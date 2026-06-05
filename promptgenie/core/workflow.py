@@ -206,13 +206,73 @@ def _render_step(
     )
 
 
+class WorkflowValidationError(Exception):
+    """Raised when a workflow definition fails structural validation."""
+
+
+def validate_workflow(steps: list[WorkflowStep]) -> None:
+    """
+    Validate a list of WorkflowSteps before rendering.
+
+    Checks:
+    - No duplicate step IDs
+    - All depends_on references exist
+    - No dependency cycles
+    - Required fields are non-empty (id, name, objective)
+
+    Raises WorkflowValidationError with a descriptive message on any failure.
+    """
+    # Required fields
+    for i, step in enumerate(steps):
+        for field_name in ("id", "name", "objective"):
+            if not getattr(step, field_name, "").strip():
+                raise WorkflowValidationError(
+                    f"Step {i + 1}: required field '{field_name}' is missing or empty."
+                )
+
+    # Duplicate IDs
+    seen_ids: set[str] = set()
+    for step in steps:
+        if step.id in seen_ids:
+            raise WorkflowValidationError(f"Duplicate step ID: '{step.id}'.")
+        seen_ids.add(step.id)
+
+    # Unknown dependency references
+    for step in steps:
+        if step.depends_on and step.depends_on not in seen_ids:
+            raise WorkflowValidationError(
+                f"Step '{step.id}' depends_on unknown step '{step.depends_on}'."
+            )
+
+    # Cycle detection via DFS
+    index = {s.id: s for s in steps}
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def _dfs(step_id: str, path: list[str]) -> None:
+        if step_id in visited:
+            return
+        if step_id in visiting:
+            cycle = " → ".join(path + [step_id])
+            raise WorkflowValidationError(f"Dependency cycle detected: {cycle}")
+        visiting.add(step_id)
+        dep = index[step_id].depends_on
+        if dep and dep in index:
+            _dfs(dep, path + [step_id])
+        visiting.discard(step_id)
+        visited.add(step_id)
+
+    for s in steps:
+        _dfs(s.id, [])
+
+
 def _resolve_order(steps: list[WorkflowStep]) -> list[WorkflowStep]:
-    """Topological sort respecting depends_on."""
+    """Topological sort respecting depends_on (assumes validate_workflow already ran)."""
     index = {s.id: s for s in steps}
     ordered: list[WorkflowStep] = []
     visited: set[str] = set()
 
-    def visit(step_id: str):
+    def visit(step_id: str) -> None:
         if step_id in visited:
             return
         step = index[step_id]
@@ -274,6 +334,7 @@ def generate_workflow(workflow_path: str) -> WorkflowResult:
         for i, s in enumerate(raw_steps)
     ]
 
+    validate_workflow(steps)
     ordered = _resolve_order(steps)
     total = len(ordered)
     _step_index = {s.id: s for s in ordered}

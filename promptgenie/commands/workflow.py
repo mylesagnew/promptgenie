@@ -5,7 +5,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from promptgenie.core.workflow import generate_workflow, save_workflow
+from promptgenie.core.workflow import WorkflowValidationError, generate_workflow, save_workflow
 from promptgenie.renderers.rich import console
 
 
@@ -25,6 +25,9 @@ def workflow_cmd(workflow_file, out, step, summary):
     with console.status("[bold blue]Building workflow…"):
         try:
             result = generate_workflow(workflow_file)
+        except WorkflowValidationError as e:
+            console.print(f"[red]Workflow validation error:[/red] {e}")
+            sys.exit(1)
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)

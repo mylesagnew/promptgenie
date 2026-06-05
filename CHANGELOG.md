@@ -12,6 +12,12 @@ _Implementation plan from Principal SecDevOps architecture review (2026-06-05). 
 
 ---
 
+### Wave 2 — Input Validation + Security (HIGH security findings) ✅ COMPLETE
+
+**Status:** All items shipped (2026-06-05).
+
+---
+
 ### Wave 1 — CI Green + Version Hygiene (P0 blockers) ✅ COMPLETE
 
 **Status:** All items shipped (2026-06-05).
@@ -160,6 +166,35 @@ Priority test targets (current coverage in parentheses):
 - `promptgenie/commands/benchmark.py` (18%) — run limit, cost estimate output
 
 Target: raise overall coverage from 62% to ≥80% before `v1.1.0` release.
+
+---
+
+## [1.0.4] — 2026-06-05
+
+### Security
+
+- **Context pack path traversal fix** — `load_pack()` and `init_pack()` now validate `pack_id` against `^[A-Za-z0-9_-]+$` and enforce path containment within the packs directory. Pack IDs containing `../`, absolute paths, spaces, unicode, null bytes, or any non-slug character are rejected with `ValueError`. Prevents local file disclosure or YAML creation outside the intended directory.
+- **Benchmark judge prompt injection hardening** — `JUDGE_SYSTEM` prompt now explicitly instructs the model that content inside `<prompt>` and `<response>` tags is untrusted data and must not be followed as instructions. Protects benchmark score integrity against adversarial prompts in evaluated content.
+
+### Fixed
+
+- **Benchmark judge parse failure is now explicit** — `_judge()` raises `BenchmarkEvaluationError` (instead of silently returning score-50) when the judge returns no JSON or invalid JSON. `run_benchmark()` catches this, sets `judge_parse_failed=True` on the result, and the CLI emits a yellow warning. Scores for failed runs are omitted from averages rather than silently dragging them down.
+- **Benchmark JSON extraction improved** — JSON is now extracted by checking for a fenced `\`\`\`json` block first, then falling back to a bare `{...}` match. Reduces false positives from judge responses that wrap JSON in markdown.
+- **ReDoS protection for prompt-test regex** — `_safe_search()` helper rejects patterns longer than 500 characters and applies a `SIGALRM`-based 5-second timeout (POSIX only) before calling `re.search`. Invalid regex returns a `failed` assertion with an error message instead of raising an unhandled exception.
+
+### Changed
+
+- **Workflow validation** — `validate_workflow()` now runs before `_resolve_order()` in `generate_workflow()`. It checks: non-empty required fields (`id`, `name`, `objective`), unique step IDs, all `depends_on` references exist, and no dependency cycles (DFS with visiting/visited sets). Raises `WorkflowValidationError` with a descriptive message on any failure. The workflow CLI command surfaces `WorkflowValidationError` with a distinct red prefix separate from generic exceptions.
+- **Benchmark `--runs` bounded** — `click.IntRange(min=1, max=10)` on the CLI option; `run_benchmark()` core also validates the range. API call count is printed before execution so users can anticipate cost.
+
+### Tests
+
+- `tests/test_context_packs.py` — 10 new tests covering valid IDs, `../` traversal, absolute paths, spaces, unicode, null bytes, empty string, single dot.
+- `tests/test_workflow.py` — 13 new tests covering valid linear/parallel/diamond workflows, duplicate IDs, unknown dependencies, self-reference cycles, two-step and three-step cycles, missing required fields.
+- `tests/test_tester_regex.py` — 7 new tests covering match/no-match, case-insensitivity, invalid regex, over-length regex, max-length boundary, ReDoS pattern.
+- `tests/test_benchmarker.py` — 12 new tests covering runs validation, judge JSON parsing (valid, fenced, no-JSON, invalid-JSON), injection attempt, `judge_parse_failed` flag, `BenchmarkRun.overall_score`.
+
+Total tests: 182 (was 140).
 
 ---
 

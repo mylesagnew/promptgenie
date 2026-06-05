@@ -8,6 +8,7 @@ from rich.table import Table
 
 from promptgenie.core.benchmarker import (
     DEFAULT_MODEL,
+    MAX_RUNS,
     RUBRIC_DIMENSIONS,
     compare_benchmarks,
     run_benchmark,
@@ -18,7 +19,13 @@ from promptgenie.renderers.rich import console, score_color
 @click.command(name="benchmark")
 @click.argument("prompt_file", type=click.Path(exists=True))
 @click.option("--model", "-m", default=DEFAULT_MODEL, help="Claude model to benchmark against.")
-@click.option("--runs", "-n", default=1, type=int, help="Number of runs (averages scores).")
+@click.option(
+    "--runs",
+    "-n",
+    default=1,
+    type=click.IntRange(min=1, max=MAX_RUNS),
+    help=f"Number of runs (averages scores, max {MAX_RUNS}).",
+)
 @click.option(
     "--compare",
     "-c",
@@ -38,12 +45,23 @@ from promptgenie.renderers.rich import console, score_color
 @click.option("--show-response", is_flag=True, help="Print the full model response.")
 def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, show_response):
     """Run a prompt against a Claude model and score the output with a rubric."""
+    total_calls = runs * (
+        2 if not compare else 4
+    )  # 2 calls per run (model + judge), doubled if comparing
+    console.print(
+        f"[dim]Benchmark: {total_calls} API call(s) across {runs} run(s) — model=[bold]{model}[/bold][/dim]"
+    )
     try:
         with console.status(f"[bold blue]Benchmarking {prompt_file} against {model}…"):
             results_a = run_benchmark(prompt_file, model=model, api_key=api_key, runs=runs)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
+
+    if any(r.judge_parse_failed for r in results_a):
+        console.print(
+            "[yellow]Warning:[/yellow] judge model returned an unparseable response on one or more runs. Scores for those runs are omitted."
+        )
 
     results_b = None
     if compare:

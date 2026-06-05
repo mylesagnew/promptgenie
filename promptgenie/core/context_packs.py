@@ -44,11 +44,27 @@ Pack file format (promptgenie/context-packs/<name>.yaml):
     preferred_output_format: "TypeScript with explicit return types"
 """
 
+import re
 from pathlib import Path
 
 import yaml
 
 PACKS_DIR = Path(__file__).parent.parent / "context-packs"
+
+_PACK_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _validate_pack_id(pack_id: str) -> None:
+    """Reject pack IDs that could escape the packs directory."""
+    if not pack_id or not _PACK_ID_RE.match(pack_id):
+        raise ValueError(
+            f"Invalid pack ID {pack_id!r}. Only letters, digits, hyphens, and underscores are allowed."
+        )
+    # Belt-and-suspenders: resolve and assert containment
+    candidate = (_packs_dir() / f"{pack_id}.yaml").resolve()
+    if not str(candidate).startswith(str(_packs_dir().resolve())):
+        raise ValueError(f"Pack ID {pack_id!r} resolves outside the packs directory.")
+
 
 # Which pack keys map to which prompt section labels
 SECTION_MAP = {
@@ -90,6 +106,7 @@ def list_packs() -> list[dict]:
 
 
 def load_pack(pack_id: str) -> dict:
+    _validate_pack_id(pack_id)
     path = _packs_dir() / f"{pack_id}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"Context pack not found: {pack_id}  (looked in {_packs_dir()})")
@@ -165,6 +182,7 @@ def inject_pack_into_prompt(prompt_text: str, pack_id: str, mode: str = "standar
 
 def init_pack(pack_id: str, name: str = "", description: str = "") -> Path:
     """Create a blank context pack file with template structure."""
+    _validate_pack_id(pack_id)
     path = _packs_dir() / f"{pack_id}.yaml"
     if path.exists():
         raise FileExistsError(f"Pack already exists: {path}")

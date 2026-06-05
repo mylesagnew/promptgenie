@@ -43,6 +43,7 @@ Test file format (.prompt-test.yaml):
 """
 
 import re
+import signal
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -54,6 +55,43 @@ from promptgenie.core.scanner import scan
 
 SEVERITY_ORDER = {"HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
 RISK_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+
+_MAX_REGEX_LEN = 500
+_REGEX_TIMEOUT_S = 5
+
+
+def _safe_search(pattern: str, text: str) -> tuple[bool, str | None]:
+    """
+    Run re.search with a length guard and SIGALRM-based timeout on POSIX systems.
+    Returns (matched: bool, error_message: str | None).
+    Error message is non-None when the pattern was rejected before matching.
+    """
+    if len(pattern) > _MAX_REGEX_LEN:
+        return False, f"regex too long ({len(pattern)} chars, max {_MAX_REGEX_LEN})"
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        return False, f"invalid regex: {exc}"
+
+    # SIGALRM is only available on POSIX; skip timeout on Windows/macOS CI runners
+    # that don't support it (it's always available on Linux CI).
+    if hasattr(signal, "SIGALRM"):
+
+        def _handler(signum, frame):
+            raise TimeoutError
+
+        old = signal.signal(signal.SIGALRM, _handler)
+        signal.alarm(_REGEX_TIMEOUT_S)
+        try:
+            result = bool(re.search(pattern, text, re.IGNORECASE))
+        except TimeoutError:
+            return False, f"regex timed out after {_REGEX_TIMEOUT_S}s (possible ReDoS pattern)"
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+        return result, None
+    else:
+        return bool(re.search(pattern, text, re.IGNORECASE)), None
 
 
 @dataclass
@@ -208,8 +246,17 @@ def _run_case(
 
     # regex_match — coerce to str in case YAML parsed as list/other
     for pattern in [str(p) for p in case.get("regex_match", [])]:
-        try:
-            matched = bool(re.search(pattern, prompt_text, re.IGNORECASE))
+        matched, err = _safe_search(pattern, prompt_text)
+        if err:
+            assertions.append(
+                TestAssertion(
+                    kind="regex_match",
+                    detail=f"Regex match: {pattern}",
+                    passed=False,
+                    actual=err,
+                )
+            )
+        else:
             assertions.append(
                 TestAssertion(
                     kind="regex_match",
@@ -218,35 +265,26 @@ def _run_case(
                     actual="matched" if matched else "no match",
                 )
             )
-        except re.error as exc:
-            assertions.append(
-                TestAssertion(
-                    kind="regex_match",
-                    detail=f"Regex match: {pattern}",
-                    passed=False,
-                    actual=f"invalid regex: {exc}",
-                )
-            )
 
     # regex_not_match — coerce to str in case YAML parsed as list/other
     for pattern in [str(p) for p in case.get("regex_not_match", [])]:
-        try:
-            matched = bool(re.search(pattern, prompt_text, re.IGNORECASE))
+        matched, err = _safe_search(pattern, prompt_text)
+        if err:
+            assertions.append(
+                TestAssertion(
+                    kind="regex_not_match",
+                    detail=f"Regex must NOT match: {pattern}",
+                    passed=False,
+                    actual=err,
+                )
+            )
+        else:
             assertions.append(
                 TestAssertion(
                     kind="regex_not_match",
                     detail=f"Regex must NOT match: {pattern}",
                     passed=not matched,
                     actual="no match" if not matched else "matched (unexpected)",
-                )
-            )
-        except re.error as exc:
-            assertions.append(
-                TestAssertion(
-                    kind="regex_not_match",
-                    detail=f"Regex must NOT match: {pattern}",
-                    passed=False,
-                    actual=f"invalid regex: {exc}",
                 )
             )
 
