@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, model benchmarker, context pack system, quality scoring, and token estimation.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, quality scoring, and token estimation.
 
 ---
 
@@ -23,6 +23,7 @@ PromptGenie makes prompts:
 - **Tested** — declarative unit tests assert quality, safety, structure, and content before you ship
 - **Benchmarked** — run prompts against real Claude models and score responses across 6 rubric dimensions
 - **Context-aware** — reusable project context packs inject stack, architecture, pitfalls, and style into every prompt
+- **Workflow-driven** — break complex tasks into staged prompt chains with approval gates, handoffs, and per-step scope locks
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles, templates, and context packs versioned alongside your code
 
@@ -50,6 +51,7 @@ pip install -e .
 | `adapt` | Translate a prompt from one target profile to another |
 | `test` | Run a declarative prompt test suite |
 | `benchmark` | Run a prompt against a Claude model and score the output |
+| `workflow` | Generate a staged prompt chain from a `.workflow.yaml` file |
 | `pack list` | List available context packs |
 | `pack show` | Preview a context pack's rendered content |
 | `pack inject` | Inject a context pack into an existing prompt file |
@@ -356,6 +358,106 @@ The response is scored by a separate judge call (claude-haiku — fast and cheap
 
 ---
 
+### `workflow`
+
+Break a complex task into a staged prompt chain — one focused prompt per step, with handoffs, approval gates, per-step scope locks, and stop conditions. Agentic tools perform significantly better with staged prompts than with a single large prompt.
+
+```bash
+# Show all steps + full prompts
+promptgenie workflow my-feature.workflow.yaml
+
+# Summary and step index only
+promptgenie workflow my-feature.workflow.yaml --summary
+
+# Show a single step
+promptgenie workflow my-feature.workflow.yaml --step 3
+
+# Save all steps as individual .md files
+promptgenie workflow my-feature.workflow.yaml --out ./prompts/
+```
+
+**`.workflow.yaml` format:**
+
+```yaml
+name: secure-login-feature
+description: "Build a secure JWT login system end-to-end"
+target: claude-code
+context_pack: react-supabase-app   # optional — injected into step 1
+mode: standard
+
+steps:
+  - id: inspect
+    name: Inspect existing auth
+    objective: "Map the current authentication architecture and identify gaps"
+    scope:
+      - src/auth/
+      - src/middleware/
+    output: "Architecture summary with file map and identified gaps"
+
+  - id: plan
+    name: Propose implementation plan
+    depends_on: inspect
+    objective: "Propose a JWT implementation plan based on the inspection"
+    output: "Numbered plan with file list and risk notes"
+    requires_approval: true        # model stops here for human review
+
+  - id: implement
+    name: Implement middleware
+    depends_on: plan
+    objective: "Implement JWT middleware only, as per the approved plan"
+    scope:
+      - src/middleware/auth.ts
+    forbidden:
+      - Do not touch files outside scope
+      - Do not install packages without approval
+    stop_conditions:
+      - Tests fail
+      - A file outside scope needs changing
+    output: "Diff of changed files + test results"
+
+  - id: security-review
+    name: Security review
+    depends_on: implement
+    objective: "Security review of the JWT implementation"
+    output: "Findings table: | Finding | Severity | Recommendation |"
+    requires_approval: true
+```
+
+**Step fields:**
+
+| Field | Description |
+|---|---|
+| `id` | Unique step identifier (used in `depends_on`) |
+| `name` | Human-readable step name |
+| `objective` | What this step must accomplish |
+| `depends_on` | ID of the step that must complete first |
+| `scope` | Files or directories the model may touch |
+| `forbidden` | Actions explicitly prohibited in this step |
+| `stop_conditions` | Conditions that require stopping and asking for approval |
+| `output` | Expected output format or deliverable |
+| `requires_approval` | If `true`, inserts an approval gate — model will not proceed |
+| `context_note` | Optional extra notes for this step |
+
+**What each rendered step contains:**
+
+- Workflow header and step number
+- Handoff summary from the previous step
+- Objective, scope, forbidden actions, stop conditions
+- Approval gate notice (if set)
+- Expected output and acceptance criteria
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--summary` | Show step index only — no prompt content |
+| `--step N` | Render a single step by number |
+| `--out DIR` | Save all steps as `step_01_name.md` files in a directory |
+
+See [`examples/secure-login.workflow.yaml`](examples/secure-login.workflow.yaml) for a full 6-step example with approval gates and a context pack.
+
+---
+
 ### `pack`
 
 Context packs are reusable YAML files that capture everything a model needs to know about your project — stack, architecture, coding style, forbidden changes, known pitfalls, and terminology. Use them to stop repeating yourself across every prompt.
@@ -533,7 +635,8 @@ promptgenie/
 │   ├── adapter.py              # Adapt engine — cross-profile prompt translation
 │   ├── tester.py               # Test runner — declarative prompt unit tests
 │   ├── benchmarker.py          # Benchmark engine — model calls, rubric scoring, cost
-│   └── context_packs.py        # Context pack engine — load, render, inject, init
+│   ├── context_packs.py        # Context pack engine — load, render, inject, init
+│   └── workflow.py             # Workflow engine — staged prompt chains
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
@@ -548,7 +651,8 @@ promptgenie/
 │   └── cyber-security-team.yaml           # Security engineering team
 └── examples/
     ├── auth-refactor.md                    # Example prompt
-    └── auth-refactor.prompt-test.yaml      # Example test suite
+    ├── auth-refactor.prompt-test.yaml      # Example test suite
+    └── secure-login.workflow.yaml          # Example 6-step workflow
 ```
 
 ---
@@ -563,7 +667,7 @@ promptgenie/
 - [x] `test` — declarative prompt unit tests with 8 assertion types, CI-safe
 - [x] `benchmark` — run prompt against Claude, score with judge model, compare versions
 - [x] Context packs — reusable project context blocks with stack, architecture, style, pitfalls
-- [ ] Workflow mode — staged prompt chains for complex agentic tasks
+- [x] Workflow mode — staged prompt chains with approval gates, handoffs, and per-step scope locks
 - [ ] VS Code / Cursor extension
 - [ ] GitHub Actions lint/scan integration
 - [ ] Community profile and template packs
