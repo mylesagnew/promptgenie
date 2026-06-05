@@ -12,6 +12,7 @@ from promptgenie.core.generator import generate_prompt, list_targets, list_templ
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
 from promptgenie.core.differ import diff_prompts
+from promptgenie.core.adapter import adapt
 
 console = Console()
 
@@ -142,6 +143,81 @@ def scan_cmd(prompt_file):
     ))
 
     sys.exit(1 if result.risk_level in ("CRITICAL", "HIGH") else 0)
+
+
+@cli.command(name="adapt")
+@click.argument("prompt_file", type=click.Path(exists=True))
+@click.option("--from", "from_target", required=True, help="Source target profile (e.g. claude-code).")
+@click.option("--to", "to_target", required=True, help="Destination target profile (e.g. cursor).")
+@click.option("--out", "-o", default=None, type=click.Path(), help="Save adapted prompt to file.")
+@click.option("--show-original", is_flag=True, help="Print original prompt alongside adapted version.")
+def adapt_cmd(prompt_file, from_target, to_target, out, show_original):
+    """Translate a prompt from one target profile to another."""
+    with console.status("[bold blue]Adapting prompt…"):
+        result = adapt(prompt_file, from_target, to_target)
+
+    from_name = result.source_target
+    to_name = result.dest_target
+    console.print()
+
+    # ── Original (optional) ──────────────────────────────────────────────────
+    if show_original:
+        console.print(Panel(
+            result.original_text,
+            title=f"[dim]Original — {from_name}[/dim]",
+            border_style="dim",
+        ))
+
+    # ── Adapted prompt ───────────────────────────────────────────────────────
+    console.print(Panel(
+        result.adapted_text,
+        title=f"[bold]Adapted Prompt[/bold]  [dim]{from_name}[/dim] → [cyan]{to_name}[/cyan]",
+        border_style="blue",
+    ))
+
+    # ── Change log ───────────────────────────────────────────────────────────
+    ACTION_STYLE = {
+        "kept":      ("dim",    "KEPT"),
+        "rewritten": ("yellow", "REWRITTEN"),
+        "added":     ("green",  "ADDED"),
+        "dropped":   ("red",    "DROPPED"),
+    }
+    change_lines = []
+    for change in result.changes:
+        if change.name == "":
+            continue
+        color, label = ACTION_STYLE.get(change.action, ("white", change.action.upper()))
+        change_lines.append(f"[{color}][{label}][/{color}]  {change.name}")
+        change_lines.append(f"  [dim]{change.reason}[/dim]")
+
+    console.print(Panel("\n".join(change_lines), title="Change Log", border_style="dim"))
+
+    # ── Score & token summary ────────────────────────────────────────────────
+    summary = Table(box=box.SIMPLE, show_header=True, padding=(0, 2))
+    summary.add_column("Metric", style="dim")
+    summary.add_column(f"Original ({from_name})", justify="right")
+    summary.add_column(f"Adapted ({to_name})", justify="right")
+
+    def _delta(a: int, b: int, invert: bool = False) -> str:
+        d = b - a
+        color = "green" if (d > 0 and not invert) or (d < 0 and invert) else ("red" if d != 0 else "dim")
+        prefix = "+" if d > 0 else ""
+        return f"[{color}]{prefix}{d}[/{color}]"
+
+    summary.add_row("Tokens", str(result.source_tokens), str(result.adapted_tokens) + f"  {_delta(result.source_tokens, result.adapted_tokens, invert=True)}")
+    summary.add_row("Quality score", f"{result.source_score['total']}/100", f"{result.adapted_score['total']}/100  {_delta(result.source_score['total'], result.adapted_score['total'])}")
+    console.print(Panel(summary, title="Score & Token Summary", border_style="dim"))
+
+    # ── Warnings ─────────────────────────────────────────────────────────────
+    if result.warnings:
+        warn_lines = "\n".join(f"[yellow]⚠[/yellow]  {w}" for w in result.warnings)
+        console.print(Panel(warn_lines, title="Warnings", border_style="yellow"))
+
+    # ── Save ─────────────────────────────────────────────────────────────────
+    if out:
+        from pathlib import Path as _Path
+        _Path(out).write_text(result.adapted_text)
+        console.print(f"\n[green]Adapted prompt saved to {out}[/green]")
 
 
 @cli.command(name="diff")
