@@ -12,7 +12,9 @@ required_sections:
   - Objective
   - Output Format
 forbidden_patterns: []
-stop_conditions: []
+stop_conditions:
+  - Stop if the modality or input type is unclear and ask for clarification
+  - Do not assume grounding sources — ask if retrieval context is needed
 security_controls: []
 scope_guidance: |
   For multimodal tasks, specify which modality and what to do with it.

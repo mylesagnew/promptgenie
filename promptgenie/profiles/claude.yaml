@@ -16,7 +16,9 @@ required_sections:
 forbidden_patterns:
   - "just figure it out"
   - "do what you think is best"
-stop_conditions: []
+stop_conditions:
+  - Stop if the objective is ambiguous and ask for clarification
+  - Do not expand scope beyond the stated task without confirmation
 security_controls: []
 scope_guidance: |
   Focus on the stated objective. Do not expand scope without being asked.

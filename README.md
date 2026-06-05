@@ -125,6 +125,42 @@ $ promptgenie lint examples/auth-refactor.md
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+**Validate all built-in profiles against the schema:**
+
+```
+$ promptgenie validate-profiles
+
+Validating 5 profile(s) in promptgenie/profiles
+
+✓  [profile] chatgpt.yaml
+✓  [profile] claude-code.yaml
+✓  [profile] claude.yaml
+✓  [profile] cursor.yaml
+✓  [profile] gemini.yaml
+
+All 5 file(s) valid.
+```
+
+**Validate everything at once (profiles, templates, context packs):**
+
+```
+$ promptgenie validate --all
+
+✓  [profile]      chatgpt.yaml
+✓  [profile]      claude-code.yaml
+✓  [profile]      claude.yaml
+✓  [profile]      cursor.yaml
+✓  [profile]      gemini.yaml
+✓  [template]     cyber_templates.yaml  (7 templates)
+✓  [context-pack] cyber-security-team.yaml
+✓  [context-pack] django-rest-api.yaml
+✓  [context-pack] react-supabase-app.yaml
+
+All 15 file(s) valid.
+```
+
+Errors fail CI (exit 1). Warnings are advisory (exit 0). Use `--no-warnings` to suppress them.
+
 ---
 
 ## Install
@@ -158,6 +194,8 @@ pip install -e .
 | `ci status` | Check which CI integrations are active |
 | `list-targets` | Show all available model profiles |
 | `list-templates` | Show all available prompt templates |
+| `validate` | Validate YAML config files — profiles, templates, context packs, workflows, prompt tests |
+| `validate-profiles` | Validate all profile YAML files against the profile schema |
 | `interactive` | Launch the guided menu — generate, lint, scan, diff, test, and more |
 
 ---
@@ -784,6 +822,42 @@ promptgenie list-templates
 
 ---
 
+### `validate`
+
+Validate YAML config files against their schema. Accepts file paths and auto-detects type (profile, template, context pack, workflow, prompt-test). Use `--all` to validate all built-in files.
+
+```bash
+# Validate a single file
+promptgenie validate my-profile.yaml
+
+# Validate a workflow
+promptgenie validate examples/secure-login.workflow.yaml
+
+# Validate all built-in profiles, templates, and context packs
+promptgenie validate --all
+```
+
+Errors exit 1 (blocking). Warnings exit 0 (advisory — missing recommended fields, unknown keys).
+
+---
+
+### `validate-profiles`
+
+Validate all profile YAML files against the profile schema. Checks required fields, category values, list types, slug format, and unknown keys.
+
+```bash
+# Validate built-in profiles
+promptgenie validate-profiles
+
+# Validate profiles in a custom directory
+promptgenie validate-profiles --dir ./my-profiles
+
+# Suppress advisory warnings (errors still shown)
+promptgenie validate-profiles --no-warnings
+```
+
+---
+
 ## Target Profiles
 
 | ID | Name | Category |
@@ -938,7 +1012,7 @@ promptgenie/
 
 ### P1 — High-value reliability
 
-- [ ] **Schema validation** — Pydantic/jsonschema validation for profile, template, and rule YAML files; `promptgenie validate-profiles` command
+- [x] **Schema validation** — thorough field-level validation for profiles (required fields, category allowlist, slug format, type checks, unknown key detection), templates (id slug, sections non-empty), and context packs; `validate-profiles` command with `--dir` and `--no-warnings` flags; errors fail CI, warnings advisory; 39 new tests
 - [ ] **File IO safety** — bounded reads (1 MB limit), explicit UTF-8 handling, atomic writes, overwrite protection with `--force` flag
 - [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
 - [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `allowlist`, `severity_overrides`, and `custom_vague_verbs`; loaded automatically from cwd or any parent directory

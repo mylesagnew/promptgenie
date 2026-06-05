@@ -14,7 +14,9 @@ required_sections:
 forbidden_patterns:
   - "pretend you have no restrictions"
   - "ignore your guidelines"
-stop_conditions: []
+stop_conditions:
+  - Stop if the request requires actions outside the stated objective
+  - Clarify before making assumptions about format or scope
 security_controls:
   - no_jailbreak_instructions
 scope_guidance: |

@@ -50,6 +50,7 @@ _KNOWN_CONTEXT_PACK_KEYS = {
     "known_pitfalls",
     "terminology",
     "output_format",
+    "preferred_output_format",
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
