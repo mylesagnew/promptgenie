@@ -102,7 +102,7 @@ $ promptgenie generate "review this repo for security issues" --target claude-co
 ╰────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-**Scan a prompt for security risks:**
+**Scan a prompt for static prompt-risk patterns:**
 
 ```
 $ promptgenie scan examples/auth-refactor.md
@@ -113,6 +113,8 @@ $ promptgenie scan examples/auth-refactor.md
 │     Add explicit approval gates.                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
+
+> **Scanner scope:** `scan` is a regex/heuristic tripwire. It catches obvious prompt-injection vocabulary, hardcoded secrets, and unsafe agent permission patterns. It does not catch obfuscated attacks (Unicode homoglyphs, multiline splits, base64 encoding, synonym substitution). See `tests/test_scanner_adversarial.py` for a full list of documented detection gaps.
 
 **Lint a prompt for quality issues:**
 
@@ -991,9 +993,11 @@ promptgenie/
 - [x] CONTRIBUTING.md — contributor guide, rule authoring docs, profile/template schema reference
 - [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
 - [x] `interactive` — guided menu mode: generate, adapt, lint, scan, diff, test, workflow, list in one flow
-- [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists, custom vague verbs
-- [x] Coverage gate — `fail_under = 85` enforced in CI; 306 tests, 0 warnings
+- [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists (scoped `AllowlistEntry` format), custom vague verbs
+- [x] Coverage gate — `fail_under = 85` enforced in CI; 401 tests, 87% coverage, 0 ruff issues across `promptgenie/` and `tests/`
 - [x] CODEOWNERS — `.github/CODEOWNERS` governs all files; branch protection docs in CONTRIBUTING.md
+- [x] Adversarial scanner tests — `TestDetects` (15 caught patterns), `TestMisses` (8 documented gaps: multiline splits, homoglyphs, word-spacing, base64, synonyms, indirect reference), `TestScopedAllowlist` (regression suite for fixed allowlist logic)
+- [x] Scoped scanner allowlist — `AllowlistEntry` replaces broken whole-prompt suppression; phrase matched against finding's `matched_text` only; rule-scoped entries filter by code first
 
 ---
 
@@ -1015,7 +1019,7 @@ promptgenie/
 - [x] **Schema validation** — thorough field-level validation for profiles (required fields, category allowlist, slug format, type checks, unknown key detection), templates (id slug, sections non-empty), and context packs; `validate-profiles` command with `--dir` and `--no-warnings` flags; errors fail CI, warnings advisory; 39 new tests
 - [ ] **File IO safety** — bounded reads (1 MB limit), explicit UTF-8 handling, atomic writes, overwrite protection with `--force` flag
 - [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
-- [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `allowlist`, `severity_overrides`, and `custom_vague_verbs`; loaded automatically from cwd or any parent directory
+- [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `severity_overrides`, `custom_vague_verbs`, and a scoped `allowlist` (`AllowlistEntry` with optional `rules` filter); suppression is matched against the finding's `matched_text`, not the whole prompt
 - [x] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
 - [x] **Context pack path validation** — strict slug regex `^[A-Za-z0-9_-]+$` on `pack_id`; path containment enforced in `load_pack` and `init_pack`; 10 traversal rejection tests added
 - [x] **Workflow schema validation and cycle detection** — `validate_workflow()` checks duplicate IDs, required fields, unknown dependencies, and cycles (DFS with visiting/visited sets); `WorkflowValidationError` surfaced cleanly in CLI; 13 tests covering valid DAGs, cycles, self-references, and bad fields
@@ -1051,11 +1055,20 @@ Place a `.promptgenie.yaml` file in your project root (or any parent directory) 
 
 ```yaml
 scanner:
-  # Suppress findings that match any of these strings (useful for docs examples)
+  # Allowlist entries suppress findings whose *matched text* contains the phrase.
+  # Suppression is scoped to the finding's match — not the whole prompt.
+
+  # Simple string: suppresses any finding whose matched text contains this phrase.
   allowlist:
     - "example-token-for-docs"
 
-  # Disable specific rule codes entirely
+  # Scoped object: suppress only specific rule codes when the phrase is matched.
+  # Safer — won't accidentally suppress unrelated findings on the same line.
+  #   - phrase: "known-safe-deploy"
+  #     rules:
+  #       - PERM_005
+
+  # Disable specific rule codes entirely (no phrase check needed)
   disabled_rules:
     - SEC_007
 
@@ -1073,6 +1086,8 @@ linter:
     - "tidy"
     - "polish"
 ```
+
+Copy `.promptgenie.yaml.example` from the repo root as a starting point.
 
 Copy `.promptgenie.yaml.example` from the repo root as a starting point.
 
