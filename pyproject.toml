@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "promptgenie"
-version = "1.0.4"
+version = "1.0.5"
 description = "Secure prompt engineering for AI agents and engineering teams"
 readme = "README.md"
 license = { text = "MIT" }
@@ -51,6 +51,7 @@ dev = [
     "types-PyYAML>=6.0",
     "build>=1.2",
     "twine>=5.0",
+    "cyclonedx-bom>=4.0",
 ]
 
 [tool.setuptools.packages.find]

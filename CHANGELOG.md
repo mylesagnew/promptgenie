@@ -12,6 +12,12 @@ _Implementation plan from Principal SecDevOps architecture review (2026-06-05). 
 
 ---
 
+### Wave 3 — Reproducibility + Supply Chain ✅ COMPLETE
+
+**Status:** All items shipped (2026-06-05).
+
+---
+
 ### Wave 2 — Input Validation + Security (HIGH security findings) ✅ COMPLETE
 
 **Status:** All items shipped (2026-06-05).
@@ -166,6 +172,27 @@ Priority test targets (current coverage in parentheses):
 - `promptgenie/commands/benchmark.py` (18%) — run limit, cost estimate output
 
 Target: raise overall coverage from 62% to ≥80% before `v1.1.0` release.
+
+---
+
+## [1.0.5] — 2026-06-05
+
+### Added
+
+- **`uv.lock` — reproducible dependency lockfile** — 108 packages pinned with hashes using `uv lock`. CI now installs via `uv sync --frozen --extra dev` instead of bare `pip install`, so every CI run resolves the exact same dependency graph. `cyclonedx-bom>=4.0` added to the `dev` extras group.
+
+- **CI migrated to `uv`** — all four CI jobs (`test`, `lint`, `security`, `build`) now use `astral-sh/setup-uv` (SHA-pinned) and `uv sync --frozen` / `uv run` / `uv build`. Removed `actions/setup-python` in favour of uv's built-in Python management. Build job uses `uv build` instead of `python -m build`.
+
+- **Dependabot** — `.github/dependabot.yml` configures weekly dependency PRs for both `uv` (Python packages) and `github-actions`. Dev dependencies are grouped into a single PR. Labels `dependencies` + `python`/`github-actions` applied automatically.
+
+- **Release workflow** — `.github/workflows/release.yml` is triggered by semver tags (`v*.*.*`) and runs five sequential jobs:
+  1. **verify** — full test, ruff, mypy, bandit, pip-audit, and version consistency check (pyproject version must equal the Git tag).
+  2. **build** — `uv build` produces sdist + wheel; `twine check` validates; `cyclonedx-py environment` generates `sbom.cyclonedx.json` alongside the dist artifacts.
+  3. **publish** — PyPI Trusted Publishing via GitHub OIDC (`pypa/gh-action-pypi-publish`, SHA-pinned, `attestations: true`). No stored API token required. Runs inside the protected `release` environment.
+  4. **attest** — `actions/attest-build-provenance` (SHA-pinned) generates Sigstore-backed provenance attestations for the wheel and sdist.
+  5. **github-release** — extracts the matching `CHANGELOG.md` entry and creates a GitHub Release with wheel, sdist, and SBOM attached.
+
+- **README — Development section updated** — setup, test, lint, security, build, SBOM, and release instructions now use `uv`. One-time setup note added for the `release` environment and PyPI Trusted Publisher configuration.
 
 ---
 

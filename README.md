@@ -837,7 +837,7 @@ promptgenie/
 - [x] **Workflow schema validation and cycle detection** — `validate_workflow()` checks duplicate IDs, required fields, unknown dependencies, and cycles (DFS with visiting/visited sets); `WorkflowValidationError` surfaced cleanly in CLI; 13 tests covering valid DAGs, cycles, self-references, and bad fields
 - [x] **ReDoS protection for prompt-test regex** — `_safe_search()` helper with 500-char length guard and `SIGALRM`-based 5s timeout on POSIX; invalid regex returns error assertion instead of exception; 7 tests including known ReDoS pattern and max-length boundary
 - [x] **Benchmark cost controls and judge hardening** — `--runs` bounded via `click.IntRange(max=10)`; API call count printed before execution; judge parse failure sets `judge_parse_failed=True` and emits CLI warning instead of silent score-50; judge system prompt hardened with explicit untrusted-data instruction; `BenchmarkEvaluationError` raised on bad JSON; 12 tests added
-- [ ] **Dependency lockfile strategy** — add `uv.lock` or `pip-tools` generated `requirements-dev.txt`; add Dependabot/Renovate; audit locked dependencies in CI _(SecDevOps review: HIGH — lower-bound ranges are not reproducible; CI results are environment-dependent)_
+- [x] **Dependency lockfile strategy** — `uv.lock` committed (108 packages with hashes); CI now installs via `uv sync --frozen`; Dependabot configured for weekly `uv` and `github-actions` updates; `cyclonedx-bom` added to dev deps
 - [ ] **Line-level SARIF locations** — track match offsets in scanner/linter; emit `startLine`/`startColumn` in SARIF `region`; add confidence field and stable rule IDs _(SecDevOps review: MEDIUM — enterprise code scanning workflows require actionable file/line locations)_
 - [ ] **Least-privilege GitHub token permissions** — add `permissions: contents: read` top-level block in `ci.yml`; scope `security-events: write` only to SARIF upload job; pin all actions to full commit SHAs _(SecDevOps review: MEDIUM — mutable action tags and default token scope are supply-chain risks)_
 - [ ] **Improve pre-commit hooks** — add pinned `ruff`, `ruff-format`, `check-yaml`, `check-toml`, `detect-secrets`/`gitleaks` hooks; remove dependency on locally installed `promptgenie` _(SecDevOps review: MEDIUM — current config is fragile and skips all quality gates available at commit time)_
@@ -851,7 +851,7 @@ promptgenie/
 - [ ] **VS Code / Cursor extension** — inline lint and scan as you write prompts
 - [ ] **Community profile and template packs** — installable packs for more stacks, models, and domains
 - [ ] **Secret scanning for the repo** — `gitleaks` / `detect-secrets` in pre-commit and CI to prevent committing real credentials
-- [ ] **SBOM and release provenance** — CycloneDX SBOM generation, PyPI trusted publishing via GitHub OIDC, GitHub artifact attestations, signed releases, SLSA alignment _(SecDevOps review: HIGH — a secure-engineering tool must model the supply-chain posture it recommends)_
+- [x] **SBOM and release provenance** — tag-triggered `release.yml` workflow: version consistency check, full test/lint/security gate, `uv build`, CycloneDX SBOM (`sbom.cyclonedx.json`), PyPI Trusted Publishing via GitHub OIDC (no stored token), GitHub artifact attestations (`actions/attest-build-provenance`), GitHub Release with wheel + sdist + SBOM attached; requires protected `release` environment
 - [ ] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR _(SecDevOps review: LOW — improves external trust and OpenSSF Scorecard rating)_
 - [ ] **Dependabot / Renovate** — automated dependency update PRs with vulnerability alerting
 - [ ] **OpenSSF Scorecard** — scheduled Scorecard workflow; upload results to GitHub security tab _(SecDevOps review: LOW — baseline for external trust signals)_
@@ -863,35 +863,50 @@ promptgenie/
 
 ## Development
 
+Dependencies are locked in `uv.lock`. Install [uv](https://docs.astral.sh/uv/) then:
+
 ```bash
 git clone https://github.com/mylesagnew/promptgenie.git
 cd promptgenie
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --extra dev
 ```
 
 **Run tests:**
 ```bash
-pytest tests/
+uv run pytest tests/
 ```
 
 **Lint and format:**
 ```bash
-ruff check promptgenie/
-ruff format promptgenie/
+uv run ruff check promptgenie/
+uv run ruff format promptgenie/
+uv run mypy promptgenie
 ```
 
 **Security checks:**
 ```bash
-bandit -r promptgenie/ -ll
-pip-audit
+uv run bandit -r promptgenie/ -ll
+uv run pip-audit --skip-editable --progress-spinner off
 ```
 
 **Build:**
 ```bash
-python -m build
-twine check dist/*
+uv build
+uv run --with twine twine check dist/*
 ```
+
+**Generate SBOM:**
+```bash
+uv run cyclonedx-py environment --output-format json --outfile sbom.cyclonedx.json
+```
+
+**Releasing** (maintainers only):
+1. Update `version` in `pyproject.toml` and add a `[X.Y.Z]` entry to `CHANGELOG.md`.
+2. Run `uv lock` to update the lockfile.
+3. Commit, push to `main`, then push a semver tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+4. The `release.yml` workflow runs the full gate, builds, publishes to PyPI via Trusted Publishing, generates GitHub artifact attestations, generates a CycloneDX SBOM, and creates a GitHub Release — all without a stored API token.
+
+> **One-time setup required:** Create a `release` protected environment in GitHub Settings → Environments (add required reviewer). Configure a PyPI Trusted Publisher for this repo pointing at `.github/workflows/release.yml`.
 
 See [SECURITY.md](SECURITY.md) for the vulnerability reporting process and scanner limitations.
 

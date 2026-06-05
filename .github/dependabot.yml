@@ -1,0 +1,36 @@
+version: 2
+
+updates:
+  # Python dependencies (uv lockfile)
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "bandit"
+          - "pip-audit"
+          - "mypy"
+          - "types-*"
+          - "build"
+          - "twine"
+          - "cyclonedx-bom"
+    labels:
+      - "dependencies"
+      - "python"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
