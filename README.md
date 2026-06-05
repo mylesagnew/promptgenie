@@ -25,6 +25,7 @@ PromptGenie makes prompts:
 - **Context-aware** — reusable project context packs inject stack, architecture, pitfalls, and style into every prompt
 - **Workflow-driven** — break complex tasks into staged prompt chains with approval gates, handoffs, and per-step scope locks
 - **CI-integrated** — GitHub Actions workflow and pre-commit hooks keep bad prompts out of your repo
+- **Machine-readable** — `--format json` and `--format sarif` on every lint and scan for CI pipelines and GitHub code scanning
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles, templates, and context packs versioned alongside your code
 
@@ -112,7 +113,14 @@ promptgenie generate "threat model the payment API" \
 Check a prompt file for quality and structural issues.
 
 ```bash
+# Default rich terminal output
 promptgenie lint my-prompt.md
+
+# Machine-readable JSON (CI scripts, dashboards)
+promptgenie lint my-prompt.md --format json
+
+# SARIF for GitHub code scanning
+promptgenie lint my-prompt.md --format sarif --out lint-results.sarif
 ```
 
 **What it checks:**
@@ -130,6 +138,13 @@ promptgenie lint my-prompt.md
 
 Exits `1` if any HIGH severity issues are found — safe to use in CI.
 
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--format` | Output format: `rich` (default) / `json` / `sarif` |
+| `--out`, `-o` | Write output to file instead of stdout |
+
 ---
 
 ### `scan`
@@ -137,7 +152,14 @@ Exits `1` if any HIGH severity issues are found — safe to use in CI.
 Scan a prompt file for security risks.
 
 ```bash
+# Default rich terminal output
 promptgenie scan my-prompt.md
+
+# Machine-readable JSON
+promptgenie scan my-prompt.md --format json
+
+# SARIF for GitHub code scanning upload
+promptgenie scan my-prompt.md --format sarif --out scan-results.sarif
 ```
 
 **What it detects:**
@@ -151,6 +173,15 @@ promptgenie scan my-prompt.md
 | Chained risks | Web fetch + action (email/deploy/write) without approval gate |
 
 Exits `1` on CRITICAL or HIGH findings — safe to use in CI or pre-commit hooks.
+
+The scanner reports the **class** of secret found, never the secret value itself.
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--format` | Output format: `rich` (default) / `json` / `sarif` |
+| `--out`, `-o` | Write output to file instead of stdout |
 
 ---
 
@@ -712,7 +743,8 @@ promptgenie/
 │   ├── benchmarker.py          # Benchmark engine — model calls, rubric scoring, cost
 │   ├── context_packs.py        # Context pack engine — load, render, inject, init
 │   ├── workflow.py             # Workflow engine — staged prompt chains
-│   └── ci.py                   # CI scaffolder — GitHub Actions + pre-commit
+│   ├── ci.py                   # CI scaffolder — GitHub Actions + pre-commit
+│   └── formatters.py           # Structured output — JSON and SARIF v2.1.0
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
@@ -732,7 +764,9 @@ promptgenie/
 ├── .github/
 │   └── workflows/
 │       └── prompt-check.yml                # GitHub Actions — lint, scan, test
-└── .pre-commit-config.yaml                 # Pre-commit hooks
+├── .pre-commit-config.yaml                 # Pre-commit hooks
+├── SECURITY.md                             # Vulnerability reporting and scanner limitations
+└── pyproject.toml                          # Modern packaging + dev dependency groups
 ```
 
 ---
@@ -756,12 +790,12 @@ promptgenie/
 
 ### P0 — Must do before serious adoption
 
-- [ ] **Automated test suite** — pytest coverage for scanner, linter, generator, differ, adapter, and CLI smoke tests via `CliRunner`
-- [ ] **Developer CI pipeline** — `.github/workflows/ci.yml` with pytest, ruff, bandit, pip-audit, and build smoke test across Python 3.10–3.12
-- [ ] **Modern packaging** — migrate from `setup.py` to `pyproject.toml` with dev dependency groups and a lockfile (`uv.lock` or `poetry.lock`)
-- [ ] **SECURITY.md** — vulnerability reporting process, supported versions, scanner limitations, and safe prompt handling policy
-- [ ] **Adapter safety fix** — preserve agentic safety sections by default when adapting; add `--strip-agentic-safety` as explicit opt-in
-- [ ] **Structured output mode** — `--format json` and `--format sarif` for lint and scan so CI tools and GitHub code scanning can ingest findings
+- [x] **Automated test suite** — 136 tests: scanner, linter, generator, differ, adapter, CLI smoke tests, formatter output
+- [x] **Developer CI pipeline** — `ci.yml`: pytest (3.10–3.12), ruff, bandit, pip-audit, build + wheel smoke test
+- [x] **Modern packaging** — `pyproject.toml` with dev dependency groups, classifiers, project URLs
+- [x] **SECURITY.md** — vulnerability reporting, scanner limitations, safe secret handling policy
+- [x] **Structured output** — `--format json` and `--format sarif` on lint and scan; SARIF uploaded to GitHub code scanning
+- [ ] **Adapter safety fix** — preserve agentic safety sections by default; add `--strip-agentic-safety` as explicit opt-in
 
 ---
 
@@ -786,6 +820,42 @@ promptgenie/
 - [ ] **Dependabot / Renovate** — automated dependency update PRs with vulnerability alerting
 - [ ] **Plugin/profile registry** — versioned remote profile and rule packs with `promptgenie pack update`
 - [ ] **Container image** — minimal non-root Dockerfile for pipeline and SaaS use, with pinned digest and vulnerability scan
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/mylesagnew/promptgenie.git
+cd promptgenie
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+**Run tests:**
+```bash
+pytest tests/
+```
+
+**Lint and format:**
+```bash
+ruff check promptgenie/
+ruff format promptgenie/
+```
+
+**Security checks:**
+```bash
+bandit -r promptgenie/ -ll
+pip-audit
+```
+
+**Build:**
+```bash
+python -m build
+twine check dist/*
+```
+
+See [SECURITY.md](SECURITY.md) for the vulnerability reporting process and scanner limitations.
 
 ---
 
