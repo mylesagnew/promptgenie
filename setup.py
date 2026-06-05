@@ -15,6 +15,7 @@ setup(
         "pyyaml>=6.0",
         "rich>=13.0",
         "tiktoken>=0.7",
+        "anthropic>=0.100",
     ],
     entry_points={
         "console_scripts": [
