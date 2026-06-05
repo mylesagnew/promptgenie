@@ -1,0 +1,27 @@
+# .promptgenie.yaml — project-level PromptGenie configuration
+# Copy to .promptgenie.yaml and customise for your project.
+
+scanner:
+  # Strings that suppress ALL scanner findings when found in the prompt.
+  # Use for known-safe documentation examples that trigger secret patterns.
+  allowlist:
+    - "example-token-for-docs"
+    - "PLACEHOLDER_SECRET"
+
+  # Rule codes to suppress entirely.
+  disabled_rules:
+    - SEC_007
+
+  # Override the default risk level for a specific rule code.
+  severity_overrides:
+    PERM_005: CRITICAL
+
+linter:
+  # Lint rule codes to suppress entirely.
+  disabled_rules:
+    - LINT_003
+
+  # Additional vague verbs to flag beyond the built-in list.
+  custom_vague_verbs:
+    - "tidy"
+    - "polish"

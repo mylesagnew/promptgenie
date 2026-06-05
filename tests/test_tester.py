@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 
 from promptgenie.core.tester import (
-    TestAssertion,
-    TestCaseResult,
-    TestSuiteResult,
+    PromptTestAssertion,
+    PromptTestCaseResult,
+    PromptTestSuiteResult,
     _run_case,
     run_test_suite,
 )
@@ -194,16 +194,16 @@ class TestRegexAssertions:
         assert "invalid regex" in result.assertions[-1].actual
 
 
-# ── TestSuiteResult properties ────────────────────────────────────────────────
+# ── PromptTestSuiteResult properties ─────────────────────────────────────────
 
 
 class TestSuiteResultProperties:
     def test_passed_all_pass(self):
-        suite = TestSuiteResult(
+        suite = PromptTestSuiteResult(
             prompt_path="p", target="claude", description="",
             cases=[
-                TestCaseResult(name="a", passed=True),
-                TestCaseResult(name="b", passed=True),
+                PromptTestCaseResult(name="a", passed=True),
+                PromptTestCaseResult(name="b", passed=True),
             ],
         )
         assert suite.passed
@@ -211,23 +211,23 @@ class TestSuiteResultProperties:
         assert suite.fail_count == 0
 
     def test_not_passed_when_one_fails(self):
-        suite = TestSuiteResult(
+        suite = PromptTestSuiteResult(
             prompt_path="p", target="claude", description="",
             cases=[
-                TestCaseResult(name="a", passed=True),
-                TestCaseResult(name="b", passed=False),
+                PromptTestCaseResult(name="a", passed=True),
+                PromptTestCaseResult(name="b", passed=False),
             ],
         )
         assert not suite.passed
         assert suite.fail_count == 1
 
     def test_failure_count_on_case(self):
-        case = TestCaseResult(
+        case = PromptTestCaseResult(
             name="x",
             passed=False,
             assertions=[
-                TestAssertion(kind="k", detail="d", passed=True),
-                TestAssertion(kind="k", detail="d", passed=False),
+                PromptTestAssertion(kind="k", detail="d", passed=True),
+                PromptTestAssertion(kind="k", detail="d", passed=False),
             ],
         )
         assert case.failure_count == 1

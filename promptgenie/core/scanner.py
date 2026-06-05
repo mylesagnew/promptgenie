@@ -1,6 +1,9 @@
 import re
 from dataclasses import dataclass, field
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
+
+if TYPE_CHECKING:
+    from promptgenie.core.config import ScannerConfig
 
 Risk = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"]
 Confidence = Literal["HIGH", "MEDIUM", "LOW"]
@@ -176,7 +179,10 @@ RAG_PATTERNS = [
 ]
 
 
-def scan(prompt: str) -> ScanResult:
+def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
+    from promptgenie.core.config import ScannerConfig as _ScannerConfig
+
+    cfg: _ScannerConfig = config if config is not None else _ScannerConfig()
     result = ScanResult()
     lower = prompt.lower()
 
@@ -267,5 +273,27 @@ def scan(prompt: str) -> ScanResult:
                 col=1,
             )
         )
+
+    # Apply config: allowlist, disabled rules, severity overrides
+    if cfg.allowlist or cfg.disabled_rules or cfg.severity_overrides:
+        filtered: list[SecurityFinding] = []
+        for finding in result.findings:
+            if finding.code in cfg.disabled_rules:
+                continue
+            if cfg.allowlist and any(phrase in prompt for phrase in cfg.allowlist):
+                continue
+            if finding.code in cfg.severity_overrides:
+                finding = SecurityFinding(
+                    risk=cast(Risk, cfg.severity_overrides[finding.code]),
+                    code=finding.code,
+                    message=finding.message,
+                    detail=finding.detail,
+                    recommendation=finding.recommendation,
+                    confidence=finding.confidence,
+                    line=finding.line,
+                    col=finding.col,
+                )
+            filtered.append(finding)
+        result.findings = filtered
 
     return result

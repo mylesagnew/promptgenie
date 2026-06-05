@@ -7,7 +7,7 @@ name = "promptgenie"
 version = "1.0.7"
 description = "Secure prompt engineering for AI agents and engineering teams"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Myles Agnew" }]
 requires-python = ">=3.10"
 keywords = ["prompt-engineering", "llm", "ai", "security", "cli", "agents"]
@@ -15,7 +15,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -69,6 +68,13 @@ promptgenie = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts   = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["promptgenie"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
 
 [tool.ruff]
 target-version = "py310"

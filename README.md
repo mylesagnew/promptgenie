@@ -31,6 +31,43 @@ PromptGenie makes prompts:
 
 ---
 
+## Quickstart
+
+```bash
+git clone https://github.com/mylesagnew/promptgenie.git
+cd promptgenie
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
+
+# Generate a security-checked prompt for Claude Code
+promptgenie generate "review this repo for security issues" --target claude-code
+
+# Scan a prompt file for secrets and injection risks
+promptgenie scan examples/auth-refactor.md
+
+# Lint a prompt for quality issues
+promptgenie lint examples/auth-refactor.md
+
+# Launch the guided interactive menu
+promptgenie interactive
+```
+
+Expected output: a structured, linted, scored prompt ready to paste into your AI tool.
+
+---
+
+## Demo
+
+<!-- Screenshot: promptgenie generate output showing structured prompt + quality score -->
+<!-- Replace with: assets/demo-generate.png -->
+
+<!-- Screenshot: promptgenie scan output showing SARIF-linked security findings -->
+<!-- Replace with: assets/demo-scan.png -->
+
+> **To add screenshots:** run `promptgenie generate "..." --target claude-code` and `promptgenie scan examples/auth-refactor.md`, capture the terminal output, and save to `assets/demo-generate.png` and `assets/demo-scan.png`.
+
+---
+
 ## Install
 
 ```bash

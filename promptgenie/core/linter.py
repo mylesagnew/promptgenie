@@ -1,6 +1,9 @@
 import re
 from dataclasses import dataclass, field
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
+
+if TYPE_CHECKING:
+    from promptgenie.core.config import LinterConfig
 
 Severity = Literal["HIGH", "MEDIUM", "LOW", "INFO"]
 Confidence = Literal["HIGH", "MEDIUM", "LOW"]
@@ -148,12 +151,17 @@ MISSING_SECTIONS = [
 ]
 
 
-def lint(prompt: str) -> LintResult:
+def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
+    from promptgenie.core.config import LinterConfig as _LinterConfig
+
+    cfg: _LinterConfig = config if config is not None else _LinterConfig()
     result = LintResult()
     lower = prompt.lower()
 
+    effective_vague_verbs = list(VAGUE_VERBS) + cfg.custom_vague_verbs
+
     # Vague verb check
-    for verb in VAGUE_VERBS:
+    for verb in effective_vague_verbs:
         m = re.search(rf"\b{re.escape(verb)}\b", lower)
         if m:
             line, col = _offset_to_line_col(lower, m.start())
@@ -266,5 +274,9 @@ def lint(prompt: str) -> LintResult:
                 col=col,
             )
         )
+
+    # Apply config: filter disabled rules
+    if cfg.disabled_rules:
+        result.issues = [i for i in result.issues if i.code not in cfg.disabled_rules]
 
     return result

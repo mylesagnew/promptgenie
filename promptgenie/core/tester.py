@@ -95,7 +95,7 @@ def _safe_search(pattern: str, text: str) -> tuple[bool, str | None]:
 
 
 @dataclass
-class TestAssertion:
+class PromptTestAssertion:
     kind: str
     detail: str
     passed: bool
@@ -103,10 +103,10 @@ class TestAssertion:
 
 
 @dataclass
-class TestCaseResult:
+class PromptTestCaseResult:
     name: str
     passed: bool
-    assertions: list[TestAssertion] = field(default_factory=list)
+    assertions: list[PromptTestAssertion] = field(default_factory=list)
 
     @property
     def failure_count(self) -> int:
@@ -114,11 +114,11 @@ class TestCaseResult:
 
 
 @dataclass
-class TestSuiteResult:
+class PromptTestSuiteResult:
     prompt_path: str
     target: str
     description: str
-    cases: list[TestCaseResult] = field(default_factory=list)
+    cases: list[PromptTestCaseResult] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -145,15 +145,15 @@ def _run_case(
     scan_result,
     token_count: int,
     score: dict,
-) -> TestCaseResult:
+) -> PromptTestCaseResult:
     name = case.get("name", "unnamed")
-    assertions: list[TestAssertion] = []
+    assertions: list[PromptTestAssertion] = []
 
     # must_include
     for phrase in case.get("must_include", []):
         found = phrase.lower() in prompt_text.lower()
         assertions.append(
-            TestAssertion(
+            PromptTestAssertion(
                 kind="must_include",
                 detail=f'Must contain: "{phrase}"',
                 passed=found,
@@ -165,7 +165,7 @@ def _run_case(
     for phrase in case.get("must_not_include", []):
         found = phrase.lower() in prompt_text.lower()
         assertions.append(
-            TestAssertion(
+            PromptTestAssertion(
                 kind="must_not_include",
                 detail=f'Must NOT contain: "{phrase}"',
                 passed=not found,
@@ -178,7 +178,7 @@ def _run_case(
         threshold = int(case["min_score"])
         actual_score = score["total"]
         assertions.append(
-            TestAssertion(
+            PromptTestAssertion(
                 kind="min_score",
                 detail=f"Quality score ≥ {threshold}",
                 passed=actual_score >= threshold,
@@ -190,7 +190,7 @@ def _run_case(
     if "max_tokens" in case:
         limit = int(case["max_tokens"])
         assertions.append(
-            TestAssertion(
+            PromptTestAssertion(
                 kind="max_tokens",
                 detail=f"Token count ≤ {limit}",
                 passed=token_count <= limit,
@@ -203,7 +203,7 @@ def _run_case(
         allowed = SEVERITY_ORDER.get(case["max_lint_severity"].upper(), 99)
         violations = [i for i in lint_result.issues if SEVERITY_ORDER.get(i.severity, 0) > allowed]
         assertions.append(
-            TestAssertion(
+            PromptTestAssertion(
                 kind="max_lint_severity",
                 detail=f"No lint issues worse than {case['max_lint_severity'].upper()}",
                 passed=len(violations) == 0,
@@ -219,7 +219,7 @@ def _run_case(
         allowed = RISK_ORDER.get(case["max_security_risk"].upper(), 99)
         violations = [f for f in scan_result.findings if RISK_ORDER.get(f.risk, 0) > allowed]
         assertions.append(
-            TestAssertion(
+            PromptTestAssertion(
                 kind="max_security_risk",
                 detail=f"No security findings worse than {case['max_security_risk'].upper()}",
                 passed=len(violations) == 0,
@@ -236,7 +236,7 @@ def _run_case(
             re.search(rf"^##\s+{re.escape(section)}", prompt_text, re.MULTILINE | re.IGNORECASE)
         )
         assertions.append(
-            TestAssertion(
+            PromptTestAssertion(
                 kind="required_section",
                 detail=f"Section present: ## {section}",
                 passed=present,
@@ -249,7 +249,7 @@ def _run_case(
         matched, err = _safe_search(pattern, prompt_text)
         if err:
             assertions.append(
-                TestAssertion(
+                PromptTestAssertion(
                     kind="regex_match",
                     detail=f"Regex match: {pattern}",
                     passed=False,
@@ -258,7 +258,7 @@ def _run_case(
             )
         else:
             assertions.append(
-                TestAssertion(
+                PromptTestAssertion(
                     kind="regex_match",
                     detail=f"Regex match: {pattern}",
                     passed=matched,
@@ -271,7 +271,7 @@ def _run_case(
         matched, err = _safe_search(pattern, prompt_text)
         if err:
             assertions.append(
-                TestAssertion(
+                PromptTestAssertion(
                     kind="regex_not_match",
                     detail=f"Regex must NOT match: {pattern}",
                     passed=False,
@@ -280,7 +280,7 @@ def _run_case(
             )
         else:
             assertions.append(
-                TestAssertion(
+                PromptTestAssertion(
                     kind="regex_not_match",
                     detail=f"Regex must NOT match: {pattern}",
                     passed=not matched,
@@ -289,10 +289,10 @@ def _run_case(
             )
 
     passed = all(a.passed for a in assertions)
-    return TestCaseResult(name=name, passed=passed, assertions=assertions)
+    return PromptTestCaseResult(name=name, passed=passed, assertions=assertions)
 
 
-def run_test_suite(test_file: str) -> TestSuiteResult:
+def run_test_suite(test_file: str) -> PromptTestSuiteResult:
     test_path = Path(test_file)
     with open(test_path) as f:
         suite_def = yaml.safe_load(f)
@@ -317,7 +317,7 @@ def run_test_suite(test_file: str) -> TestSuiteResult:
     lint_result = lint(prompt_text)
     scan_result = scan(prompt_text)
 
-    results = TestSuiteResult(
+    results = PromptTestSuiteResult(
         prompt_path=str(prompt_path),
         target=target,
         description=description,
