@@ -12,6 +12,12 @@ _Implementation plan from Principal SecDevOps architecture review (2026-06-05). 
 
 ---
 
+### Wave 5 — Typed Models + Coverage ✅ COMPLETE
+
+**Status:** All items shipped (2026-06-05).
+
+---
+
 ### Wave 4 — SARIF Precision + Pre-commit ✅ COMPLETE
 
 **Status:** All items shipped (2026-06-05).
@@ -178,6 +184,37 @@ Priority test targets (current coverage in parentheses):
 - `promptgenie/commands/benchmark.py` (18%) — run limit, cost estimate output
 
 Target: raise overall coverage from 62% to ≥80% before `v1.1.0` release.
+
+---
+
+## [1.0.7] — 2026-06-05
+
+### Added
+
+- **`promptgenie/models.py` — typed config and result models** — New module introducing dataclass models with `from_dict()` constructors and `validate()` methods:
+  - `Profile` — target model profile (id, name, category, required_sections, forbidden_patterns, stop_conditions, security_controls, scope_guidance, default_output_format)
+  - `Template` — prompt template (id, name, description, sections, tags)
+  - `ContextPackMeta` — lightweight pack metadata for list views
+  - `GenerateResult` — output of a generate call (prompt, target, template, token_estimate, score, lint_issues, scan_findings) with `score_total`, `has_high_lint`, `has_critical_security` properties
+  - `ValidationResult` — structured output of a validate call (path, kind, valid, errors, warnings) with `__str__` rendering
+
+- **`promptgenie validate` command** — validates YAML config artefacts and exits 1 on errors:
+  - `--all` validates all built-in profiles, templates, and context packs
+  - Positional paths: auto-detects kind from filename suffix (`.workflow.yaml`, `.prompt-test.yaml`) or directory name; falls back to heuristic YAML inspection
+  - Per-kind validators: `_validate_profile`, `_validate_template_file`, `_validate_context_pack`, `_validate_workflow_file`, `_validate_prompt_test`
+  - Workflow validation delegates to `validate_workflow()` (cycle detection, required fields)
+
+### Tests
+
+- `tests/test_tester.py` — 26 new tests covering all 8 assertion types (`must_include`, `must_not_include`, `min_score`, `max_tokens`, `max_lint_severity`, `max_security_risk`, `required_sections`, `regex_match`/`not_match`), `TestSuiteResult` properties, and `run_test_suite` integration
+- `tests/test_ci_core.py` — 7 new tests covering `init_ci` (creates files, skips existing, partial create) and `ci_status`
+- `tests/test_context_packs_full.py` — 12 new tests covering `list_packs`, `render_pack` (all modes, explicit keys, unknown pack), `inject_pack_into_prompt` (before Scope, before Constraints, append), `init_pack` (creates, raises on duplicate, rejects invalid ID)
+- `tests/test_workflow_full.py` — 16 new tests covering step ordering, approval gates, prompt content (scope, forbidden, handoff, approval gate), fallback on unknown target, cycle error, minimal mode, `save_workflow`
+- `tests/test_models.py` — 17 new tests covering all model classes and their `from_dict`/`validate` methods
+- `tests/test_validate_cmd.py` — 8 new tests covering the `validate` CLI command
+- `tests/test_cli_commands.py` — 21 new tests covering Rich CLI output paths for `lint`, `scan`, `pack`, `test`, `ci` commands
+
+**Coverage: 83% (was 65%). Total tests: 306 (was 199).**
 
 ---
 
