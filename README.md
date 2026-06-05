@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="PromptGenie" width="600" />
+</p>
+
 # PromptGenie
 
 **Secure prompt engineering for AI agents and engineering teams.**
