@@ -1,0 +1,28 @@
+name: Cursor
+category: ide-coding
+strengths:
+  - inline code completion
+  - file-level edits
+  - diff application
+  - test generation
+risks:
+  - applying changes to wrong files
+  - accepting ambiguous instructions literally
+  - silent failure on multi-file edits
+required_sections:
+  - Objective
+  - Scope
+  - Constraints
+  - Output Format
+forbidden_patterns:
+  - "refactor the whole codebase"
+  - "update all files"
+stop_conditions:
+  - Change would affect files outside the listed scope
+  - Test suite fails after edit
+security_controls:
+  - require_diff_review_before_apply
+scope_guidance: |
+  Specify exact files or directories. Cursor works best with narrow, file-level tasks.
+default_output_format: |
+  Apply changes as diffs. Show before/after for each modified block.

@@ -1,0 +1,87 @@
+templates:
+  - id: threat-model
+    name: Threat Model
+    category: security
+    description: STRIDE-based threat modelling for a system or feature.
+    sections:
+      - Objective
+      - System Overview
+      - Assets
+      - Trust Boundaries
+      - Data Flows
+      - Threat Assumptions
+      - Output Format
+      - Acceptance Criteria
+
+  - id: secure-code-review
+    name: Secure Code Review
+    category: security
+    description: Security-focused code review for a given file or module.
+    sections:
+      - Objective
+      - Scope
+      - Review Focus
+      - Constraints
+      - Output Format
+      - Acceptance Criteria
+
+  - id: soc-triage
+    name: SOC Alert Triage
+    category: security-operations
+    description: Structured triage for a SOC alert or security event.
+    sections:
+      - Objective
+      - Alert Details
+      - Context
+      - Triage Steps
+      - Output Format
+      - Escalation Criteria
+
+  - id: pentest
+    name: Penetration Test Plan
+    category: security
+    description: Scoped penetration testing plan and prompt chain.
+    sections:
+      - Objective
+      - Scope
+      - Rules of Engagement
+      - Constraints
+      - Output Format
+      - Acceptance Criteria
+
+  - id: iac-review
+    name: IaC Security Review
+    category: security
+    description: Infrastructure-as-Code security review (Terraform, CloudFormation, Bicep).
+    sections:
+      - Objective
+      - Scope
+      - IaC Type
+      - Review Focus
+      - Output Format
+      - Acceptance Criteria
+
+  - id: prompt-injection-test
+    name: Prompt Injection Test Suite
+    category: security
+    description: Generate a prompt injection test suite for an AI application.
+    sections:
+      - Objective
+      - Application Description
+      - Attack Vectors
+      - Test Cases
+      - Output Format
+      - Success Criteria
+
+  - id: agentic-task
+    name: Agentic Task Brief
+    category: coding
+    description: Structured task brief for agentic coding tools (Claude Code, Cursor, Devin).
+    sections:
+      - Objective
+      - Scope
+      - Constraints
+      - Forbidden Actions
+      - Stop Conditions
+      - Acceptance Criteria
+      - Output Format

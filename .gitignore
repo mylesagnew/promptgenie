@@ -1,0 +1,14 @@
+.DS_Store
+**/.DS_Store
+.env
+.env.*
+*.env
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.prompt_library.db

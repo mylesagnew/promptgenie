@@ -1,0 +1,43 @@
+name: Claude Code
+category: agentic-coding
+strengths:
+  - multi-file reasoning
+  - terminal and shell usage
+  - codebase-wide refactoring
+  - test generation
+risks:
+  - scope creep across unrelated files
+  - destructive file edits without rollback
+  - dependency installation without approval
+  - schema migrations applied automatically
+required_sections:
+  - Objective
+  - Scope
+  - Constraints
+  - Acceptance Criteria
+  - Stop Conditions
+  - Output Format
+forbidden_patterns:
+  - "do whatever it takes"
+  - "fix everything"
+  - "use your best judgement"
+  - "handle the whole app"
+stop_conditions:
+  - Any file outside the defined scope needs to be modified
+  - A new dependency would be added
+  - A database schema change is required
+  - Tests fail and the fix is non-obvious
+  - The task would require a deployment
+security_controls:
+  - require_human_approval_for_dependencies
+  - require_scope_locks
+  - require_verification_commands
+  - no_production_deployment_without_approval
+  - no_schema_changes_without_approval
+scope_guidance: |
+  Work only within the explicitly listed files or directories.
+  Do not modify files outside this scope without asking first.
+default_output_format: |
+  Show diffs for each changed file.
+  Run tests and report results.
+  Summarise what changed and why.

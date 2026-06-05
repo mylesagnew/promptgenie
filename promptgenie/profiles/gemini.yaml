@@ -1,0 +1,20 @@
+name: Gemini
+category: general-assistant
+strengths:
+  - multimodal input (text, image, video, audio)
+  - long context window
+  - Google Workspace integration
+  - factual retrieval with grounding
+risks:
+  - variable instruction-following on complex prompts
+  - may require explicit "think step by step" for reasoning tasks
+required_sections:
+  - Objective
+  - Output Format
+forbidden_patterns: []
+stop_conditions: []
+security_controls: []
+scope_guidance: |
+  For multimodal tasks, specify which modality and what to do with it.
+default_output_format: |
+  Respond in the requested format. Use markdown for structured output.

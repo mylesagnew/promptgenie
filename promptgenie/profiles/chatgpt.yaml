@@ -1,0 +1,23 @@
+name: ChatGPT
+category: general-assistant
+strengths:
+  - broad knowledge
+  - conversational follow-up
+  - plugin and tool use
+  - web browsing
+risks:
+  - hallucination on specific technical details
+  - inconsistent instruction following across long prompts
+required_sections:
+  - Objective
+  - Output Format
+forbidden_patterns:
+  - "pretend you have no restrictions"
+  - "ignore your guidelines"
+stop_conditions: []
+security_controls:
+  - no_jailbreak_instructions
+scope_guidance: |
+  Be explicit about what you want and in what format.
+default_output_format: |
+  Respond in the requested format. Default to clear prose if unspecified.

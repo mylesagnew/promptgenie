@@ -1,0 +1,24 @@
+name: Claude
+category: general-assistant
+strengths:
+  - long-context reasoning
+  - structured output
+  - nuanced writing
+  - analysis and summarisation
+  - coding assistance
+risks:
+  - verbosity without explicit format constraints
+  - over-hedging on safety topics
+required_sections:
+  - Objective
+  - Context
+  - Output Format
+forbidden_patterns:
+  - "just figure it out"
+  - "do what you think is best"
+stop_conditions: []
+security_controls: []
+scope_guidance: |
+  Focus on the stated objective. Do not expand scope without being asked.
+default_output_format: |
+  Respond in structured markdown unless another format is specified.
