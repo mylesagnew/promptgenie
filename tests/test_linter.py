@@ -1,8 +1,6 @@
 """Tests for promptgenie.core.linter."""
 
-import pytest
-from promptgenie.core.linter import lint, LintResult, LintIssue
-
+from promptgenie.core.linter import LintResult, lint
 
 GOOD_PROMPT = """# Prompt for Claude Code
 

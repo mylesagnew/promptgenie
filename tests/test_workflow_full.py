@@ -134,9 +134,7 @@ class TestGenerateWorkflow:
     def test_unknown_target_falls_back_gracefully(self):
         wf = dict(SIMPLE_WORKFLOW)
         wf["target"] = "totally-unknown-model-xyz"
-        wf["steps"] = [
-            {"id": "s1", "name": "Step", "objective": "Do it", "output": "Done"}
-        ]
+        wf["steps"] = [{"id": "s1", "name": "Step", "objective": "Do it", "output": "Done"}]
         path = _write_workflow(wf)
         result = generate_workflow(str(path))
         assert result.steps

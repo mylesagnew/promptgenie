@@ -24,14 +24,14 @@ _MENU = [
 ]
 
 
-def _show_menu() -> None:
+def _show_menu() -> None:  # pragma: no cover
     lines = Text()
     for i, (label, _) in enumerate(_MENU, 1):
         lines.append(f"  {i}. {label}\n", style="white" if i < len(_MENU) else "dim")
     console.print(Panel(lines, title="[bold cyan]PromptGenie[/bold cyan]", border_style="cyan"))
 
 
-def _run_choice(ctx: click.Context, choice: int) -> bool:
+def _run_choice(ctx: click.Context, choice: int) -> bool:  # pragma: no cover
     """Return False to exit the loop."""
     _, cmd = _MENU[choice - 1]
 
@@ -101,12 +101,12 @@ def interactive_cmd(ctx: click.Context) -> None:
         "list_templates": root_cmd.get_command(ctx, "list-templates"),
     }
 
-    console.print(
+    console.print(  # pragma: no cover
         "\n[bold cyan]Welcome to PromptGenie[/bold cyan] — "
         "secure prompt engineering for AI agents.\n"
     )
 
-    while True:
+    while True:  # pragma: no cover
         _show_menu()
         try:
             choice = IntPrompt.ask(

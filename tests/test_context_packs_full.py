@@ -1,16 +1,14 @@
 """Extended tests for core/context_packs.py — render, inject, init (Wave 5 coverage)."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
 import yaml
 
 from promptgenie.core.context_packs import (
-    inject_pack_into_prompt,
     init_pack,
+    inject_pack_into_prompt,
     list_packs,
-    load_pack,
     render_pack,
 )
 
@@ -18,6 +16,7 @@ from promptgenie.core.context_packs import (
 def _write_pack(pack_id: str, data: dict) -> Path:
     """Write a pack YAML into the real packs directory and return its path."""
     from promptgenie.core.context_packs import _packs_dir
+
     path = _packs_dir() / f"{pack_id}.yaml"
     path.write_text(yaml.dump(data))
     return path
@@ -89,8 +88,10 @@ class TestInjectPack:
 class TestInitPack:
     def test_creates_yaml_file(self):
         import uuid
+
         pack_id = f"test-pack-{uuid.uuid4().hex[:8]}"
         from promptgenie.core.context_packs import _packs_dir
+
         try:
             path = init_pack(pack_id, name="Test Pack", description="A test pack")
             assert path.exists()

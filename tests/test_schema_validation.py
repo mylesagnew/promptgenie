@@ -3,13 +3,11 @@
 import tempfile
 from pathlib import Path
 
-import pytest
 import yaml
 from click.testing import CliRunner
 
 from promptgenie.cli import cli
 from promptgenie.models import ContextPackMeta, Profile, Template
-
 
 # ── Profile.validate() ────────────────────────────────────────────────────────
 

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from promptgenie.core.linter import LintResult
+from promptgenie.core.scanner import ScanResult
 from promptgenie.core.tester import (
     PromptTestAssertion,
     PromptTestCaseResult,
@@ -12,9 +14,6 @@ from promptgenie.core.tester import (
     _run_case,
     run_test_suite,
 )
-from promptgenie.core.linter import LintResult
-from promptgenie.core.scanner import ScanResult
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,6 +30,7 @@ def _make_suite_files(prompt_text: str, suite_yaml: str) -> tuple[Path, Path]:
 
 def _empty_results(prompt: str = "hello"):
     from promptgenie.core.generator import estimate_tokens, score_prompt
+
     lint_result = LintResult()
     scan_result = ScanResult()
     token_count = estimate_tokens(prompt)
@@ -108,6 +108,7 @@ class TestMaxTokens:
 class TestMaxLintSeverity:
     def test_passes_when_no_violations(self):
         from promptgenie.core.linter import LintIssue
+
         lint_r = LintResult(issues=[LintIssue(severity="LOW", code="X", message="m")])
         scan_r = ScanResult()
         score = {"total": 70, "breakdown": {}}
@@ -117,6 +118,7 @@ class TestMaxLintSeverity:
 
     def test_fails_when_high_issue_present(self):
         from promptgenie.core.linter import LintIssue
+
         lint_r = LintResult(issues=[LintIssue(severity="HIGH", code="X", message="m")])
         scan_r = ScanResult()
         score = {"total": 70, "breakdown": {}}
@@ -128,6 +130,7 @@ class TestMaxLintSeverity:
 class TestMaxSecurityRisk:
     def test_passes_when_no_violations(self):
         from promptgenie.core.scanner import SecurityFinding
+
         scan_r = ScanResult(findings=[SecurityFinding(risk="LOW", code="X", message="m")])
         lint_r = LintResult()
         score = {"total": 70, "breakdown": {}}
@@ -137,6 +140,7 @@ class TestMaxSecurityRisk:
 
     def test_fails_when_high_finding_present(self):
         from promptgenie.core.scanner import SecurityFinding
+
         scan_r = ScanResult(findings=[SecurityFinding(risk="CRITICAL", code="X", message="m")])
         lint_r = LintResult()
         score = {"total": 70, "breakdown": {}}
@@ -200,7 +204,9 @@ class TestRegexAssertions:
 class TestSuiteResultProperties:
     def test_passed_all_pass(self):
         suite = PromptTestSuiteResult(
-            prompt_path="p", target="claude", description="",
+            prompt_path="p",
+            target="claude",
+            description="",
             cases=[
                 PromptTestCaseResult(name="a", passed=True),
                 PromptTestCaseResult(name="b", passed=True),
@@ -212,7 +218,9 @@ class TestSuiteResultProperties:
 
     def test_not_passed_when_one_fails(self):
         suite = PromptTestSuiteResult(
-            prompt_path="p", target="claude", description="",
+            prompt_path="p",
+            target="claude",
+            description="",
             cases=[
                 PromptTestCaseResult(name="a", passed=True),
                 PromptTestCaseResult(name="b", passed=False),
@@ -269,6 +277,7 @@ tests:
 
     def test_missing_prompt_file_raises(self):
         import tempfile
+
         tmp = Path(tempfile.mkdtemp())
         suite_path = tmp / "suite.prompt-test.yaml"
         suite_path.write_text("prompt: nonexistent.md\ntests: []\n")

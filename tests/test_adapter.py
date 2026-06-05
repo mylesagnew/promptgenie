@@ -1,9 +1,8 @@
 """Tests for promptgenie.core.adapter."""
 
 import pytest
-from pathlib import Path
-from promptgenie.core.adapter import adapt, AdaptResult, AGENTIC_SECTIONS
 
+from promptgenie.core.adapter import AdaptResult, adapt
 
 AGENTIC_PROMPT = """\
 # Prompt for Claude Code

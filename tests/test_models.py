@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from promptgenie.models import (
     ContextPackMeta,
     GenerateResult,
@@ -34,9 +32,7 @@ class TestProfile:
         assert profile.default_output_format == "Structured markdown."
 
     def test_validate_passes_with_name(self):
-        profile = Profile.from_dict(
-            {"name": "Test", "category": "agentic-coding"}, "test"
-        )
+        profile = Profile.from_dict({"name": "Test", "category": "agentic-coding"}, "test")
         errors, _ = profile.validate()
         assert errors == []
 
@@ -81,8 +77,6 @@ class TestContextPackMeta:
 
 class TestGenerateResult:
     def _make(self, score_total=80, lint_issues=None, findings=None):
-        from promptgenie.core.linter import LintIssue
-        from promptgenie.core.scanner import SecurityFinding
         return GenerateResult(
             prompt="## Objective\nDo the thing.",
             target="claude-code",
@@ -103,6 +97,7 @@ class TestGenerateResult:
 
     def test_has_high_lint_true(self):
         from promptgenie.core.linter import LintIssue
+
         r = self._make(lint_issues=[LintIssue(severity="HIGH", code="X", message="m")])
         assert r.has_high_lint
 
@@ -112,6 +107,7 @@ class TestGenerateResult:
 
     def test_has_critical_security_true(self):
         from promptgenie.core.scanner import SecurityFinding
+
         r = self._make(findings=[SecurityFinding(risk="CRITICAL", code="X", message="m")])
         assert r.has_critical_security
 

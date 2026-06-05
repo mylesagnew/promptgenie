@@ -1,9 +1,8 @@
 """Tests for promptgenie.core.differ."""
 
 import pytest
-import tempfile
-from pathlib import Path
-from promptgenie.core.differ import diff_prompts, DiffResult
+
+from promptgenie.core.differ import DiffResult, diff_prompts
 
 V1 = """\
 # Prompt for Claude Code

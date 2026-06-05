@@ -1,15 +1,14 @@
 """Tests for promptgenie.core.generator."""
 
-import pytest
 from promptgenie.core.generator import (
-    generate_prompt,
-    list_targets,
-    list_templates,
     estimate_tokens,
-    score_prompt,
-    load_profile,
+    generate_prompt,
     infer_target,
     infer_template,
+    list_targets,
+    list_templates,
+    load_profile,
+    score_prompt,
 )
 
 
@@ -122,8 +121,15 @@ class TestScoring:
     def test_score_has_all_dimensions(self):
         profile = load_profile("claude-code")
         score = score_prompt("test", profile)
-        dims = {"target_fit", "task_clarity", "context_sufficiency",
-                "output_contract", "safety_controls", "token_efficiency", "testability"}
+        dims = {
+            "target_fit",
+            "task_clarity",
+            "context_sufficiency",
+            "output_contract",
+            "safety_controls",
+            "token_efficiency",
+            "testability",
+        }
         assert set(score["breakdown"].keys()) == dims
 
 

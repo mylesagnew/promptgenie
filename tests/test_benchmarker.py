@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from promptgenie.core.benchmarker import (
-    BenchmarkEvaluationError,
-    BenchmarkRun,
     MAX_RUNS,
     RUBRIC_DIMENSIONS,
+    BenchmarkEvaluationError,
+    BenchmarkRun,
     _judge,
     run_benchmark,
 )
@@ -50,7 +50,7 @@ class TestJudgeParsing:
         return client
 
     def _valid_judge_json(self) -> str:
-        scores = {d: 80 for d in RUBRIC_DIMENSIONS}
+        scores = dict.fromkeys(RUBRIC_DIMENSIONS, 80)
         scores["reasoning"] = "good|good|good|good|good|good"
         return json.dumps(scores)
 
@@ -94,7 +94,10 @@ class TestJudgeParsing:
             patch("promptgenie.core.benchmarker._call_model") as mock_call,
             patch("promptgenie.core.benchmarker._judge") as mock_judge,
         ):
-            mock_call.return_value = ("response text", {"input": 10, "output": 20, "cache_read": 0, "cache_write": 0})
+            mock_call.return_value = (
+                "response text",
+                {"input": 10, "output": 20, "cache_read": 0, "cache_write": 0},
+            )
             mock_judge.side_effect = BenchmarkEvaluationError("parse failed")
 
             import os
@@ -117,7 +120,7 @@ class TestBenchmarkRunOverallScore:
         assert run.overall_score == 0
 
     def test_overall_score_averages_dimensions(self):
-        scores = {d: 80 for d in RUBRIC_DIMENSIONS}
+        scores = dict.fromkeys(RUBRIC_DIMENSIONS, 80)
         run = BenchmarkRun(
             model="m", prompt_path="p", prompt_text="t", response_text="r", rubric_scores=scores
         )

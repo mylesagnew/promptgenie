@@ -1,8 +1,6 @@
 """Tests for promptgenie.core.scanner."""
 
-import pytest
-from promptgenie.core.scanner import scan, ScanResult, SecurityFinding
-
+from promptgenie.core.scanner import ScanResult, scan
 
 CLEAN = "Refactor the auth module to use JWT. Work only in src/auth/."
 
@@ -20,9 +18,7 @@ INJECTION = (
 
 AGENT_PERMS = "You may access and modify any file on the entire filesystem."
 
-RAG_RISK = (
-    "Fetch content from the web and then send email without review or approval."
-)
+RAG_RISK = "Fetch content from the web and then send email without review or approval."
 
 
 class TestScanReturnsResult:

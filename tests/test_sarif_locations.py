@@ -2,11 +2,9 @@
 
 import json
 
-import pytest
-
 from promptgenie.core.formatters import lint_to_sarif, scan_to_sarif
-from promptgenie.core.linter import LintIssue, lint
-from promptgenie.core.scanner import SecurityFinding, scan, _offset_to_line_col
+from promptgenie.core.linter import lint
+from promptgenie.core.scanner import _offset_to_line_col, scan
 
 
 class TestOffsetToLineCol:
@@ -112,11 +110,7 @@ class TestSarifRegionEmission:
         sarif = self._parse_sarif(lint_to_sarif(result, "test.prompt.md"))
         results = sarif["runs"][0]["results"]
         # Find a result that has a region (pattern-matched issues should)
-        with_region = [
-            r
-            for r in results
-            if "region" in r["locations"][0]["physicalLocation"]
-        ]
+        with_region = [r for r in results if "region" in r["locations"][0]["physicalLocation"]]
         assert with_region, "At least one lint result should have a SARIF region"
 
     def test_sarif_has_confidence_property(self):

@@ -38,9 +38,8 @@ class TestLintCommand:
         self.runner = CliRunner()
 
     def _prompt_file(self, content: str = SAMPLE_PROMPT):
-        tmp = tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False)
-        tmp.write(content)
-        tmp.flush()
+        with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False) as tmp:
+            tmp.write(content)
         return tmp.name
 
     def test_lint_rich_output(self):
@@ -74,9 +73,8 @@ class TestScanCommand:
         self.runner = CliRunner()
 
     def _prompt_file(self, content: str = SAMPLE_PROMPT):
-        tmp = tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False)
-        tmp.write(content)
-        tmp.flush()
+        with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False) as tmp:
+            tmp.write(content)
         return tmp.name
 
     def test_scan_rich_output(self):
@@ -103,7 +101,7 @@ class TestScanCommand:
         path = self._prompt_file()
         with tempfile.TemporaryDirectory() as tmp:
             out = str(Path(tmp) / "scan.json")
-            result = self.runner.invoke(cli, ["scan", path, "--format", "json", "--out", out])
+            self.runner.invoke(cli, ["scan", path, "--format", "json", "--out", out])
             assert Path(out).exists()
 
 
@@ -121,11 +119,15 @@ class TestPackCommands:
         assert "React" in result.output
 
     def test_pack_show_minimal_mode(self):
-        result = self.runner.invoke(cli, ["pack", "show", "react-supabase-app", "--mode", "minimal"])
+        result = self.runner.invoke(
+            cli, ["pack", "show", "react-supabase-app", "--mode", "minimal"]
+        )
         assert result.exit_code == 0
 
     def test_pack_show_exhaustive_mode(self):
-        result = self.runner.invoke(cli, ["pack", "show", "react-supabase-app", "--mode", "exhaustive"])
+        result = self.runner.invoke(
+            cli, ["pack", "show", "react-supabase-app", "--mode", "exhaustive"]
+        )
         assert result.exit_code == 0
 
     def test_pack_show_unknown_exits_1(self):
@@ -147,7 +149,9 @@ class TestPackCommands:
 
     def test_pack_init_and_cleanup(self):
         import uuid
+
         from promptgenie.core.context_packs import _packs_dir
+
         pack_id = f"cli-test-{uuid.uuid4().hex[:8]}"
         try:
             result = self.runner.invoke(cli, ["pack", "init", pack_id, "--name", "CLI Test Pack"])
@@ -171,8 +175,8 @@ class TestTestCommand:
             prompt.write_text(SAMPLE_PROMPT)
             suite = Path(tmp) / "suite.prompt-test.yaml"
             suite.write_text(
-                f"prompt: prompt.md\ntarget: claude-code\ntests:\n"
-                f"  - name: has objective\n    must_include:\n      - Objective\n"
+                "prompt: prompt.md\ntarget: claude-code\ntests:\n"
+                "  - name: has objective\n    must_include:\n      - Objective\n"
             )
             result = self.runner.invoke(cli, ["test", str(suite)])
             assert result.exit_code == 0

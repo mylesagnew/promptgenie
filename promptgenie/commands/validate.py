@@ -21,7 +21,9 @@ def _validate_profile(path: Path) -> ValidationResult:
         )
     profile = Profile.from_dict(data, profile_id=path.stem)
     errors, warnings = profile.validate()
-    return ValidationResult(path=path, kind="profile", valid=not errors, errors=errors, warnings=warnings)
+    return ValidationResult(
+        path=path, kind="profile", valid=not errors, errors=errors, warnings=warnings
+    )
 
 
 def _validate_template_file(path: Path) -> list[ValidationResult]:

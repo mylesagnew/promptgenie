@@ -2,6 +2,7 @@
 
 import pytest
 from click.testing import CliRunner
+
 from promptgenie.cli import cli
 
 
@@ -53,22 +54,59 @@ class TestHelp:
 
 class TestGenerate:
     def test_generate_exits_zero(self, runner):
-        result = runner.invoke(cli, ["generate", "refactor auth", "--target", "claude-code", "--no-lint", "--no-scan"])
+        result = runner.invoke(
+            cli, ["generate", "refactor auth", "--target", "claude-code", "--no-lint", "--no-scan"]
+        )
         assert result.exit_code == 0
 
     def test_generate_includes_objective(self, runner):
-        result = runner.invoke(cli, ["generate", "refactor auth module", "--target", "claude-code", "--no-lint", "--no-scan"])
+        result = runner.invoke(
+            cli,
+            [
+                "generate",
+                "refactor auth module",
+                "--target",
+                "claude-code",
+                "--no-lint",
+                "--no-scan",
+            ],
+        )
         assert "Objective" in result.output
 
     def test_generate_saves_to_file(self, runner, tmp_path):
         out = str(tmp_path / "out.md")
-        result = runner.invoke(cli, ["generate", "refactor auth", "--target", "claude", "--out", out, "--no-lint", "--no-scan"])
+        result = runner.invoke(
+            cli,
+            [
+                "generate",
+                "refactor auth",
+                "--target",
+                "claude",
+                "--out",
+                out,
+                "--no-lint",
+                "--no-scan",
+            ],
+        )
         assert result.exit_code == 0
         from pathlib import Path
+
         assert Path(out).exists()
 
     def test_generate_exhaustive_mode(self, runner):
-        result = runner.invoke(cli, ["generate", "refactor auth", "--target", "claude-code", "--mode", "exhaustive", "--no-lint", "--no-scan"])
+        result = runner.invoke(
+            cli,
+            [
+                "generate",
+                "refactor auth",
+                "--target",
+                "claude-code",
+                "--mode",
+                "exhaustive",
+                "--no-lint",
+                "--no-scan",
+            ],
+        )
         assert result.exit_code == 0
 
 

@@ -31,6 +31,7 @@ class TestInitCi:
 
     def test_workflow_content_is_yaml(self):
         import yaml
+
         with tempfile.TemporaryDirectory() as tmp:
             result = init_ci(tmp)
             wf_path = result["created"]["github_actions"]

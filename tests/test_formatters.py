@@ -1,13 +1,15 @@
 """Tests for promptgenie.core.formatters — JSON and SARIF output."""
 
 import json
-import pytest
+
+from promptgenie.core.formatters import (
+    lint_to_json,
+    lint_to_sarif,
+    scan_to_json,
+    scan_to_sarif,
+)
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
-from promptgenie.core.formatters import (
-    lint_to_json, lint_to_sarif,
-    scan_to_json, scan_to_sarif,
-)
 
 CLEAN = (
     "# Prompt for Claude Code\n\n"
