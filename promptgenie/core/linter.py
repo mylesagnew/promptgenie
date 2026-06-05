@@ -3,6 +3,15 @@ from dataclasses import dataclass, field
 from typing import Literal, cast
 
 Severity = Literal["HIGH", "MEDIUM", "LOW", "INFO"]
+Confidence = Literal["HIGH", "MEDIUM", "LOW"]
+
+
+def _offset_to_line_col(text: str, offset: int) -> tuple[int, int]:
+    """Convert a byte offset into 1-based (line, col)."""
+    before = text[:offset]
+    line = before.count("\n") + 1
+    col = offset - before.rfind("\n")
+    return line, col
 
 
 @dataclass
@@ -11,6 +20,9 @@ class LintIssue:
     code: str
     message: str
     suggestion: str = ""
+    confidence: Confidence = "MEDIUM"
+    line: int = 0
+    col: int = 0
 
 
 @dataclass
@@ -43,49 +55,57 @@ VAGUE_VERBS = [
     "work on",
 ]
 
+# (regex, severity, code, message, confidence)
 AGENTIC_RISK_PATTERNS = [
-    (r"do whatever it takes", "HIGH", "AGENT_001", "Unbounded agent instruction."),
+    (r"do whatever it takes", "HIGH", "AGENT_001", "Unbounded agent instruction.", "HIGH"),
     (
         r"fix everything",
         "HIGH",
         "AGENT_002",
         "Overly broad scope — agent will interpret liberally.",
+        "HIGH",
     ),
     (
         r"use your judgement",
         "MEDIUM",
         "AGENT_003",
         "Defers decisions to model; add explicit stop conditions.",
+        "MEDIUM",
     ),
     (
         r"install (any|all|whatever|the) (dependencies|packages|libs)",
         "HIGH",
         "AGENT_004",
         "Allows unrestricted package installation.",
+        "HIGH",
     ),
     (
         r"deploy to (production|prod|live)",
         "HIGH",
         "AGENT_005",
         "Prompt allows production deployment without approval gate.",
+        "HIGH",
     ),
     (
         r"drop (the |all )?(table|database|db|schema)",
         "HIGH",
         "AGENT_006",
         "Prompt allows destructive database operations.",
+        "HIGH",
     ),
     (
         r"delete (all|every|the whole|everything)",
         "HIGH",
         "AGENT_007",
         "Prompt allows mass deletion.",
+        "HIGH",
     ),
     (
         r"run (as|with) (root|admin|sudo)",
         "HIGH",
         "AGENT_008",
         "Prompt requests elevated privileges.",
+        "HIGH",
     ),
 ]
 
@@ -134,13 +154,18 @@ def lint(prompt: str) -> LintResult:
 
     # Vague verb check
     for verb in VAGUE_VERBS:
-        if re.search(rf"\b{re.escape(verb)}\b", lower):
+        m = re.search(rf"\b{re.escape(verb)}\b", lower)
+        if m:
+            line, col = _offset_to_line_col(lower, m.start())
             result.issues.append(
                 LintIssue(
                     severity="MEDIUM",
                     code="TASK_001",
                     message=f'Vague verb detected: "{verb}".',
                     suggestion='Replace with a specific, measurable action (e.g. "refactor", "extract", "add unit tests for").',
+                    confidence="HIGH",
+                    line=line,
+                    col=col,
                 )
             )
             break  # one warning per class
@@ -157,6 +182,9 @@ def lint(prompt: str) -> LintResult:
                 + ", ".join(found_markers[:3])
                 + ").",
                 suggestion="Split into separate focused prompts or use a staged workflow.",
+                confidence="MEDIUM",
+                line=1,
+                col=1,
             )
         )
 
@@ -171,18 +199,26 @@ def lint(prompt: str) -> LintResult:
                 code="TASK_003",
                 message="No target AI tool specified.",
                 suggestion="Add the intended tool (Claude, Claude Code, ChatGPT, Cursor, etc.).",
+                confidence="HIGH",
+                line=1,
+                col=1,
             )
         )
 
     # Agentic risk patterns
-    for pattern, sev, code, msg in AGENTIC_RISK_PATTERNS:
-        if re.search(pattern, lower):
+    for pattern, sev, code, msg, confidence in AGENTIC_RISK_PATTERNS:
+        m = re.search(pattern, lower)
+        if m:
+            line, col = _offset_to_line_col(lower, m.start())
             result.issues.append(
                 LintIssue(
                     severity=cast(Severity, sev),
                     code=code,
                     message=msg,
                     suggestion="Add explicit constraints and approval gates.",
+                    confidence=cast(Confidence, confidence),
+                    line=line,
+                    col=col,
                 )
             )
 
@@ -209,17 +245,25 @@ def lint(prompt: str) -> LintResult:
                         code=code,
                         message=msg,
                         suggestion=f"Add a {section_name} section.",
+                        confidence="MEDIUM",
+                        line=1,
+                        col=1,
                     )
                 )
 
     # Over-broad scope
-    if re.search(r"(the whole|entire|whole|all of the) (app|codebase|repo|project|system)", lower):
+    m = re.search(r"(the whole|entire|whole|all of the) (app|codebase|repo|project|system)", lower)
+    if m:
+        line, col = _offset_to_line_col(lower, m.start())
         result.issues.append(
             LintIssue(
                 severity="MEDIUM",
                 code="TASK_004",
                 message="Scope is too broad — references the whole app/codebase.",
                 suggestion="Narrow scope to specific modules, files, or functions.",
+                confidence="HIGH",
+                line=line,
+                col=col,
             )
         )
 

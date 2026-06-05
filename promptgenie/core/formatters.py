@@ -12,6 +12,7 @@ SARIF spec: https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 from __future__ import annotations
 
 import json
+from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -19,7 +20,12 @@ if TYPE_CHECKING:
     from promptgenie.core.scanner import ScanResult
 
 TOOL_NAME = "promptgenie"
-TOOL_VERSION = "1.0.0"
+
+try:
+    TOOL_VERSION = version("promptgenie")
+except PackageNotFoundError:
+    TOOL_VERSION = "0.0.0"
+
 TOOL_URI = "https://github.com/mylesagnew/promptgenie"
 
 SARIF_VERSION = "2.1.0"
@@ -57,6 +63,9 @@ def lint_to_json(result: LintResult, prompt_path: str = "") -> str:
             {
                 "code": issue.code,
                 "severity": issue.severity,
+                "confidence": issue.confidence,
+                "line": issue.line,
+                "col": issue.col,
                 "message": issue.message,
                 "suggestion": issue.suggestion,
             }
@@ -77,6 +86,9 @@ def scan_to_json(result: ScanResult, prompt_path: str = "") -> str:
             {
                 "code": f.code,
                 "risk": f.risk,
+                "confidence": f.confidence,
+                "line": f.line,
+                "col": f.col,
                 "message": f.message,
                 "detail": f.detail,
                 "recommendation": f.recommendation,
@@ -109,7 +121,7 @@ def _sarif_tool(rules: list[dict]) -> dict:
     }
 
 
-def _sarif_location(prompt_path: str, region: dict | None = None) -> dict:
+def _sarif_location(prompt_path: str, line: int = 0, col: int = 0) -> dict:
     loc: dict = {
         "physicalLocation": {
             "artifactLocation": {
@@ -118,13 +130,15 @@ def _sarif_location(prompt_path: str, region: dict | None = None) -> dict:
             }
         }
     }
-    if region:
-        loc["physicalLocation"]["region"] = region
+    if line > 0:
+        loc["physicalLocation"]["region"] = {
+            "startLine": line,
+            "startColumn": max(col, 1),
+        }
     return loc
 
 
 def lint_to_sarif(result: LintResult, prompt_path: str = "") -> str:
-    # Build rule registry from unique codes
     seen_codes: dict[str, dict] = {}
     for issue in result.issues:
         if issue.code not in seen_codes:
@@ -135,7 +149,10 @@ def lint_to_sarif(result: LintResult, prompt_path: str = "") -> str:
                 "fullDescription": {"text": issue.suggestion or issue.message},
                 "defaultConfiguration": {"level": SEVERITY_TO_SARIF.get(issue.severity, "warning")},
                 "helpUri": TOOL_URI,
-                "properties": {"tags": ["prompt-lint"]},
+                "properties": {
+                    "tags": ["prompt-lint"],
+                    "confidence": issue.confidence,
+                },
             }
 
     rules = list(seen_codes.values())
@@ -145,7 +162,8 @@ def lint_to_sarif(result: LintResult, prompt_path: str = "") -> str:
             "ruleId": issue.code,
             "level": SEVERITY_TO_SARIF.get(issue.severity, "warning"),
             "message": {"text": f"{issue.message} {issue.suggestion}".strip()},
-            "locations": [_sarif_location(prompt_path)],
+            "locations": [_sarif_location(prompt_path, issue.line, issue.col)],
+            "properties": {"confidence": issue.confidence},
         }
         for issue in result.issues
     ]
@@ -173,7 +191,10 @@ def scan_to_sarif(result: ScanResult, prompt_path: str = "") -> str:
                 "fullDescription": {"text": f.recommendation or f.message},
                 "defaultConfiguration": {"level": RISK_TO_SARIF.get(f.risk, "warning")},
                 "helpUri": TOOL_URI,
-                "properties": {"tags": ["prompt-security", f"risk:{f.risk.lower()}"]},
+                "properties": {
+                    "tags": ["prompt-security", f"risk:{f.risk.lower()}"],
+                    "confidence": f.confidence,
+                },
             }
 
     rules = list(seen_codes.values())
@@ -183,7 +204,8 @@ def scan_to_sarif(result: ScanResult, prompt_path: str = "") -> str:
             "ruleId": f.code,
             "level": RISK_TO_SARIF.get(f.risk, "warning"),
             "message": {"text": f"{f.message} {f.recommendation}".strip()},
-            "locations": [_sarif_location(prompt_path)],
+            "locations": [_sarif_location(prompt_path, f.line, f.col)],
+            "properties": {"confidence": f.confidence},
         }
         for f in result.findings
     ]

@@ -12,6 +12,12 @@ _Implementation plan from Principal SecDevOps architecture review (2026-06-05). 
 
 ---
 
+### Wave 4 — SARIF Precision + Pre-commit ✅ COMPLETE
+
+**Status:** All items shipped (2026-06-05).
+
+---
+
 ### Wave 3 — Reproducibility + Supply Chain ✅ COMPLETE
 
 **Status:** All items shipped (2026-06-05).
@@ -172,6 +178,32 @@ Priority test targets (current coverage in parentheses):
 - `promptgenie/commands/benchmark.py` (18%) — run limit, cost estimate output
 
 Target: raise overall coverage from 62% to ≥80% before `v1.1.0` release.
+
+---
+
+## [1.0.6] — 2026-06-05
+
+### Added
+
+- **Line-level SARIF locations** — `SecurityFinding` and `LintIssue` now carry three new fields: `line: int`, `col: int`, and `confidence: Literal["HIGH","MEDIUM","LOW"]`. The shared helper `_offset_to_line_col(text, offset)` converts a regex match start offset to a 1-based (line, col) tuple. Every pattern-matched finding in `scan()` and `lint()` now records the exact line and column of the match. Findings that cannot be attributed to a single offset (missing-section checks, SEC_CHAIN) default to `line=1, col=1`.
+
+- **SARIF `region` in output** — `_sarif_location()` in `formatters.py` now emits a `physicalLocation.region` block with `startLine` and `startColumn` whenever `line > 0`. SARIF results also include a `properties.confidence` field. JSON output (`lint_to_json`, `scan_to_json`) includes `line`, `col`, and `confidence` for each finding/issue.
+
+- **`TOOL_VERSION` from metadata** — `formatters.py` now reads the tool version from `importlib.metadata.version("promptgenie")` instead of a hard-coded string, so SARIF output always reflects the installed version.
+
+- **Improved pre-commit hooks** — `.pre-commit-config.yaml` rebuilt with SHA-pinned upstream hooks replacing the fragile `language: system` entries:
+  - `astral-sh/ruff-pre-commit` — `ruff --fix` and `ruff-format` at commit time
+  - `pre-commit/pre-commit-hooks` — `check-yaml`, `check-toml`, `end-of-file-fixer`, `trailing-whitespace`, `check-merge-conflict`, `check-added-large-files`
+  - `Yelp/detect-secrets` — secret scanning against a committed baseline (`.secrets.baseline`)
+  - PromptGenie `local` hooks retained for prompt lint/scan/test
+
+- **`.secrets.baseline`** — detect-secrets scan baseline committed. Excludes `uv.lock`.
+
+### Tests
+
+- `tests/test_sarif_locations.py` — 17 new tests covering `_offset_to_line_col` (single-line, multi-line), scanner line/col tracking, linter line/col tracking, SARIF `region` emission, `confidence` in SARIF properties and JSON output, `TOOL_VERSION` from metadata.
+
+Total tests: 199 (was 182).
 
 ---
 
