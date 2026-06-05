@@ -813,7 +813,7 @@ promptgenie/
 - [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
 - [ ] **Rule suppression and baselining** — inline suppressions, suppression file, baseline mode, configurable fail-on severity threshold
 - [ ] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
-- [ ] **CONTRIBUTING.md and CHANGELOG** — contributor guide, rule authoring docs, profile/template schema docs, and a changelog
+- [x] **CONTRIBUTING.md and CHANGELOG** — contributor guide, rule authoring docs, profile/template schema docs, and a changelog
 
 ---
 
@@ -863,6 +863,10 @@ twine check dist/*
 ```
 
 See [SECURITY.md](SECURITY.md) for the vulnerability reporting process and scanner limitations.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor guide, rule authoring docs, and profile/template schema reference.
+
+See [CHANGELOG.md](CHANGELOG.md) for a full version history.
 
 ---
 
