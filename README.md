@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, quality scoring, and token estimation.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, quality scoring, and token estimation.
 
 ---
 
@@ -20,6 +20,7 @@ PromptGenie makes prompts:
 - **Linted** — catches vague verbs, missing scope, broad tasks, and agentic risks before you send
 - **Scanned** — detects secrets, prompt injection patterns, and unsafe agent permissions
 - **Diffed** — compare two versions with token delta, score delta, section changes, and risk changes
+- **Tested** — declarative unit tests assert quality, safety, structure, and content before you ship
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles and templates, versioned alongside your code
 
@@ -44,6 +45,8 @@ pip install -e .
 | `lint` | Check a prompt file for quality and structural issues |
 | `scan` | Scan a prompt file for security risks |
 | `diff` | Compare two prompt versions — token, score, section, and risk delta |
+| `adapt` | Translate a prompt from one target profile to another |
+| `test` | Run a declarative prompt test suite |
 | `list-targets` | Show all available model profiles |
 | `list-templates` | Show all available prompt templates |
 
@@ -144,10 +147,6 @@ Compare two prompt versions side-by-side — tokens, quality scores, section cha
 
 ```bash
 promptgenie diff v1.md v2.md --target claude-code
-```
-
-```bash
-# Include full unified diff
 promptgenie diff v1.md v2.md --target claude-code --unified
 ```
 
@@ -161,53 +160,133 @@ promptgenie diff v1.md v2.md --target claude-code --unified
 | **Lint Changes** | Issues resolved in v2 vs new issues introduced |
 | **Security Changes** | Findings resolved in v2 vs new findings introduced |
 
-**Example output:**
-
-```
-Comparing  v1.md  →  v2.md
-
-╭──────────────────────────── Summary ─────────────────────────────╮
-│  Metric              Version A    Version B    Delta              │
-│  Tokens                    38          171     +133              │
-│  Quality score         70/100       88/100      +18              │
-│  Lint issues                3            1       -2              │
-│  Security findings          0            1       +1              │
-╰──────────────────────────────────────────────────────────────────╯
-
-╭──────────────────── Quality Score Breakdown ──────────────────────╮
-│  Dimension           A      B      Δ                              │
-│  Target Fit         50    100    +50                              │
-│  Task Clarity       90     90      0                              │
-│  Context Sufficiency 50    75    +25                              │
-│  Output Contract    90     90      0                              │
-│  Safety Controls    58     82    +24                              │
-│  Token Efficiency   95     95      0                              │
-│  Testability        60     90    +30                              │
-╰──────────────────────────────────────────────────────────────────╯
-
-╭──────────────────────── Section Changes ──────────────────────────╮
-│ [CHANGED]    Objective                                            │
-│ [CHANGED]    Scope                                               │
-│ [CHANGED]    Output Format                                       │
-│ [ADDED]      Constraints                                         │
-│ [ADDED]      Stop Conditions                                     │
-│ [ADDED]      Acceptance Criteria                                 │
-╰──────────────────────────────────────────────────────────────────╯
-
-╭───────────────────────── Lint Changes ────────────────────────────╮
-│ [RESOLVED]  MEDIUM  [STRUCT_001]  No stop conditions found.      │
-│ [RESOLVED]  LOW     [STRUCT_003]  No forbidden actions listed.   │
-│ [RESOLVED]  LOW     [STRUCT_005]  No acceptance criteria.        │
-│ [NEW]       HIGH    [AGENT_004]   Unrestricted package install.  │
-╰──────────────────────────────────────────────────────────────────╯
-```
-
 **Options:**
 
 | Flag | Description |
 |---|---|
 | `--target`, `-t` | Profile to use for quality scoring (default: `claude`) |
 | `--unified`, `-u` | Show full colour-coded unified diff |
+
+---
+
+### `adapt`
+
+Translate a prompt written for one target into another — rewriting model-specific language, dropping agentic safety sections for non-agentic targets, and adding sections required by the destination profile.
+
+```bash
+# Claude Code → Cursor (same agentic category — keeps all safety sections)
+promptgenie adapt my-prompt.md --from claude-code --to cursor
+
+# Claude Code → ChatGPT (drops scope/stop conditions/constraints, warns you)
+promptgenie adapt my-prompt.md --from claude-code --to chatgpt --out chatgpt-prompt.md
+
+# Show original alongside adapted version
+promptgenie adapt my-prompt.md --from claude-code --to gemini --show-original
+```
+
+**What it does:**
+
+| Scenario | Behaviour |
+|---|---|
+| Agentic → Agentic (e.g. `claude-code` → `cursor`) | Keeps all sections, rewrites model name |
+| Agentic → General (e.g. `claude-code` → `chatgpt`) | Drops scope / stop conditions / constraints, warns you, trims tokens |
+| Missing required sections | Generates default content from the destination profile |
+| Forbidden patterns in content | Replaces with `[REMOVED — forbidden by target profile]` |
+
+Outputs a colour-coded change log (KEPT / REWRITTEN / ADDED / DROPPED per section) and a score and token summary with delta.
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--from` | Source target profile |
+| `--to` | Destination target profile |
+| `--out`, `-o` | Save adapted prompt to file |
+| `--show-original` | Print original alongside adapted version |
+
+---
+
+### `test`
+
+Run a declarative prompt test suite defined in a `.prompt-test.yaml` file. Assert content, structure, quality scores, token budgets, lint severity, and security risk — all without sending the prompt to a model.
+
+```bash
+promptgenie test my-suite.prompt-test.yaml
+promptgenie test my-suite.prompt-test.yaml --verbose
+```
+
+**Test file format:**
+
+```yaml
+prompt: path/to/my-prompt.md   # relative to the test file
+target: claude-code
+description: "Auth refactor prompt — safety and quality assertions"
+
+tests:
+  - name: has explicit stop conditions
+    must_include:
+      - "Stop and ask"
+      - "approval"
+
+  - name: scope is restricted
+    must_include:
+      - "src/auth"
+    must_not_include:
+      - "entire codebase"
+      - "fix everything"
+
+  - name: no unsafe agentic patterns
+    must_not_include:
+      - "do whatever it takes"
+      - "deploy to production"
+
+  - name: required sections present
+    required_sections:
+      - Objective
+      - Scope
+      - Stop Conditions
+      - Acceptance Criteria
+
+  - name: quality score threshold
+    min_score: 80
+
+  - name: token budget
+    max_tokens: 500
+
+  - name: no high lint issues
+    max_lint_severity: MEDIUM
+
+  - name: no high security findings
+    max_security_risk: MEDIUM
+
+  - name: no production deployment pattern
+    regex_not_match:
+      - "deploy to (prod|production|live)"
+```
+
+**All assertion types:**
+
+| Assertion | What it checks |
+|---|---|
+| `must_include` | Phrase is present in the prompt (case-insensitive) |
+| `must_not_include` | Phrase is absent from the prompt |
+| `required_sections` | `## Section` heading exists |
+| `regex_match` | Regex matches anywhere in the prompt |
+| `regex_not_match` | Regex does not match |
+| `min_score` | Quality score ≥ threshold |
+| `max_tokens` | Token count ≤ budget |
+| `max_lint_severity` | No lint issue worse than HIGH / MEDIUM / LOW |
+| `max_security_risk` | No security finding worse than CRITICAL / HIGH / MEDIUM / LOW |
+
+Exits `0` on full pass, `1` on any failure — safe to run in CI or as a pre-commit hook.
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--verbose`, `-v` | Show all assertions including passing ones |
+
+See [`examples/auth-refactor.prompt-test.yaml`](examples/auth-refactor.prompt-test.yaml) for a full working example.
 
 ---
 
@@ -288,15 +367,20 @@ promptgenie/
 │   ├── generator.py            # Prompt builder, scoring, token estimation
 │   ├── linter.py               # Lint rules engine
 │   ├── scanner.py              # Security scanner
-│   └── differ.py              # Diff engine — token, score, section, risk delta
+│   ├── differ.py               # Diff engine — token, score, section, risk delta
+│   ├── adapter.py              # Adapt engine — cross-profile prompt translation
+│   └── tester.py               # Test runner — declarative prompt unit tests
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
 │   ├── chatgpt.yaml
 │   ├── cursor.yaml
 │   └── gemini.yaml
-└── templates/
-    └── cyber_templates.yaml    # 7 security and coding templates
+├── templates/
+│   └── cyber_templates.yaml    # 7 security and coding templates
+└── examples/
+    ├── auth-refactor.md                    # Example prompt
+    └── auth-refactor.prompt-test.yaml      # Example test suite
 ```
 
 ---
@@ -307,8 +391,8 @@ promptgenie/
 - [x] `lint` — 15+ rules for quality, scope, and agentic safety
 - [x] `scan` — security scanner for secrets, injection, and agent risks
 - [x] `diff` — compare two prompt versions with token, score, section, and risk delta
-- [ ] `adapt` — translate a prompt from one target to another
-- [ ] `test` — prompt unit tests with expected output assertions
+- [x] `adapt` — translate a prompt from one target profile to another
+- [x] `test` — declarative prompt unit tests with 8 assertion types, CI-safe
 - [ ] `benchmark` — run prompt against a model and score the output
 - [ ] Context packs — reusable project context blocks
 - [ ] Workflow mode — staged prompt chains for complex agentic tasks
