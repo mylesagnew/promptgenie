@@ -1,0 +1,6 @@
+# PromptGenie — files excluded from lint/scan
+# Add paths that should not be checked (one per line, supports glob patterns)
+README.md
+CHANGELOG.md
+LICENSE
+docs/**

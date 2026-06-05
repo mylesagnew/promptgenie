@@ -17,6 +17,7 @@ from promptgenie.core.tester import run_test_suite
 from promptgenie.core.benchmarker import run_benchmark, compare_benchmarks, DEFAULT_MODEL, RUBRIC_DIMENSIONS
 from promptgenie.core.context_packs import list_packs, load_pack, render_pack, inject_pack_into_prompt, init_pack, SECTION_MAP
 from promptgenie.core.workflow import generate_workflow, save_workflow
+from promptgenie.core.ci import init_ci, ci_status
 
 console = Console()
 
@@ -618,6 +619,89 @@ def workflow_cmd(workflow_file, out, step, summary):
         console.print(f"\n[green]Saved {len(saved)} step prompt(s) to {out}/[/green]")
         for p in saved:
             console.print(f"  [dim]{p.name}[/dim]")
+
+
+@cli.group(name="ci")
+def ci_group():
+    """Set up and check CI integrations for prompt quality gates."""
+
+
+@ci_group.command(name="init")
+@click.option("--dir", "target_dir", default=".", type=click.Path(),
+              help="Target project directory (default: current directory).")
+def ci_init(target_dir):
+    """Scaffold GitHub Actions workflow and pre-commit hooks for prompt checks."""
+    result = init_ci(target_dir)
+    created = result["created"]
+    skipped = result["skipped"]
+
+    console.print()
+    if created:
+        for key, path in created.items():
+            label = {
+                "github_actions": "GitHub Actions workflow",
+                "pre_commit":     "pre-commit config",
+                "promptignore":   ".promptignore",
+            }.get(key, key)
+            console.print(f"  [green]Created[/green]  {label}: [dim]{path}[/dim]")
+
+    if skipped:
+        for key, path in skipped.items():
+            label = {
+                "github_actions": "GitHub Actions workflow",
+                "pre_commit":     "pre-commit config",
+                "promptignore":   ".promptignore",
+            }.get(key, key)
+            console.print(f"  [yellow]Skipped[/yellow] {label}: already exists at [dim]{path}[/dim]")
+
+    console.print()
+    console.print(Panel(
+        "\n".join([
+            "[bold]GitHub Actions[/bold]",
+            "Push or PR touching [dim].md[/dim] / [dim].prompt-test.yaml[/dim] / [dim].workflow.yaml[/dim] files",
+            "will automatically run lint, scan, and test jobs.",
+            "",
+            "[bold]Pre-commit hooks[/bold]",
+            "Install with: [cyan]pip install pre-commit && pre-commit install[/cyan]",
+            "Hooks run on staged [dim].prompt.md[/dim] and [dim].prompt-test.yaml[/dim] files.",
+            "",
+            "[bold].promptignore[/bold]",
+            "Add paths to exclude from lint/scan checks (supports glob patterns).",
+        ]),
+        title="CI Integration Ready",
+        border_style="green",
+    ))
+
+
+@ci_group.command(name="status")
+@click.option("--dir", "target_dir", default=".", type=click.Path(),
+              help="Target project directory (default: current directory).")
+def ci_status_cmd(target_dir):
+    """Check which CI integrations are active in a project directory."""
+    status = ci_status(target_dir)
+
+    table = Table(title=f"CI Status — {Path(target_dir).resolve()}", box=box.ROUNDED)
+    table.add_column("Integration")
+    table.add_column("Status", justify="center")
+
+    labels = {
+        "github_actions": "GitHub Actions (prompt-check.yml)",
+        "pre_commit":     "Pre-commit hooks (.pre-commit-config.yaml)",
+        "promptignore":   ".promptignore exclusion file",
+        "is_git_repo":    "Git repository",
+    }
+
+    for key, active in status.items():
+        icon = "[green]✓ Active[/green]" if active else "[dim]✗ Not found[/dim]"
+        table.add_row(labels.get(key, key), icon)
+
+    console.print(table)
+
+    if not status.get("is_git_repo"):
+        console.print("\n[yellow]Warning:[/yellow] No .git directory found — not a git repository.")
+
+    if not all(status.values()):
+        console.print("\n[dim]Run [bold]promptgenie ci init[/bold] to set up missing integrations.[/dim]")
 
 
 @cli.group(name="pack")

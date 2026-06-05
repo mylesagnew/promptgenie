@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks:
+      - id: promptgenie-lint
+        name: PromptGenie lint
+        language: system
+        entry: promptgenie lint
+        files: \.prompt\.md$
+        pass_filenames: true
+
+      - id: promptgenie-scan
+        name: PromptGenie security scan
+        language: system
+        entry: promptgenie scan
+        files: \.prompt\.md$
+        pass_filenames: true
+
+      - id: promptgenie-test
+        name: PromptGenie prompt tests
+        language: system
+        entry: promptgenie test
+        files: \.prompt-test\.yaml$
+        pass_filenames: true
