@@ -2,13 +2,26 @@
 # Copy to .promptgenie.yaml and customise for your project.
 
 scanner:
-  # Strings that suppress ALL scanner findings when found in the prompt.
-  # Use for known-safe documentation examples that trigger secret patterns.
+  # Allowlist entries suppress findings whose *matched text* contains the phrase.
+  # Suppression is finding-specific, not whole-prompt.
+  #
+  # Simple string: suppresses any finding whose matched text contains this phrase.
+  # Use for known-safe documentation examples that look like secrets.
   allowlist:
     - "example-token-for-docs"
-    - "PLACEHOLDER_SECRET"
 
-  # Rule codes to suppress entirely.
+  # Scoped entry: suppress only specific rule codes when the phrase is matched.
+  # This is safer — it won't accidentally suppress unrelated findings.
+  #
+  #   - phrase: "PLACEHOLDER_SECRET"
+  #     rules:
+  #       - SEC_SECRET
+  #
+  #   - phrase: "known-safe-deploy"
+  #     rules:
+  #       - PERM_005
+
+  # Rule codes to disable entirely (no suppression phrase needed).
   disabled_rules:
     - SEC_007
 

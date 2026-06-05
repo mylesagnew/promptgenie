@@ -27,6 +27,7 @@ class SecurityFinding:
     confidence: Confidence = "MEDIUM"
     line: int = 0
     col: int = 0
+    matched_text: str = ""  # the text that triggered this finding (used for scoped allowlisting)
 
 
 @dataclass
@@ -200,6 +201,7 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                     confidence=cast(Confidence, confidence),
                     line=line,
                     col=col,
+                    matched_text=m.group(0),
                 )
             )
 
@@ -217,6 +219,7 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                     confidence=cast(Confidence, confidence),
                     line=line,
                     col=col,
+                    matched_text=m.group(0),
                 )
             )
 
@@ -234,6 +237,7 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                     confidence=cast(Confidence, confidence),
                     line=line,
                     col=col,
+                    matched_text=m.group(0),
                 )
             )
 
@@ -251,6 +255,7 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                     confidence=cast(Confidence, confidence),
                     line=line,
                     col=col,
+                    matched_text=m.group(0),
                 )
             )
 
@@ -271,16 +276,24 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                 confidence="MEDIUM",
                 line=1,
                 col=1,
+                matched_text="",
             )
         )
 
-    # Apply config: allowlist, disabled rules, severity overrides
+    # Apply config: disabled rules, scoped allowlist, severity overrides.
+    #
+    # Allowlist entries are rule-scoped and matched-text-aware:
+    #   - entry.rules non-empty → only suppresses findings with those rule codes
+    #   - suppression only fires when entry.phrase appears in the finding's matched_text
+    #     (not anywhere in the whole prompt — that was the original broken behaviour)
     if cfg.allowlist or cfg.disabled_rules or cfg.severity_overrides:
         filtered: list[SecurityFinding] = []
         for finding in result.findings:
             if finding.code in cfg.disabled_rules:
                 continue
-            if cfg.allowlist and any(phrase in prompt for phrase in cfg.allowlist):
+            if cfg.allowlist and any(
+                entry.suppresses(finding.code, finding.matched_text) for entry in cfg.allowlist
+            ):
                 continue
             if finding.code in cfg.severity_overrides:
                 finding = SecurityFinding(
@@ -292,6 +305,7 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                     confidence=finding.confidence,
                     line=finding.line,
                     col=finding.col,
+                    matched_text=finding.matched_text,
                 )
             filtered.append(finding)
         result.findings = filtered

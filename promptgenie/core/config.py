@@ -10,8 +10,37 @@ import yaml
 
 
 @dataclass
+class AllowlistEntry:
+    """A single allowlist entry.
+
+    *phrase*: text that, when found in a finding's matched region, suppresses it.
+    *rules*:  if non-empty, suppression only applies to findings with these codes.
+              If empty, the phrase suppresses any finding whose matched text contains it.
+
+    YAML formats accepted:
+
+        # Simple string — suppresses any finding whose matched text contains this phrase
+        - "example-token-for-docs"
+
+        # Scoped — suppresses only specified rule codes
+        - phrase: "known-safe-deploy"
+          rules:
+            - PERM_005
+    """
+
+    phrase: str
+    rules: list[str] = field(default_factory=list)  # empty = applies to all rules
+
+    def suppresses(self, finding_code: str, matched_text: str) -> bool:
+        """Return True if this entry suppresses the given finding."""
+        if self.rules and finding_code not in self.rules:
+            return False
+        return self.phrase.lower() in matched_text.lower()
+
+
+@dataclass
 class ScannerConfig:
-    allowlist: list[str] = field(default_factory=list)
+    allowlist: list[AllowlistEntry] = field(default_factory=list)
     disabled_rules: list[str] = field(default_factory=list)
     severity_overrides: dict[str, str] = field(default_factory=dict)
 
@@ -31,6 +60,24 @@ class PromptGenieConfig:
 _VALID_RISK_LEVELS = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
 
 
+def _parse_allowlist(raw_entries: list[Any]) -> list[AllowlistEntry]:
+    entries: list[AllowlistEntry] = []
+    for item in raw_entries:
+        if isinstance(item, str):
+            entries.append(AllowlistEntry(phrase=item))
+        elif isinstance(item, dict):
+            phrase = str(item.get("phrase", ""))
+            if not phrase:
+                raise ValueError(f"Allowlist entry {item!r} is missing a 'phrase' key.")
+            rules = [str(r) for r in item.get("rules", [])]
+            entries.append(AllowlistEntry(phrase=phrase, rules=rules))
+        else:
+            raise ValueError(
+                f"Allowlist entry must be a string or a mapping, got {type(item).__name__}: {item!r}"
+            )
+    return entries
+
+
 def _parse_scanner(raw: dict[str, Any]) -> ScannerConfig:
     overrides: dict[str, str] = {}
     for code, level in raw.get("severity_overrides", {}).items():
@@ -43,7 +90,7 @@ def _parse_scanner(raw: dict[str, Any]) -> ScannerConfig:
         overrides[str(code)] = level_upper
 
     return ScannerConfig(
-        allowlist=[str(v) for v in raw.get("allowlist", [])],
+        allowlist=_parse_allowlist(raw.get("allowlist", [])),
         disabled_rules=[str(v) for v in raw.get("disabled_rules", [])],
         severity_overrides=overrides,
     )
