@@ -58,13 +58,72 @@ Expected output: a structured, linted, scored prompt ready to paste into your AI
 
 ## Demo
 
-<!-- Screenshot: promptgenie generate output showing structured prompt + quality score -->
-<!-- Replace with: assets/demo-generate.png -->
+**Generate a structured, scored prompt:**
 
-<!-- Screenshot: promptgenie scan output showing SARIF-linked security findings -->
-<!-- Replace with: assets/demo-scan.png -->
+```
+$ promptgenie generate "review this repo for security issues" --target claude-code
 
-> **To add screenshots:** run `promptgenie generate "..." --target claude-code` and `promptgenie scan examples/auth-refactor.md`, capture the terminal output, and save to `assets/demo-generate.png` and `assets/demo-scan.png`.
+╭─ Generated Prompt  target: claude-code  template: agentic-task  mode: standard ─╮
+│ # Prompt for Claude Code                                                         │
+│                                                                                  │
+│ ## Objective                                                                     │
+│ review this repo for security issues                                             │
+│                                                                                  │
+│ ## Scope                                                                         │
+│ Work only within the explicitly listed files or directories.                     │
+│ Do not modify files outside this scope without asking first.                     │
+│                                                                                  │
+│ ## Stop Conditions                                                               │
+│ Stop and ask for approval if:                                                    │
+│ - Any file outside the defined scope needs to be modified                        │
+│ - A new dependency would be added                                                │
+│ - A database schema change is required                                           │
+│ - Tests fail and the fix is non-obvious                                          │
+│ - The task would require a deployment                                            │
+│                                                                                  │
+│ ## Output Format                                                                 │
+│ Show diffs for each changed file.                                                │
+│ Run tests and report results.                                                    │
+│ Summarise what changed and why.                                                  │
+│                                                                                  │
+│ ## Acceptance Criteria                                                           │
+│ Done when all objectives are met, output matches the requested format,           │
+│ and no forbidden actions were taken.                                             │
+╰──────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────── Prompt Quality Score ──────────────────────────────────╮
+│                                                                                │
+│   Target Fit            83    Task Clarity          90                         │
+│   Context Sufficiency   75    Output Contract       90                         │
+│   Safety Controls       82    Token Efficiency      95                         │
+│   Testability           90                                                     │
+│                                                                                │
+│   Overall           86/100   Token estimate        150                         │
+│                                                                                │
+╰────────────────────────────────────────────────────────────────────────────────╯
+```
+
+**Scan a prompt for security risks:**
+
+```
+$ promptgenie scan examples/auth-refactor.md
+
+╭──────────── Security Scan  Risk: HIGH  examples/auth-refactor.md ────────────╮
+│ [HIGH] [PERM_006] Unrestricted package installation.                         │
+│   → Restrict agent permissions to minimum required scope.                    │
+│     Add explicit approval gates.                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+**Lint a prompt for quality issues:**
+
+```
+$ promptgenie lint examples/auth-refactor.md
+
+╭────────────── Lint Results  80/100  examples/auth-refactor.md ───────────────╮
+│ [HIGH] [AGENT_004] Allows unrestricted package installation.                 │
+│   → Add explicit constraints and approval gates.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
 
 ---
 
@@ -99,6 +158,7 @@ pip install -e .
 | `ci status` | Check which CI integrations are active |
 | `list-targets` | Show all available model profiles |
 | `list-templates` | Show all available prompt templates |
+| `interactive` | Launch the guided menu — generate, lint, scan, diff, test, and more |
 
 ---
 
@@ -788,7 +848,8 @@ promptgenie/
 │   ├── workflow.py             # workflow command
 │   ├── ci.py                   # ci group (init, status)
 │   ├── pack.py                 # pack group (list, show, inject, init)
-│   └── targets.py              # list-targets, list-templates
+│   ├── targets.py              # list-targets, list-templates
+│   └── interactive.py          # guided interactive menu mode
 ├── renderers/
 │   └── rich.py                 # console, color constants, shared formatting helpers
 ├── core/
@@ -802,6 +863,7 @@ promptgenie/
 │   ├── context_packs.py        # Context pack engine — load, render, inject, init
 │   ├── workflow.py             # Workflow engine — staged prompt chains
 │   ├── ci.py                   # CI scaffolder — GitHub Actions + pre-commit
+│   ├── config.py               # .promptgenie.yaml config loader
 │   └── formatters.py           # Structured output — JSON and SARIF v2.1.0
 ├── profiles/
 │   ├── claude.yaml
@@ -822,11 +884,18 @@ promptgenie/
 ├── .github/
 │   └── workflows/
 │       └── prompt-check.yml                # GitHub Actions — lint, scan, test
+├── .github/
+│   ├── CODEOWNERS                          # Code ownership (all files → @mylesagnew)
+│   └── workflows/
+│       ├── ci.yml                          # Pytest (3.10–3.12), ruff, mypy, bandit, pip-audit, build
+│       ├── prompt-check.yml                # Lint, scan, and test prompt files on every PR
+│       └── release.yml                     # Tag-triggered PyPI publish + SBOM + GitHub Release
 ├── .pre-commit-config.yaml                 # Pre-commit hooks
+├── .promptgenie.yaml.example               # Example project config (rules, suppressions, overrides)
 ├── SECURITY.md                             # Vulnerability reporting and scanner limitations
 ├── CONTRIBUTING.md                         # Contributor guide, rule authoring, profile/template schema
 ├── CHANGELOG.md                            # Version history
-└── pyproject.toml                          # Modern packaging + dev dependency groups
+└── pyproject.toml                          # Modern packaging, coverage gate, dev dependency groups
 ```
 
 ---
@@ -847,18 +916,22 @@ promptgenie/
 - [x] GitHub Actions + pre-commit CI integration — lint, scan, and test in every PR
 - [x] CONTRIBUTING.md — contributor guide, rule authoring docs, profile/template schema reference
 - [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
+- [x] `interactive` — guided menu mode: generate, adapt, lint, scan, diff, test, workflow, list in one flow
+- [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists, custom vague verbs
+- [x] Coverage gate — `fail_under = 85` enforced in CI; 306 tests, 0 warnings
+- [x] CODEOWNERS — `.github/CODEOWNERS` governs all files; branch protection docs in CONTRIBUTING.md
 
 ---
 
 ### P0 — Must do before serious adoption
 
-- [x] **Automated test suite** — 140 tests: scanner, linter, generator, differ, adapter, CLI smoke tests, formatter output
-- [x] **Developer CI pipeline** — `ci.yml`: pytest (3.10–3.12), ruff, bandit, pip-audit, build + wheel smoke test
-- [x] **Modern packaging** — `pyproject.toml` with dev dependency groups, classifiers, project URLs
+- [x] **Automated test suite** — 306 tests: scanner, linter, generator, differ, adapter, tester, CLI smoke tests, formatter output — 0 warnings
+- [x] **Developer CI pipeline** — `ci.yml`: pytest (3.10–3.12) with coverage gate, ruff, mypy, bandit, pip-audit, build + wheel smoke test
+- [x] **Modern packaging** — `pyproject.toml` with dev dependency groups, classifiers, project URLs; setuptools license field modernised
 - [x] **SECURITY.md** — vulnerability reporting, scanner limitations, safe secret handling policy
 - [x] **Structured output** — `--format json` and `--format sarif` on lint and scan; SARIF uploaded to GitHub code scanning
 - [x] **Adapter safety fix** — preserve agentic safety sections by default; add `--strip-agentic-safety` as explicit opt-in
-- [x] **Fix CI green** — replaced invalid `pip-audit -q` flag; resolved 61 ruff issues; fixed 13 mypy errors; added mypy to lint job; SHA-pinned all GitHub Actions; added least-privilege `permissions: contents: read`
+- [x] **Fix CI green** — replaced invalid `pip-audit -q` flag; resolved 61 ruff issues; fixed 13 mypy errors; added mypy to lint job; SHA-pinned all GitHub Actions in all workflows; added least-privilege `permissions: contents: read`
 - [x] **Versioning single source of truth** — `__init__.py` and `cli.py` now read version from `importlib.metadata`; `pyproject.toml` aligned to `1.0.2`; version test no longer hard-codes a string
 
 ---
@@ -868,7 +941,7 @@ promptgenie/
 - [ ] **Schema validation** — Pydantic/jsonschema validation for profile, template, and rule YAML files; `promptgenie validate-profiles` command
 - [ ] **File IO safety** — bounded reads (1 MB limit), explicit UTF-8 handling, atomic writes, overwrite protection with `--force` flag
 - [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
-- [ ] **Rule suppression and baselining** — inline suppressions, suppression file, baseline mode, configurable fail-on severity threshold
+- [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `allowlist`, `severity_overrides`, and `custom_vague_verbs`; loaded automatically from cwd or any parent directory
 - [x] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
 - [x] **Context pack path validation** — strict slug regex `^[A-Za-z0-9_-]+$` on `pack_id`; path containment enforced in `load_pack` and `init_pack`; 10 traversal rejection tests added
 - [x] **Workflow schema validation and cycle detection** — `validate_workflow()` checks duplicate IDs, required fields, unknown dependencies, and cycles (DFS with visiting/visited sets); `WorkflowValidationError` surfaced cleanly in CLI; 13 tests covering valid DAGs, cycles, self-references, and bad fields
@@ -895,6 +968,39 @@ promptgenie/
 - [ ] **Plugin/profile registry** — versioned remote profile and rule packs with `promptgenie pack update`; custom rules directory; `enabled_rules`/`disabled_rules` config; severity overrides; expiring suppressions
 - [ ] **Container image** — minimal non-root Dockerfile for pipeline and SaaS use, with pinned digest and vulnerability scan
 - [ ] **Benchmark model abstraction** — provider-agnostic model interface; deterministic offline rubric tests; structured JSON output from judge; adversarial evaluation cases _(SecDevOps review: MEDIUM — hard-coded Anthropic dependency limits adoption and evaluation auditability)_
+
+---
+
+## Configuration
+
+Place a `.promptgenie.yaml` file in your project root (or any parent directory) to customise rule behaviour:
+
+```yaml
+scanner:
+  # Suppress findings that match any of these strings (useful for docs examples)
+  allowlist:
+    - "example-token-for-docs"
+
+  # Disable specific rule codes entirely
+  disabled_rules:
+    - SEC_007
+
+  # Override the default risk level for a rule
+  severity_overrides:
+    PERM_005: CRITICAL
+
+linter:
+  # Disable specific lint rules
+  disabled_rules:
+    - TASK_003
+
+  # Add project-specific vague verbs beyond the built-in list
+  custom_vague_verbs:
+    - "tidy"
+    - "polish"
+```
+
+Copy `.promptgenie.yaml.example` from the repo root as a starting point.
 
 ---
 
