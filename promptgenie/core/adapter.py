@@ -139,7 +139,7 @@ def _build_added_section(section_name: str, profile: dict) -> list[str]:
     return [f"[Add {section_name} content here]"]
 
 
-def adapt(source_path: str, from_target: str, to_target: str) -> AdaptResult:
+def adapt(source_path: str, from_target: str, to_target: str, strip_agentic_safety: bool = False) -> AdaptResult:
     original_text = Path(source_path).read_text()
 
     try:
@@ -180,14 +180,21 @@ def adapt(source_path: str, from_target: str, to_target: str) -> AdaptResult:
         heading_lower = heading.lower()
         seen_sections.add(heading_lower)
 
-        # Drop agentic-only sections when adapting to a non-agentic target
+        # Drop agentic-only sections only when caller explicitly opts in
         if heading_lower in AGENTIC_SECTIONS and not to_is_agentic and from_is_agentic:
+            if strip_agentic_safety:
+                changes.append(SectionChange(
+                    name=heading,
+                    action="dropped",
+                    reason=f"{to_name} is not an agentic tool — stripped via --strip-agentic-safety.",
+                ))
+                continue
+            # Default: preserve safety sections with a note
             changes.append(SectionChange(
                 name=heading,
-                action="dropped",
-                reason=f"{to_name} is not an agentic tool — agentic safety sections are not needed.",
+                action="kept",
+                reason="Agentic safety section preserved by default. Use --strip-agentic-safety to remove.",
             ))
-            continue
 
         # Rewrite content to replace source-specific language
         new_lines, was_changed = _rewrite_content(lines, from_profile, to_profile)

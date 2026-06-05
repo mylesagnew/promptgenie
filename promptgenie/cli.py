@@ -210,10 +210,13 @@ def scan_cmd(prompt_file, output_format, out):
 @click.option("--to", "to_target", required=True, help="Destination target profile (e.g. cursor).")
 @click.option("--out", "-o", default=None, type=click.Path(), help="Save adapted prompt to file.")
 @click.option("--show-original", is_flag=True, help="Print original prompt alongside adapted version.")
-def adapt_cmd(prompt_file, from_target, to_target, out, show_original):
+@click.option("--strip-agentic-safety", "strip_agentic_safety", is_flag=True,
+              help="Remove agentic safety sections (stop conditions, scope, forbidden actions, etc.) "
+                   "when adapting to a non-agentic target. Off by default — safety sections are preserved.")
+def adapt_cmd(prompt_file, from_target, to_target, out, show_original, strip_agentic_safety):
     """Translate a prompt from one target profile to another."""
     with console.status("[bold blue]Adapting prompt…"):
-        result = adapt(prompt_file, from_target, to_target)
+        result = adapt(prompt_file, from_target, to_target, strip_agentic_safety=strip_agentic_safety)
 
     from_name = result.source_target
     to_name = result.dest_target

@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from promptgenie.core.adapter import adapt, AdaptResult
+from promptgenie.core.adapter import adapt, AdaptResult, AGENTIC_SECTIONS
 
 
 AGENTIC_PROMPT = """\
@@ -74,21 +74,21 @@ class TestAgenticToAgenticAdaptation:
 
 
 class TestAgenticToGeneralAdaptation:
-    def test_chatgpt_drops_stop_conditions(self, agentic_file):
-        """Agentic → General (chatgpt) should drop agentic safety sections."""
+    """Default behaviour: safety sections are preserved."""
+
+    def test_chatgpt_keeps_stop_conditions_by_default(self, agentic_file):
+        """Agentic → General should preserve safety sections unless explicitly stripped."""
+        result = adapt(agentic_file, "claude-code", "chatgpt")
+        assert "Stop" in result.adapted_text
+
+    def test_chatgpt_keeps_scope_by_default(self, agentic_file):
+        result = adapt(agentic_file, "claude-code", "chatgpt")
+        assert "Scope" in result.adapted_text
+
+    def test_chatgpt_no_dropped_changes_by_default(self, agentic_file):
         result = adapt(agentic_file, "claude-code", "chatgpt")
         dropped = [c for c in result.changes if c.action == "dropped"]
-        dropped_names = [c.name.lower() for c in dropped]
-        assert any("stop" in n for n in dropped_names)
-
-    def test_chatgpt_drops_scope(self, agentic_file):
-        result = adapt(agentic_file, "claude-code", "chatgpt")
-        dropped = [c.name.lower() for c in result.changes if c.action == "dropped"]
-        assert any("scope" in n for n in dropped)
-
-    def test_chatgpt_issues_warning(self, agentic_file):
-        result = adapt(agentic_file, "claude-code", "chatgpt")
-        assert len(result.warnings) > 0
+        assert dropped == []
 
     def test_chatgpt_keeps_objective(self, agentic_file):
         result = adapt(agentic_file, "claude-code", "chatgpt")
@@ -98,8 +98,30 @@ class TestAgenticToGeneralAdaptation:
         result = adapt(agentic_file, "claude-code", "chatgpt")
         assert "Output" in result.adapted_text
 
-    def test_chatgpt_has_fewer_tokens_than_source(self, agentic_file):
-        result = adapt(agentic_file, "claude-code", "chatgpt")
+
+class TestAgenticToGeneralStripOptIn:
+    """Explicit --strip-agentic-safety opt-in behaviour."""
+
+    def test_strip_drops_stop_conditions(self, agentic_file):
+        result = adapt(agentic_file, "claude-code", "chatgpt", strip_agentic_safety=True)
+        dropped = [c.name.lower() for c in result.changes if c.action == "dropped"]
+        assert any("stop" in n for n in dropped)
+
+    def test_strip_drops_scope(self, agentic_file):
+        result = adapt(agentic_file, "claude-code", "chatgpt", strip_agentic_safety=True)
+        dropped = [c.name.lower() for c in result.changes if c.action == "dropped"]
+        assert any("scope" in n for n in dropped)
+
+    def test_strip_issues_warning(self, agentic_file):
+        result = adapt(agentic_file, "claude-code", "chatgpt", strip_agentic_safety=True)
+        assert len(result.warnings) > 0
+
+    def test_strip_removes_safety_text(self, agentic_file):
+        result = adapt(agentic_file, "claude-code", "chatgpt", strip_agentic_safety=True)
+        assert "Stop and ask" not in result.adapted_text
+
+    def test_strip_has_fewer_tokens_than_source(self, agentic_file):
+        result = adapt(agentic_file, "claude-code", "chatgpt", strip_agentic_safety=True)
         assert result.adapted_tokens < result.source_tokens
 
 
