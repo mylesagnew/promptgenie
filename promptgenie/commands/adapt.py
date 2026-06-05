@@ -1,0 +1,76 @@
+from pathlib import Path
+
+import click
+from rich.panel import Panel
+from rich.table import Table
+from rich import box
+
+from promptgenie.core.adapter import adapt
+from promptgenie.renderers.rich import console, delta_ab
+
+
+@click.command(name="adapt")
+@click.argument("prompt_file", type=click.Path(exists=True))
+@click.option("--from", "from_target", required=True, help="Source target profile (e.g. claude-code).")
+@click.option("--to", "to_target", required=True, help="Destination target profile (e.g. cursor).")
+@click.option("--out", "-o", default=None, type=click.Path(), help="Save adapted prompt to file.")
+@click.option("--show-original", is_flag=True, help="Print original prompt alongside adapted version.")
+@click.option("--strip-agentic-safety", "strip_agentic_safety", is_flag=True,
+              help="Remove agentic safety sections (stop conditions, scope, forbidden actions, etc.) "
+                   "when adapting to a non-agentic target. Off by default — safety sections are preserved.")
+def adapt_cmd(prompt_file, from_target, to_target, out, show_original, strip_agentic_safety):
+    """Translate a prompt from one target profile to another."""
+    with console.status("[bold blue]Adapting prompt…"):
+        result = adapt(prompt_file, from_target, to_target, strip_agentic_safety=strip_agentic_safety)
+
+    from_name = result.source_target
+    to_name = result.dest_target
+    console.print()
+
+    if show_original:
+        console.print(Panel(result.original_text, title=f"[dim]Original — {from_name}[/dim]", border_style="dim"))
+
+    console.print(Panel(
+        result.adapted_text,
+        title=f"[bold]Adapted Prompt[/bold]  [dim]{from_name}[/dim] → [cyan]{to_name}[/cyan]",
+        border_style="blue",
+    ))
+
+    ACTION_STYLE = {
+        "kept":      ("dim",    "KEPT"),
+        "rewritten": ("yellow", "REWRITTEN"),
+        "added":     ("green",  "ADDED"),
+        "dropped":   ("red",    "DROPPED"),
+    }
+    change_lines = []
+    for change in result.changes:
+        if change.name == "":
+            continue
+        color, label = ACTION_STYLE.get(change.action, ("white", change.action.upper()))
+        change_lines.append(f"[{color}][{label}][/{color}]  {change.name}")
+        change_lines.append(f"  [dim]{change.reason}[/dim]")
+    console.print(Panel("\n".join(change_lines), title="Change Log", border_style="dim"))
+
+    summary = Table(box=box.SIMPLE, show_header=True, padding=(0, 2))
+    summary.add_column("Metric", style="dim")
+    summary.add_column(f"Original ({from_name})", justify="right")
+    summary.add_column(f"Adapted ({to_name})", justify="right")
+    summary.add_row(
+        "Tokens",
+        str(result.source_tokens),
+        str(result.adapted_tokens) + f"  {delta_ab(result.source_tokens, result.adapted_tokens, invert=True)}",
+    )
+    summary.add_row(
+        "Quality score",
+        f"{result.source_score['total']}/100",
+        f"{result.adapted_score['total']}/100  {delta_ab(result.source_score['total'], result.adapted_score['total'])}",
+    )
+    console.print(Panel(summary, title="Score & Token Summary", border_style="dim"))
+
+    if result.warnings:
+        warn_lines = "\n".join(f"[yellow]⚠[/yellow]  {w}" for w in result.warnings)
+        console.print(Panel(warn_lines, title="Warnings", border_style="yellow"))
+
+    if out:
+        Path(out).write_text(result.adapted_text)
+        console.print(f"\n[green]Adapted prompt saved to {out}[/green]")
