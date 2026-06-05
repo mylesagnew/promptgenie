@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, quality scoring, and token estimation.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, model benchmarker, quality scoring, and token estimation.
 
 ---
 
@@ -21,6 +21,7 @@ PromptGenie makes prompts:
 - **Scanned** — detects secrets, prompt injection patterns, and unsafe agent permissions
 - **Diffed** — compare two versions with token delta, score delta, section changes, and risk changes
 - **Tested** — declarative unit tests assert quality, safety, structure, and content before you ship
+- **Benchmarked** — run prompts against real Claude models and score responses across 6 rubric dimensions
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles and templates, versioned alongside your code
 
@@ -47,6 +48,7 @@ pip install -e .
 | `diff` | Compare two prompt versions — token, score, section, and risk delta |
 | `adapt` | Translate a prompt from one target profile to another |
 | `test` | Run a declarative prompt test suite |
+| `benchmark` | Run a prompt against a Claude model and score the output |
 | `list-targets` | Show all available model profiles |
 | `list-templates` | Show all available prompt templates |
 
@@ -290,6 +292,64 @@ See [`examples/auth-refactor.prompt-test.yaml`](examples/auth-refactor.prompt-te
 
 ---
 
+### `benchmark`
+
+Run a prompt against a Claude model, score the response across 6 rubric dimensions using a judge model, and report token usage, latency, and estimated cost. Compare two prompts head-to-head across multiple runs.
+
+```bash
+# Requires ANTHROPIC_API_KEY
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Single run
+promptgenie benchmark my-prompt.md
+
+# Specific model, print full response
+promptgenie benchmark my-prompt.md --model claude-opus-4-8 --show-response
+
+# Average scores across 3 runs
+promptgenie benchmark my-prompt.md --runs 3
+
+# Compare two prompt versions head-to-head
+promptgenie benchmark v1.md --compare v2.md --runs 3
+
+# Save model response to file
+promptgenie benchmark my-prompt.md --out response.md
+```
+
+**Rubric dimensions:**
+
+| Dimension | What it measures |
+|---|---|
+| Relevance | Did the response address the prompt objective? |
+| Completeness | Were all tasks, sections, and requirements covered? |
+| Format Compliance | Did the output match the requested format? |
+| Safety Compliance | Did the response respect constraints and stop conditions? |
+| Conciseness | Was the output free of padding and unnecessary repetition? |
+| Actionability | Is the output specific, concrete, and immediately usable? |
+
+**What it outputs:**
+
+| Panel | Content |
+|---|---|
+| **Benchmark** | Score per dimension + overall, model, latency, token usage (with cache breakdown), estimated cost |
+| **Judge Reasoning** | One-sentence explanation per dimension from the judge model |
+| **Prompt Comparison** | Side-by-side A vs B scores with delta column, when `--compare` is used |
+
+The response is scored by a separate judge call (claude-haiku — fast and cheap) so benchmark results are comparable across models and prompt versions. Prompt caching is applied to the judge system prompt, reducing cost on repeated runs.
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--model`, `-m` | Claude model to benchmark (default: `claude-sonnet-4-6`) |
+| `--runs`, `-n` | Number of runs — scores are averaged (default: 1) |
+| `--compare`, `-c` | Second prompt file to benchmark and compare |
+| `--api-key` | Anthropic API key (or set `ANTHROPIC_API_KEY`) |
+| `--show-response` | Print full model response to terminal |
+| `--out`, `-o` | Save model response to file |
+
+---
+
 ### `list-targets`
 
 Show all available model profiles.
@@ -369,7 +429,8 @@ promptgenie/
 │   ├── scanner.py              # Security scanner
 │   ├── differ.py               # Diff engine — token, score, section, risk delta
 │   ├── adapter.py              # Adapt engine — cross-profile prompt translation
-│   └── tester.py               # Test runner — declarative prompt unit tests
+│   ├── tester.py               # Test runner — declarative prompt unit tests
+│   └── benchmarker.py          # Benchmark engine — model calls, rubric scoring, cost
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
@@ -393,7 +454,7 @@ promptgenie/
 - [x] `diff` — compare two prompt versions with token, score, section, and risk delta
 - [x] `adapt` — translate a prompt from one target profile to another
 - [x] `test` — declarative prompt unit tests with 8 assertion types, CI-safe
-- [ ] `benchmark` — run prompt against a model and score the output
+- [x] `benchmark` — run prompt against Claude, score with judge model, compare versions
 - [ ] Context packs — reusable project context blocks
 - [ ] Workflow mode — staged prompt chains for complex agentic tasks
 - [ ] VS Code / Cursor extension
