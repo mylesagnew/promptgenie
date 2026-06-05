@@ -773,6 +773,8 @@ promptgenie/
 │       └── prompt-check.yml                # GitHub Actions — lint, scan, test
 ├── .pre-commit-config.yaml                 # Pre-commit hooks
 ├── SECURITY.md                             # Vulnerability reporting and scanner limitations
+├── CONTRIBUTING.md                         # Contributor guide, rule authoring, profile/template schema
+├── CHANGELOG.md                            # Version history
 └── pyproject.toml                          # Modern packaging + dev dependency groups
 ```
 
@@ -792,6 +794,8 @@ promptgenie/
 - [x] Context packs — reusable project context blocks with stack, architecture, style, pitfalls
 - [x] Workflow mode — staged prompt chains with approval gates, handoffs, and per-step scope locks
 - [x] GitHub Actions + pre-commit CI integration — lint, scan, and test in every PR
+- [x] CONTRIBUTING.md — contributor guide, rule authoring docs, profile/template schema reference
+- [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
 
 ---
 
@@ -813,8 +817,6 @@ promptgenie/
 - [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
 - [ ] **Rule suppression and baselining** — inline suppressions, suppression file, baseline mode, configurable fail-on severity threshold
 - [ ] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
-- [x] **CONTRIBUTING.md and CHANGELOG** — contributor guide, rule authoring docs, profile/template schema docs, and a changelog
-
 ---
 
 ### P2 — Scaling and enterprise readiness
