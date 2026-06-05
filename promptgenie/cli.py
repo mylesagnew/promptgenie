@@ -13,7 +13,7 @@ from promptgenie.commands.pack import pack_group
 from promptgenie.commands.scan import scan_cmd
 from promptgenie.commands.targets import list_targets_cmd, list_templates_cmd
 from promptgenie.commands.test import test_cmd
-from promptgenie.commands.validate import validate_cmd
+from promptgenie.commands.validate import validate_cmd, validate_profiles_cmd
 from promptgenie.commands.workflow import workflow_cmd
 
 
@@ -36,6 +36,7 @@ cli.add_command(pack_group)
 cli.add_command(list_targets_cmd)
 cli.add_command(list_templates_cmd)
 cli.add_command(validate_cmd)
+cli.add_command(validate_profiles_cmd)
 cli.add_command(interactive_cmd)
 
 

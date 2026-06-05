@@ -34,12 +34,15 @@ class TestProfile:
         assert profile.default_output_format == "Structured markdown."
 
     def test_validate_passes_with_name(self):
-        profile = Profile.from_dict({"name": "Test"}, "test")
-        assert profile.validate() == []
+        profile = Profile.from_dict(
+            {"name": "Test", "category": "agentic-coding"}, "test"
+        )
+        errors, _ = profile.validate()
+        assert errors == []
 
     def test_validate_fails_without_name(self):
         profile = Profile(id="x", name="")
-        errors = profile.validate()
+        errors, _ = profile.validate()
         assert errors
 
 
@@ -52,16 +55,19 @@ class TestTemplate:
         assert "Objective" in tmpl.sections
 
     def test_validate_passes(self):
-        tmpl = Template.from_dict({"id": "t", "name": "T"})
-        assert tmpl.validate() == []
+        tmpl = Template.from_dict({"id": "my-t", "name": "T", "sections": ["Objective"]})
+        errors, _ = tmpl.validate()
+        assert errors == []
 
     def test_validate_fails_no_id(self):
         tmpl = Template(id="", name="Test")
-        assert tmpl.validate()
+        errors, _ = tmpl.validate()
+        assert errors
 
     def test_validate_fails_no_name(self):
         tmpl = Template(id="t", name="")
-        assert tmpl.validate()
+        errors, _ = tmpl.validate()
+        assert errors
 
 
 class TestContextPackMeta:

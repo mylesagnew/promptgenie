@@ -15,11 +15,13 @@ def _validate_profile(path: Path) -> ValidationResult:
         data = yaml.safe_load(path.read_text()) or {}
     except Exception as exc:
         return ValidationResult(path=path, kind="profile", valid=False, errors=[str(exc)])
-    profile = Profile.from_dict(data, profile_id=path.stem)
-    errors = profile.validate()
     if not isinstance(data, dict):
-        errors.append("Profile must be a YAML mapping.")
-    return ValidationResult(path=path, kind="profile", valid=not errors, errors=errors)
+        return ValidationResult(
+            path=path, kind="profile", valid=False, errors=["Profile must be a YAML mapping."]
+        )
+    profile = Profile.from_dict(data, profile_id=path.stem)
+    errors, warnings = profile.validate()
+    return ValidationResult(path=path, kind="profile", valid=not errors, errors=errors, warnings=warnings)
 
 
 def _validate_template_file(path: Path) -> list[ValidationResult]:
@@ -41,13 +43,14 @@ def _validate_template_file(path: Path) -> list[ValidationResult]:
         return results
     for tmpl_data in templates:
         tmpl = Template.from_dict(tmpl_data)
-        errors = tmpl.validate()
+        errors, warnings = tmpl.validate()
         results.append(
             ValidationResult(
                 path=path,
                 kind="template",
                 valid=not errors,
                 errors=errors,
+                warnings=warnings,
             )
         )
     return results
@@ -58,12 +61,20 @@ def _validate_context_pack(path: Path) -> ValidationResult:
         data = yaml.safe_load(path.read_text()) or {}
     except Exception as exc:
         return ValidationResult(path=path, kind="context-pack", valid=False, errors=[str(exc)])
-    errors = []
     if not isinstance(data, dict):
-        errors.append("Context pack must be a YAML mapping.")
-    elif not data.get("name"):
-        errors.append("Context pack 'name' is required.")
-    return ValidationResult(path=path, kind="context-pack", valid=not errors, errors=errors)
+        return ValidationResult(
+            path=path,
+            kind="context-pack",
+            valid=False,
+            errors=["Context pack must be a YAML mapping."],
+        )
+    from promptgenie.models import ContextPackMeta
+
+    pack = ContextPackMeta.from_dict(data, pack_id=path.stem)
+    errors, warnings = pack.validate()
+    return ValidationResult(
+        path=path, kind="context-pack", valid=not errors, errors=errors, warnings=warnings
+    )
 
 
 def _validate_workflow_file(path: Path) -> ValidationResult:
@@ -181,7 +192,12 @@ def validate_cmd(paths, validate_all):
         console.print("[dim]Nothing to validate. Use --all or pass file paths.[/dim]")
         return
 
+    _print_results(results)
+
+
+def _print_results(results: list[ValidationResult]) -> None:
     errors_total = 0
+    warnings_total = 0
     for r in results:
         color = "green" if r.valid else "red"
         status = "✓" if r.valid else "✗"
@@ -191,12 +207,50 @@ def validate_cmd(paths, validate_all):
             errors_total += 1
         for w in r.warnings:
             console.print(f"  [yellow]WARN:[/yellow]  {w}")
+            warnings_total += 1
 
     console.print()
     if errors_total:
         console.print(
-            f"[red]Validation failed:[/red] {errors_total} error(s) in {len(results)} file(s)."
+            f"[red]Validation failed:[/red] {errors_total} error(s), "
+            f"{warnings_total} warning(s) across {len(results)} file(s)."
         )
         sys.exit(1)
     else:
-        console.print(f"[green]All {len(results)} file(s) valid.[/green]")
+        warn_suffix = f" ({warnings_total} warning(s))" if warnings_total else ""
+        console.print(f"[green]All {len(results)} file(s) valid.[/green]{warn_suffix}")
+
+
+@click.command(name="validate-profiles")
+@click.option(
+    "--dir",
+    "profiles_dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory of profile YAML files to validate (default: built-in profiles).",
+)
+@click.option(
+    "--warnings/--no-warnings",
+    default=True,
+    help="Show warnings (default: on).",
+)
+def validate_profiles_cmd(profiles_dir: str | None, warnings: bool) -> None:
+    """Validate all profile YAML files against the profile schema."""
+    from promptgenie.core.generator import PROFILES_DIR
+
+    target_dir = Path(profiles_dir) if profiles_dir else PROFILES_DIR
+    yaml_files = sorted(target_dir.glob("*.yaml")) + sorted(target_dir.glob("*.yml"))
+
+    if not yaml_files:
+        console.print(f"[yellow]No YAML files found in {target_dir}[/yellow]")
+        return
+
+    console.print(f"Validating {len(yaml_files)} profile(s) in [dim]{target_dir}[/dim]\n")
+    results: list[ValidationResult] = []
+    for p in yaml_files:
+        r = _validate_profile(p)
+        if not warnings:
+            r.warnings.clear()
+        results.append(r)
+
+    _print_results(results)
