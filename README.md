@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, quality scoring, and token estimation.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, quality scoring, and token estimation.
 
 ---
 
@@ -19,6 +19,7 @@ PromptGenie makes prompts:
 - **Structured** — section-by-section output matched to the target tool's requirements
 - **Linted** — catches vague verbs, missing scope, broad tasks, and agentic risks before you send
 - **Scanned** — detects secrets, prompt injection patterns, and unsafe agent permissions
+- **Diffed** — compare two versions with token delta, score delta, section changes, and risk changes
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles and templates, versioned alongside your code
 
@@ -36,6 +37,17 @@ pip install -e .
 ---
 
 ## Commands
+
+| Command | Description |
+|---|---|
+| `generate` | Build an optimised prompt from a rough task description |
+| `lint` | Check a prompt file for quality and structural issues |
+| `scan` | Scan a prompt file for security risks |
+| `diff` | Compare two prompt versions — token, score, section, and risk delta |
+| `list-targets` | Show all available model profiles |
+| `list-templates` | Show all available prompt templates |
+
+---
 
 ### `generate`
 
@@ -126,6 +138,79 @@ Exits `1` on CRITICAL or HIGH findings — safe to use in CI or pre-commit hooks
 
 ---
 
+### `diff`
+
+Compare two prompt versions side-by-side — tokens, quality scores, section changes, lint changes, and security finding changes.
+
+```bash
+promptgenie diff v1.md v2.md --target claude-code
+```
+
+```bash
+# Include full unified diff
+promptgenie diff v1.md v2.md --target claude-code --unified
+```
+
+**What it shows:**
+
+| Panel | Content |
+|---|---|
+| **Summary** | Tokens, quality score, lint count, security findings — A vs B with delta |
+| **Quality Score Breakdown** | All 7 dimensions side-by-side with per-dimension delta |
+| **Section Changes** | Each `## Section` marked ADDED / REMOVED / CHANGED / UNCHANGED with inline line diffs |
+| **Lint Changes** | Issues resolved in v2 vs new issues introduced |
+| **Security Changes** | Findings resolved in v2 vs new findings introduced |
+
+**Example output:**
+
+```
+Comparing  v1.md  →  v2.md
+
+╭──────────────────────────── Summary ─────────────────────────────╮
+│  Metric              Version A    Version B    Delta              │
+│  Tokens                    38          171     +133              │
+│  Quality score         70/100       88/100      +18              │
+│  Lint issues                3            1       -2              │
+│  Security findings          0            1       +1              │
+╰──────────────────────────────────────────────────────────────────╯
+
+╭──────────────────── Quality Score Breakdown ──────────────────────╮
+│  Dimension           A      B      Δ                              │
+│  Target Fit         50    100    +50                              │
+│  Task Clarity       90     90      0                              │
+│  Context Sufficiency 50    75    +25                              │
+│  Output Contract    90     90      0                              │
+│  Safety Controls    58     82    +24                              │
+│  Token Efficiency   95     95      0                              │
+│  Testability        60     90    +30                              │
+╰──────────────────────────────────────────────────────────────────╯
+
+╭──────────────────────── Section Changes ──────────────────────────╮
+│ [CHANGED]    Objective                                            │
+│ [CHANGED]    Scope                                               │
+│ [CHANGED]    Output Format                                       │
+│ [ADDED]      Constraints                                         │
+│ [ADDED]      Stop Conditions                                     │
+│ [ADDED]      Acceptance Criteria                                 │
+╰──────────────────────────────────────────────────────────────────╯
+
+╭───────────────────────── Lint Changes ────────────────────────────╮
+│ [RESOLVED]  MEDIUM  [STRUCT_001]  No stop conditions found.      │
+│ [RESOLVED]  LOW     [STRUCT_003]  No forbidden actions listed.   │
+│ [RESOLVED]  LOW     [STRUCT_005]  No acceptance criteria.        │
+│ [NEW]       HIGH    [AGENT_004]   Unrestricted package install.  │
+╰──────────────────────────────────────────────────────────────────╯
+```
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--target`, `-t` | Profile to use for quality scoring (default: `claude`) |
+| `--unified`, `-u` | Show full colour-coded unified diff |
+
+---
+
 ### `list-targets`
 
 Show all available model profiles.
@@ -190,59 +275,7 @@ Every generated prompt is scored across 7 dimensions:
 | Token Efficiency | Prompt length relative to complexity |
 | Testability | Acceptance criteria or success definition present |
 
-Score of 80+ is considered production-ready. Below 60 will trigger lint warnings automatically.
-
----
-
-## Example output
-
-```
-promptgenie generate "review the Terraform config for S3 misconfigurations" \
-  --target claude-code --template iac-review --mode exhaustive
-```
-
-```
-╭─ Generated Prompt  target: claude-code  template: iac-review  mode: exhaustive ─╮
-│ # Prompt for Claude Code                                                         │
-│                                                                                  │
-│ ## Objective                                                                     │
-│ Review the Terraform config for S3 misconfigurations                            │
-│                                                                                  │
-│ ## Scope                                                                         │
-│ Work only within the explicitly listed files or directories.                     │
-│                                                                                  │
-│ ## Forbidden Actions                                                             │
-│ - do whatever it takes                                                           │
-│ - fix everything                                                                 │
-│                                                                                  │
-│ ## Stop Conditions                                                               │
-│ Stop and ask for approval if:                                                    │
-│ - Any file outside the defined scope needs to be modified                        │
-│ - A new dependency would be added                                                │
-│ - A database schema change is required                                           │
-│                                                                                  │
-│ ## Output Format                                                                 │
-│ Show diffs for each changed file.                                                │
-│ Run tests and report results.                                                    │
-│ Summarise what changed and why.                                                  │
-│                                                                                  │
-│ ## Acceptance Criteria                                                           │
-│ Done when: all objectives are met, output matches format, no forbidden actions.  │
-╰──────────────────────────────────────────────────────────────────────────────────╯
-
-╭──────────── Prompt Quality Score ──────────────╮
-│  Target Fit          95                        │
-│  Task Clarity        90                        │
-│  Context Sufficiency 75                        │
-│  Output Contract     90                        │
-│  Safety Controls     90                        │
-│  Token Efficiency    95                        │
-│  Testability         90                        │
-│                                                │
-│  Overall          89/100                       │
-│  Token estimate     148                        │
-╰────────────────────────────────────────────────╯
-```
+Score of 80+ is considered production-ready. Below 60 triggers lint warnings automatically.
 
 ---
 
@@ -254,7 +287,8 @@ promptgenie/
 ├── core/
 │   ├── generator.py            # Prompt builder, scoring, token estimation
 │   ├── linter.py               # Lint rules engine
-│   └── scanner.py              # Security scanner
+│   ├── scanner.py              # Security scanner
+│   └── differ.py              # Diff engine — token, score, section, risk delta
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
@@ -269,8 +303,11 @@ promptgenie/
 
 ## Roadmap
 
+- [x] `generate` — build structured prompts from rough task descriptions
+- [x] `lint` — 15+ rules for quality, scope, and agentic safety
+- [x] `scan` — security scanner for secrets, injection, and agent risks
+- [x] `diff` — compare two prompt versions with token, score, section, and risk delta
 - [ ] `adapt` — translate a prompt from one target to another
-- [ ] `diff` — compare two prompt versions with token and risk delta
 - [ ] `test` — prompt unit tests with expected output assertions
 - [ ] `benchmark` — run prompt against a model and score the output
 - [ ] Context packs — reusable project context blocks
