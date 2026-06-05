@@ -4,18 +4,23 @@ from pathlib import Path
 import click
 from rich.panel import Panel
 
-from promptgenie.core.linter import lint
 from promptgenie.core.formatters import lint_to_json, lint_to_sarif
-from promptgenie.renderers.rich import console, score_color, format_lint_issues
+from promptgenie.core.linter import lint
+from promptgenie.renderers.rich import console, format_lint_issues, score_color
 
 
 @click.command(name="lint")
 @click.argument("prompt_file", type=click.Path(exists=True))
-@click.option("--format", "output_format", default="rich",
-              type=click.Choice(["rich", "json", "sarif"]),
-              help="Output format (default: rich).")
-@click.option("--out", "-o", default=None, type=click.Path(),
-              help="Write output to file instead of stdout.")
+@click.option(
+    "--format",
+    "output_format",
+    default="rich",
+    type=click.Choice(["rich", "json", "sarif"]),
+    help="Output format (default: rich).",
+)
+@click.option(
+    "--out", "-o", default=None, type=click.Path(), help="Write output to file instead of stdout."
+)
 def lint_cmd(prompt_file, output_format, out):
     """Lint a prompt file for quality and structural issues."""
     text = Path(prompt_file).read_text()
@@ -35,11 +40,13 @@ def lint_cmd(prompt_file, output_format, out):
             click.echo(output)
     else:
         color = score_color(result.score)
-        console.print(Panel(
-            format_lint_issues(result),
-            title=f"Lint Results  [bold {color}]{result.score}/100[/bold {color}]  [dim]{prompt_file}[/dim]",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                format_lint_issues(result),
+                title=f"Lint Results  [bold {color}]{result.score}/100[/bold {color}]  [dim]{prompt_file}[/dim]",
+                border_style="yellow",
+            )
+        )
         if out:
             Path(out).write_text(lint_to_json(result, prompt_path=prompt_file))
             console.print(f"[dim]Results saved to {out}[/dim]")

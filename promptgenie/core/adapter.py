@@ -18,19 +18,29 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from promptgenie.core.generator import load_profile, estimate_tokens, score_prompt
-
+from promptgenie.core.generator import estimate_tokens, load_profile, score_prompt
 
 # Sections that are universally portable — always keep them.
 PORTABLE_SECTIONS = {
-    "objective", "context", "background", "task", "goal",
-    "output format", "output", "acceptance criteria", "done when",
+    "objective",
+    "context",
+    "background",
+    "task",
+    "goal",
+    "output format",
+    "output",
+    "acceptance criteria",
+    "done when",
 }
 
 # Sections that are agentic/safety-specific — only keep for agentic targets.
 AGENTIC_SECTIONS = {
-    "stop conditions", "forbidden actions", "security controls",
-    "constraints", "scope", "verification",
+    "stop conditions",
+    "forbidden actions",
+    "security controls",
+    "constraints",
+    "scope",
+    "verification",
 }
 
 AGENTIC_CATEGORIES = {"agentic-coding", "ide-coding"}
@@ -50,7 +60,7 @@ MODEL_NAME_PATTERNS = [
 @dataclass
 class SectionChange:
     name: str
-    action: str   # "kept" | "dropped" | "added" | "rewritten"
+    action: str  # "kept" | "dropped" | "added" | "rewritten"
     reason: str
 
 
@@ -94,7 +104,9 @@ def _sections_to_text(sections: list[tuple[str, list[str]]]) -> str:
     return "\n\n".join(p for p in parts if p.strip())
 
 
-def _rewrite_content(lines: list[str], from_profile: dict, to_profile: dict) -> tuple[list[str], bool]:
+def _rewrite_content(
+    lines: list[str], from_profile: dict, to_profile: dict
+) -> tuple[list[str], bool]:
     """Replace source-model-specific language. Returns (new_lines, was_changed)."""
     text = "\n".join(lines)
     original = text
@@ -108,7 +120,12 @@ def _rewrite_content(lines: list[str], from_profile: dict, to_profile: dict) -> 
     # Remove forbidden patterns of the destination profile from the content
     for pattern in to_profile.get("forbidden_patterns", []):
         if pattern.lower() in text.lower():
-            text = re.sub(re.escape(pattern), "[REMOVED — forbidden by target profile]", text, flags=re.IGNORECASE)
+            text = re.sub(
+                re.escape(pattern),
+                "[REMOVED — forbidden by target profile]",
+                text,
+                flags=re.IGNORECASE,
+            )
 
     changed = text != original
     return text.splitlines(), changed
@@ -131,7 +148,9 @@ def _build_added_section(section_name: str, profile: dict) -> list[str]:
         return [profile.get("scope_guidance", "Work only within explicitly stated boundaries.")]
     if name_lower == "security controls":
         controls = profile.get("security_controls", [])
-        return [f"- {c}" for c in controls] if controls else ["- Follow least-privilege principles."]
+        return (
+            [f"- {c}" for c in controls] if controls else ["- Follow least-privilege principles."]
+        )
     if name_lower == "output format":
         return [profile.get("default_output_format", "Respond in structured markdown.")]
     if name_lower == "acceptance criteria":
@@ -139,23 +158,37 @@ def _build_added_section(section_name: str, profile: dict) -> list[str]:
     return [f"[Add {section_name} content here]"]
 
 
-def adapt(source_path: str, from_target: str, to_target: str, strip_agentic_safety: bool = False) -> AdaptResult:
+def adapt(
+    source_path: str, from_target: str, to_target: str, strip_agentic_safety: bool = False
+) -> AdaptResult:
     original_text = Path(source_path).read_text()
 
     try:
         from_profile = load_profile(from_target)
     except FileNotFoundError:
-        from_profile = {"name": from_target, "category": "", "required_sections": [],
-                        "forbidden_patterns": [], "stop_conditions": [], "security_controls": []}
+        from_profile = {
+            "name": from_target,
+            "category": "",
+            "required_sections": [],
+            "forbidden_patterns": [],
+            "stop_conditions": [],
+            "security_controls": [],
+        }
 
     try:
         to_profile = load_profile(to_target)
     except FileNotFoundError:
-        to_profile = {"name": to_target, "category": "", "required_sections": [],
-                      "forbidden_patterns": [], "stop_conditions": [], "security_controls": []}
+        to_profile = {
+            "name": to_target,
+            "category": "",
+            "required_sections": [],
+            "forbidden_patterns": [],
+            "stop_conditions": [],
+            "security_controls": [],
+        }
 
     to_name = to_profile.get("name", to_target)
-    to_required = {s.lower() for s in to_profile.get("required_sections", [])}
+    _to_required = {s.lower() for s in to_profile.get("required_sections", [])}
     to_is_agentic = to_profile.get("category", "") in AGENTIC_CATEGORIES
     from_is_agentic = from_profile.get("category", "") in AGENTIC_CATEGORIES
 
@@ -183,43 +216,53 @@ def adapt(source_path: str, from_target: str, to_target: str, strip_agentic_safe
         # Drop agentic-only sections only when caller explicitly opts in
         if heading_lower in AGENTIC_SECTIONS and not to_is_agentic and from_is_agentic:
             if strip_agentic_safety:
-                changes.append(SectionChange(
-                    name=heading,
-                    action="dropped",
-                    reason=f"{to_name} is not an agentic tool — stripped via --strip-agentic-safety.",
-                ))
+                changes.append(
+                    SectionChange(
+                        name=heading,
+                        action="dropped",
+                        reason=f"{to_name} is not an agentic tool — stripped via --strip-agentic-safety.",
+                    )
+                )
                 continue
             # Default: preserve safety sections with a note
-            changes.append(SectionChange(
-                name=heading,
-                action="kept",
-                reason="Agentic safety section preserved by default. Use --strip-agentic-safety to remove.",
-            ))
+            changes.append(
+                SectionChange(
+                    name=heading,
+                    action="kept",
+                    reason="Agentic safety section preserved by default. Use --strip-agentic-safety to remove.",
+                )
+            )
 
         # Rewrite content to replace source-specific language
         new_lines, was_changed = _rewrite_content(lines, from_profile, to_profile)
 
         if was_changed:
             adapted.append((heading, new_lines))
-            changes.append(SectionChange(
-                name=heading,
-                action="rewritten",
-                reason=f"Replaced {from_profile.get('name', from_target)}-specific language for {to_name}.",
-            ))
+            changes.append(
+                SectionChange(
+                    name=heading,
+                    action="rewritten",
+                    reason=f"Replaced {from_profile.get('name', from_target)}-specific language for {to_name}.",
+                )
+            )
         else:
             adapted.append((heading, lines))
-            changes.append(SectionChange(name=heading, action="kept", reason="Content is portable."))
+            changes.append(
+                SectionChange(name=heading, action="kept", reason="Content is portable.")
+            )
 
     # Add sections required by target that were missing in source
     for required in to_profile.get("required_sections", []):
         if required.lower() not in seen_sections:
             new_lines = _build_added_section(required, to_profile)
             adapted.append((required, new_lines))
-            changes.append(SectionChange(
-                name=required,
-                action="added",
-                reason=f"Required by {to_name} profile but absent in source.",
-            ))
+            changes.append(
+                SectionChange(
+                    name=required,
+                    action="added",
+                    reason=f"Required by {to_name} profile but absent in source.",
+                )
+            )
 
     # Warn if target profile has security controls the source lacked
     if to_profile.get("security_controls") and not from_profile.get("security_controls"):

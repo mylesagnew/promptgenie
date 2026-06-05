@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from promptgenie.core.generator import estimate_tokens, score_prompt
-from promptgenie.core.linter import lint, LintResult
-from promptgenie.core.scanner import scan, ScanResult
+from promptgenie.core.linter import LintResult, lint
+from promptgenie.core.scanner import ScanResult, scan
 
 
 @dataclass
@@ -51,7 +51,7 @@ class DiffResult:
 
     @property
     def score_delta(self) -> int:
-        return self.b_score["total"] - self.a_score["total"]
+        return int(self.b_score["total"]) - int(self.a_score["total"])
 
     @property
     def lint_delta(self) -> int:
@@ -123,6 +123,7 @@ def diff_prompts(a_path: str, b_path: str, target: str = "claude") -> DiffResult
     # Load profile for scoring (best-effort)
     try:
         from promptgenie.core.generator import load_profile
+
         profile = load_profile(target)
     except Exception:
         profile = {"name": target, "required_sections": [], "forbidden_patterns": []}
@@ -139,13 +140,15 @@ def diff_prompts(a_path: str, b_path: str, target: str = "claude") -> DiffResult
     a_scan = scan(a_text)
     b_scan = scan(b_text)
 
-    unified = list(difflib.unified_diff(
-        a_text.splitlines(keepends=True),
-        b_text.splitlines(keepends=True),
-        fromfile=a_path,
-        tofile=b_path,
-        lineterm="",
-    ))
+    unified = list(
+        difflib.unified_diff(
+            a_text.splitlines(keepends=True),
+            b_text.splitlines(keepends=True),
+            fromfile=a_path,
+            tofile=b_path,
+            lineterm="",
+        )
+    )
 
     deltas = _section_deltas(a_text, b_text)
 

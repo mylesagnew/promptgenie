@@ -1,8 +1,7 @@
-import os
-import re
-import yaml
 from pathlib import Path
-from typing import Optional
+from typing import cast
+
+import yaml
 
 PROFILES_DIR = Path(__file__).parent.parent / "profiles"
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
@@ -33,17 +32,17 @@ def load_profile(target: str) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"No profile found for target: {target}")
     with open(path) as f:
-        return yaml.safe_load(f)
+        return cast(dict, yaml.safe_load(f))
 
 
 def load_template(template_name: str) -> dict:
     for tmpl_file in TEMPLATES_DIR.glob("*.yaml"):
         with open(tmpl_file) as f:
-            data = yaml.safe_load(f)
+            data = cast(dict, yaml.safe_load(f))
         if isinstance(data, dict) and "templates" in data:
             for t in data["templates"]:
                 if t.get("id") == template_name:
-                    return t
+                    return cast(dict, t)
     raise FileNotFoundError(f"Template not found: {template_name}")
 
 
@@ -69,6 +68,7 @@ def estimate_tokens(text: str) -> int:
     # ~4 chars per token as rough estimate without requiring tiktoken import
     try:
         import tiktoken
+
         enc = tiktoken.get_encoding("cl100k_base")
         return len(enc.encode(text))
     except Exception:
@@ -79,7 +79,9 @@ def score_prompt(prompt: str, profile: dict) -> dict:
     scores = {}
 
     required = profile.get("required_sections", [])
-    found = sum(1 for s in required if s.lower().replace(" ", "") in prompt.lower().replace(" ", ""))
+    found = sum(
+        1 for s in required if s.lower().replace(" ", "") in prompt.lower().replace(" ", "")
+    )
     scores["target_fit"] = int((found / max(len(required), 1)) * 100)
 
     vague = ["help me", "fix it", "make it better", "improve", "do something"]
@@ -107,11 +109,11 @@ def score_prompt(prompt: str, profile: dict) -> dict:
 
 def generate_prompt(
     task: str,
-    target: Optional[str] = None,
-    template: Optional[str] = None,
-    context: Optional[str] = None,
-    output_format: Optional[str] = None,
-    constraints: Optional[str] = None,
+    target: str | None = None,
+    template: str | None = None,
+    context: str | None = None,
+    output_format: str | None = None,
+    constraints: str | None = None,
     mode: str = "standard",
 ) -> dict:
     if not target:
@@ -151,7 +153,9 @@ def generate_prompt(
             parts.append(f"## Context\n{context}")
 
         if "Scope" in sections or mode == "exhaustive":
-            scope_note = profile.get("scope_guidance", "Work only within explicitly stated boundaries.")
+            scope_note = profile.get(
+                "scope_guidance", "Work only within explicitly stated boundaries."
+            )
             parts.append(f"## Scope\n{scope_note}")
 
         if constraints and ("Constraints" in sections or mode in ("standard", "exhaustive")):
@@ -176,7 +180,9 @@ def generate_prompt(
         parts.append(f"## Output Format\n{output_fmt}")
 
         if "Acceptance Criteria" in sections or mode == "exhaustive":
-            parts.append("## Acceptance Criteria\nDone when:\n- All objectives are met\n- Output matches the requested format\n- No forbidden actions were taken")
+            parts.append(
+                "## Acceptance Criteria\nDone when:\n- All objectives are met\n- Output matches the requested format\n- No forbidden actions were taken"
+            )
 
     prompt_text = "\n\n".join(parts)
 
@@ -198,12 +204,14 @@ def list_targets() -> list[dict]:
     for f in sorted(PROFILES_DIR.glob("*.yaml")):
         with open(f) as fh:
             data = yaml.safe_load(fh)
-        targets.append({
-            "id": f.stem,
-            "name": data.get("name", f.stem),
-            "category": data.get("category", ""),
-            "strengths": data.get("strengths", []),
-        })
+        targets.append(
+            {
+                "id": f.stem,
+                "name": data.get("name", f.stem),
+                "category": data.get("category", ""),
+                "strengths": data.get("strengths", []),
+            }
+        )
     return targets
 
 
@@ -214,10 +222,12 @@ def list_templates() -> list[dict]:
             data = yaml.safe_load(fh)
         if isinstance(data, dict) and "templates" in data:
             for t in data["templates"]:
-                templates.append({
-                    "id": t.get("id", ""),
-                    "name": t.get("name", ""),
-                    "category": t.get("category", ""),
-                    "description": t.get("description", ""),
-                })
+                templates.append(
+                    {
+                        "id": t.get("id", ""),
+                        "name": t.get("name", ""),
+                        "category": t.get("category", ""),
+                        "description": t.get("description", ""),
+                    }
+                )
     return templates

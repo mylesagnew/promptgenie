@@ -1,6 +1,6 @@
 import click
-from rich.table import Table
 from rich import box
+from rich.table import Table
 
 from promptgenie.core.generator import list_targets, list_templates
 from promptgenie.renderers.rich import console

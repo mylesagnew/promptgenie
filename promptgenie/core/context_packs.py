@@ -44,21 +44,21 @@ Pack file format (promptgenie/context-packs/<name>.yaml):
     preferred_output_format: "TypeScript with explicit return types"
 """
 
-import yaml
 from pathlib import Path
-from typing import Optional
+
+import yaml
 
 PACKS_DIR = Path(__file__).parent.parent / "context-packs"
 
 # Which pack keys map to which prompt section labels
 SECTION_MAP = {
-    "stack":                  "Tech Stack",
-    "architecture":           "Architecture",
-    "coding_style":           "Coding Style",
-    "forbidden_changes":      "Forbidden Changes",
-    "known_pitfalls":         "Known Pitfalls",
-    "terminology":            "Terminology",
-    "preferred_output_format":"Preferred Output Format",
+    "stack": "Tech Stack",
+    "architecture": "Architecture",
+    "coding_style": "Coding Style",
+    "forbidden_changes": "Forbidden Changes",
+    "known_pitfalls": "Known Pitfalls",
+    "terminology": "Terminology",
+    "preferred_output_format": "Preferred Output Format",
 }
 
 # Keys always included when a pack is injected
@@ -78,12 +78,14 @@ def list_packs() -> list[dict]:
     for f in sorted(_packs_dir().glob("*.yaml")):
         with open(f) as fh:
             data = yaml.safe_load(fh) or {}
-        packs.append({
-            "id": f.stem,
-            "name": data.get("name", f.stem),
-            "description": data.get("description", ""),
-            "stack": data.get("stack", []),
-        })
+        packs.append(
+            {
+                "id": f.stem,
+                "name": data.get("name", f.stem),
+                "description": data.get("description", ""),
+                "stack": data.get("stack", []),
+            }
+        )
     return packs
 
 
@@ -98,7 +100,7 @@ def load_pack(pack_id: str) -> dict:
 def render_pack(
     pack_id: str,
     mode: str = "standard",
-    keys: Optional[list[str]] = None,
+    keys: list[str] | None = None,
 ) -> str:
     """
     Render a context pack as a markdown block for injection into a prompt.
@@ -152,6 +154,7 @@ def inject_pack_into_prompt(prompt_text: str, pack_id: str, mode: str = "standar
 
     # Insert after ## Objective block if present, else append before ## Scope or at end
     import re
+
     insert_markers = [r"(## Scope\b)", r"(## Constraints\b)", r"(## Context\b)"]
     for marker in insert_markers:
         if re.search(marker, prompt_text, re.MULTILINE):

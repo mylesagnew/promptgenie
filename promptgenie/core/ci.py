@@ -125,7 +125,7 @@ docs/**
 """
 
 
-def init_ci(target_dir: str = ".") -> dict[str, Path]:
+def init_ci(target_dir: str = ".") -> dict[str, dict[str, Path]]:
     root = Path(target_dir).resolve()
     created: dict[str, Path] = {}
     skipped: dict[str, Path] = {}
@@ -163,7 +163,7 @@ def ci_status(target_dir: str = ".") -> dict[str, bool]:
     root = Path(target_dir).resolve()
     return {
         "github_actions": (root / ".github" / "workflows" / "prompt-check.yml").exists(),
-        "pre_commit":     (root / ".pre-commit-config.yaml").exists(),
-        "promptignore":   (root / ".promptignore").exists(),
-        "is_git_repo":    (root / ".git").exists(),
+        "pre_commit": (root / ".pre-commit-config.yaml").exists(),
+        "promptignore": (root / ".promptignore").exists(),
+        "is_git_repo": (root / ".git").exists(),
     }

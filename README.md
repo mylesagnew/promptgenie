@@ -821,6 +821,8 @@ promptgenie/
 - [x] **SECURITY.md** — vulnerability reporting, scanner limitations, safe secret handling policy
 - [x] **Structured output** — `--format json` and `--format sarif` on lint and scan; SARIF uploaded to GitHub code scanning
 - [x] **Adapter safety fix** — preserve agentic safety sections by default; add `--strip-agentic-safety` as explicit opt-in
+- [x] **Fix CI green** — replaced invalid `pip-audit -q` flag; resolved 61 ruff issues; fixed 13 mypy errors; added mypy to lint job; SHA-pinned all GitHub Actions; added least-privilege `permissions: contents: read`
+- [x] **Versioning single source of truth** — `__init__.py` and `cli.py` now read version from `importlib.metadata`; `pyproject.toml` aligned to `1.0.2`; version test no longer hard-codes a string
 
 ---
 
@@ -831,6 +833,16 @@ promptgenie/
 - [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
 - [ ] **Rule suppression and baselining** — inline suppressions, suppression file, baseline mode, configurable fail-on severity threshold
 - [x] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
+- [ ] **Context pack path validation** — strict slug regex `^[A-Za-z0-9_-]+$` on `pack_id`; resolve and enforce path containment within packs directory; add `../ ` rejection tests _(SecDevOps review: HIGH — path traversal can read or create YAML files outside intended directory)_
+- [ ] **Workflow schema validation and cycle detection** — validate unique step IDs, required fields, unknown dependencies; detect dependency cycles; return structured `WorkflowValidationError` _(SecDevOps review: HIGH — malformed workflow silently skips dependency constraints or crashes with recursion errors)_
+- [ ] **ReDoS protection for prompt-test regex** — use `regex` module with per-match timeout; add max regex length; replace `re.PatternError` → `re.error`; add invalid/adversarial regex tests _(SecDevOps review: HIGH — user-supplied regex can hang CLI or CI pipeline)_
+- [ ] **Benchmark cost controls and judge hardening** — bound `--runs` with `click.IntRange(max=10)`; print estimated call count before execution; treat judge parse failure as explicit warning not silent score-50; strengthen judge system prompt against prompt injection _(SecDevOps review: HIGH — unbounded runs cause accidental API spend; judge is injection-susceptible)_
+- [ ] **Dependency lockfile strategy** — add `uv.lock` or `pip-tools` generated `requirements-dev.txt`; add Dependabot/Renovate; audit locked dependencies in CI _(SecDevOps review: HIGH — lower-bound ranges are not reproducible; CI results are environment-dependent)_
+- [ ] **Line-level SARIF locations** — track match offsets in scanner/linter; emit `startLine`/`startColumn` in SARIF `region`; add confidence field and stable rule IDs _(SecDevOps review: MEDIUM — enterprise code scanning workflows require actionable file/line locations)_
+- [ ] **Least-privilege GitHub token permissions** — add `permissions: contents: read` top-level block in `ci.yml`; scope `security-events: write` only to SARIF upload job; pin all actions to full commit SHAs _(SecDevOps review: MEDIUM — mutable action tags and default token scope are supply-chain risks)_
+- [ ] **Improve pre-commit hooks** — add pinned `ruff`, `ruff-format`, `check-yaml`, `check-toml`, `detect-secrets`/`gitleaks` hooks; remove dependency on locally installed `promptgenie` _(SecDevOps review: MEDIUM — current config is fragile and skips all quality gates available at commit time)_
+- [ ] **Typed result models** — replace raw `dict` returns from `generate_prompt()`, `score_prompt()`, profile/template loaders with `dataclass` or Pydantic models; introduce `ConfigValidationError`, `UnsafePathError`, `WorkflowValidationError`, `BenchmarkEvaluationError` _(SecDevOps review: MEDIUM — implicit schemas increase refactor risk and silence validation failures)_
+- [ ] **Fail-closed configuration loading** — remove silent fallbacks on missing profile/template/context-pack; return explicit error by default; add `--best-effort` flag where fallback is intentional _(SecDevOps review: MEDIUM — typos produce plausible but degraded output with no warning)_
 
 ---
 
@@ -839,11 +851,13 @@ promptgenie/
 - [ ] **VS Code / Cursor extension** — inline lint and scan as you write prompts
 - [ ] **Community profile and template packs** — installable packs for more stacks, models, and domains
 - [ ] **Secret scanning for the repo** — `gitleaks` / `detect-secrets` in pre-commit and CI to prevent committing real credentials
-- [ ] **SBOM and release provenance** — CycloneDX SBOM generation, PyPI trusted publishing, signed releases
-- [ ] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR
+- [ ] **SBOM and release provenance** — CycloneDX SBOM generation, PyPI trusted publishing via GitHub OIDC, GitHub artifact attestations, signed releases, SLSA alignment _(SecDevOps review: HIGH — a secure-engineering tool must model the supply-chain posture it recommends)_
+- [ ] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR _(SecDevOps review: LOW — improves external trust and OpenSSF Scorecard rating)_
 - [ ] **Dependabot / Renovate** — automated dependency update PRs with vulnerability alerting
-- [ ] **Plugin/profile registry** — versioned remote profile and rule packs with `promptgenie pack update`
+- [ ] **OpenSSF Scorecard** — scheduled Scorecard workflow; upload results to GitHub security tab _(SecDevOps review: LOW — baseline for external trust signals)_
+- [ ] **Plugin/profile registry** — versioned remote profile and rule packs with `promptgenie pack update`; custom rules directory; `enabled_rules`/`disabled_rules` config; severity overrides; expiring suppressions
 - [ ] **Container image** — minimal non-root Dockerfile for pipeline and SaaS use, with pinned digest and vulnerability scan
+- [ ] **Benchmark model abstraction** — provider-agnostic model interface; deterministic offline rubric tests; structured JSON output from judge; adversarial evaluation cases _(SecDevOps review: MEDIUM — hard-coded Anthropic dependency limits adoption and evaluation auditability)_
 
 ---
 

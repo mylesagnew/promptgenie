@@ -23,27 +23,30 @@ TOOL_VERSION = "1.0.0"
 TOOL_URI = "https://github.com/mylesagnew/promptgenie"
 
 SARIF_VERSION = "2.1.0"
-SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+SARIF_SCHEMA = (
+    "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+)
 
 # Map our severity/risk levels to SARIF levels
 SEVERITY_TO_SARIF = {
-    "HIGH":     "error",
-    "MEDIUM":   "warning",
-    "LOW":      "note",
-    "INFO":     "none",
+    "HIGH": "error",
+    "MEDIUM": "warning",
+    "LOW": "note",
+    "INFO": "none",
 }
 
 RISK_TO_SARIF = {
     "CRITICAL": "error",
-    "HIGH":     "error",
-    "MEDIUM":   "warning",
-    "LOW":      "note",
+    "HIGH": "error",
+    "MEDIUM": "warning",
+    "LOW": "note",
 }
 
 
 # ── JSON formatters ──────────────────────────────────────────────────────────
 
-def lint_to_json(result: "LintResult", prompt_path: str = "") -> str:
+
+def lint_to_json(result: LintResult, prompt_path: str = "") -> str:
     data = {
         "tool": TOOL_NAME,
         "command": "lint",
@@ -52,9 +55,9 @@ def lint_to_json(result: "LintResult", prompt_path: str = "") -> str:
         "issue_count": len(result.issues),
         "issues": [
             {
-                "code":       issue.code,
-                "severity":   issue.severity,
-                "message":    issue.message,
+                "code": issue.code,
+                "severity": issue.severity,
+                "message": issue.message,
                 "suggestion": issue.suggestion,
             }
             for issue in result.issues
@@ -63,7 +66,7 @@ def lint_to_json(result: "LintResult", prompt_path: str = "") -> str:
     return json.dumps(data, indent=2)
 
 
-def scan_to_json(result: "ScanResult", prompt_path: str = "") -> str:
+def scan_to_json(result: ScanResult, prompt_path: str = "") -> str:
     data = {
         "tool": TOOL_NAME,
         "command": "scan",
@@ -72,10 +75,10 @@ def scan_to_json(result: "ScanResult", prompt_path: str = "") -> str:
         "finding_count": len(result.findings),
         "findings": [
             {
-                "code":           f.code,
-                "risk":           f.risk,
-                "message":        f.message,
-                "detail":         f.detail,
+                "code": f.code,
+                "risk": f.risk,
+                "message": f.message,
+                "detail": f.detail,
                 "recommendation": f.recommendation,
             }
             for f in result.findings
@@ -85,6 +88,7 @@ def scan_to_json(result: "ScanResult", prompt_path: str = "") -> str:
 
 
 # ── SARIF formatters ─────────────────────────────────────────────────────────
+
 
 def _sarif_envelope(runs: list[dict]) -> dict:
     return {
@@ -97,10 +101,10 @@ def _sarif_envelope(runs: list[dict]) -> dict:
 def _sarif_tool(rules: list[dict]) -> dict:
     return {
         "driver": {
-            "name":           TOOL_NAME,
-            "version":        TOOL_VERSION,
+            "name": TOOL_NAME,
+            "version": TOOL_VERSION,
             "informationUri": TOOL_URI,
-            "rules":          rules,
+            "rules": rules,
         }
     }
 
@@ -109,7 +113,7 @@ def _sarif_location(prompt_path: str, region: dict | None = None) -> dict:
     loc: dict = {
         "physicalLocation": {
             "artifactLocation": {
-                "uri":       prompt_path or "unknown",
+                "uri": prompt_path or "unknown",
                 "uriBaseId": "%SRCROOT%",
             }
         }
@@ -119,7 +123,7 @@ def _sarif_location(prompt_path: str, region: dict | None = None) -> dict:
     return loc
 
 
-def lint_to_sarif(result: "LintResult", prompt_path: str = "") -> str:
+def lint_to_sarif(result: LintResult, prompt_path: str = "") -> str:
     # Build rule registry from unique codes
     seen_codes: dict[str, dict] = {}
     for issue in result.issues:
@@ -128,10 +132,8 @@ def lint_to_sarif(result: "LintResult", prompt_path: str = "") -> str:
                 "id": issue.code,
                 "name": issue.code,
                 "shortDescription": {"text": issue.message},
-                "fullDescription":  {"text": issue.suggestion or issue.message},
-                "defaultConfiguration": {
-                    "level": SEVERITY_TO_SARIF.get(issue.severity, "warning")
-                },
+                "fullDescription": {"text": issue.suggestion or issue.message},
+                "defaultConfiguration": {"level": SEVERITY_TO_SARIF.get(issue.severity, "warning")},
                 "helpUri": TOOL_URI,
                 "properties": {"tags": ["prompt-lint"]},
             }
@@ -140,34 +142,36 @@ def lint_to_sarif(result: "LintResult", prompt_path: str = "") -> str:
 
     results = [
         {
-            "ruleId":  issue.code,
-            "level":   SEVERITY_TO_SARIF.get(issue.severity, "warning"),
+            "ruleId": issue.code,
+            "level": SEVERITY_TO_SARIF.get(issue.severity, "warning"),
             "message": {"text": f"{issue.message} {issue.suggestion}".strip()},
             "locations": [_sarif_location(prompt_path)],
         }
         for issue in result.issues
     ]
 
-    sarif = _sarif_envelope([{
-        "tool":    _sarif_tool(rules),
-        "results": results,
-        "artifacts": [{"location": {"uri": prompt_path or "unknown"}}],
-    }])
+    sarif = _sarif_envelope(
+        [
+            {
+                "tool": _sarif_tool(rules),
+                "results": results,
+                "artifacts": [{"location": {"uri": prompt_path or "unknown"}}],
+            }
+        ]
+    )
     return json.dumps(sarif, indent=2)
 
 
-def scan_to_sarif(result: "ScanResult", prompt_path: str = "") -> str:
+def scan_to_sarif(result: ScanResult, prompt_path: str = "") -> str:
     seen_codes: dict[str, dict] = {}
     for f in result.findings:
         if f.code not in seen_codes:
             seen_codes[f.code] = {
-                "id":   f.code,
+                "id": f.code,
                 "name": f.code,
                 "shortDescription": {"text": f.message},
-                "fullDescription":  {"text": f.recommendation or f.message},
-                "defaultConfiguration": {
-                    "level": RISK_TO_SARIF.get(f.risk, "warning")
-                },
+                "fullDescription": {"text": f.recommendation or f.message},
+                "defaultConfiguration": {"level": RISK_TO_SARIF.get(f.risk, "warning")},
                 "helpUri": TOOL_URI,
                 "properties": {"tags": ["prompt-security", f"risk:{f.risk.lower()}"]},
             }
@@ -176,17 +180,21 @@ def scan_to_sarif(result: "ScanResult", prompt_path: str = "") -> str:
 
     results = [
         {
-            "ruleId":  f.code,
-            "level":   RISK_TO_SARIF.get(f.risk, "warning"),
+            "ruleId": f.code,
+            "level": RISK_TO_SARIF.get(f.risk, "warning"),
             "message": {"text": f"{f.message} {f.recommendation}".strip()},
             "locations": [_sarif_location(prompt_path)],
         }
         for f in result.findings
     ]
 
-    sarif = _sarif_envelope([{
-        "tool":    _sarif_tool(rules),
-        "results": results,
-        "artifacts": [{"location": {"uri": prompt_path or "unknown"}}],
-    }])
+    sarif = _sarif_envelope(
+        [
+            {
+                "tool": _sarif_tool(rules),
+                "results": results,
+                "artifacts": [{"location": {"uri": prompt_path or "unknown"}}],
+            }
+        ]
+    )
     return json.dumps(sarif, indent=2)

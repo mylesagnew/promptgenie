@@ -44,9 +44,11 @@ class TestHelp:
         assert result.exit_code == 0
 
     def test_version_exits_zero(self, runner):
+        from importlib.metadata import version
+
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "1.0.0" in result.output
+        assert version("promptgenie") in result.output
 
 
 class TestGenerate:

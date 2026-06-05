@@ -1,9 +1,9 @@
 import sys
 
 import click
+from rich import box
 from rich.panel import Panel
 from rich.table import Table
-from rich import box
 
 from promptgenie.core.workflow import generate_workflow, save_workflow
 from promptgenie.renderers.rich import console
@@ -11,8 +11,13 @@ from promptgenie.renderers.rich import console
 
 @click.command(name="workflow")
 @click.argument("workflow_file", type=click.Path(exists=True))
-@click.option("--out", "-o", default=None, type=click.Path(),
-              help="Directory to save individual step prompts (one file per step).")
+@click.option(
+    "--out",
+    "-o",
+    default=None,
+    type=click.Path(),
+    help="Directory to save individual step prompts (one file per step).",
+)
 @click.option("--step", "-s", default=None, type=int, help="Show only a specific step number.")
 @click.option("--summary", is_flag=True, help="Show workflow summary only — no prompt content.")
 def workflow_cmd(workflow_file, out, step, summary):
@@ -65,11 +70,13 @@ def workflow_cmd(workflow_file, out, step, summary):
 
     for rs in steps_to_show:
         gate_label = "  [yellow][APPROVAL GATE][/yellow]" if rs.step.requires_approval else ""
-        console.print(Panel(
-            rs.prompt_text,
-            title=f"Step {rs.step_number}/{rs.total_steps} — {rs.step.name}{gate_label}  [dim]{rs.token_estimate} tokens[/dim]",
-            border_style="blue",
-        ))
+        console.print(
+            Panel(
+                rs.prompt_text,
+                title=f"Step {rs.step_number}/{rs.total_steps} — {rs.step.name}{gate_label}  [dim]{rs.token_estimate} tokens[/dim]",
+                border_style="blue",
+            )
+        )
 
     if out:
         saved = save_workflow(result, out)

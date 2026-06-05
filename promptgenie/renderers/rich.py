@@ -1,7 +1,7 @@
 """Shared Rich terminal rendering utilities."""
 
-from rich.console import Console
 from rich import box  # noqa: F401  — re-exported for command modules
+from rich.console import Console
 from rich.panel import Panel  # noqa: F401
 from rich.table import Table  # noqa: F401
 
@@ -45,7 +45,9 @@ def format_scan_findings(result) -> str:
 
 def delta_str(n: int, invert: bool = False) -> str:
     """Coloured +/- string for a pre-computed integer delta."""
-    color = "green" if (n > 0 and not invert) or (n < 0 and invert) else ("red" if n != 0 else "dim")
+    color = (
+        "green" if (n > 0 and not invert) or (n < 0 and invert) else ("red" if n != 0 else "dim")
+    )
     prefix = "+" if n > 0 else ""
     return f"[{color}]{prefix}{n}[/{color}]"
 
@@ -53,6 +55,8 @@ def delta_str(n: int, invert: bool = False) -> str:
 def delta_ab(a: int, b: int, invert: bool = False) -> str:
     """Coloured +/- string for b - a (used in adapt summary table)."""
     d = b - a
-    color = "green" if (d > 0 and not invert) or (d < 0 and invert) else ("red" if d != 0 else "dim")
+    color = (
+        "green" if (d > 0 and not invert) or (d < 0 and invert) else ("red" if d != 0 else "dim")
+    )
     prefix = "+" if d > 0 else ""
     return f"[{color}]{prefix}{d}[/{color}]"

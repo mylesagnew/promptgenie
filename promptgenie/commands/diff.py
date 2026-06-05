@@ -1,13 +1,17 @@
 import difflib
 
 import click
+from rich import box
 from rich.panel import Panel
 from rich.table import Table
-from rich import box
 
 from promptgenie.core.differ import diff_prompts
 from promptgenie.renderers.rich import (
-    console, score_color, SEVERITY_COLORS, RISK_COLORS, delta_str,
+    RISK_COLORS,
+    SEVERITY_COLORS,
+    console,
+    delta_str,
+    score_color,
 )
 
 
@@ -29,14 +33,30 @@ def diff_cmd(prompt_a, prompt_b, target, unified):
     summary.add_column("Version A", justify="right")
     summary.add_column("Version B", justify="right")
     summary.add_column("Delta", justify="right")
-    summary.add_row("Tokens", str(result.a_tokens), str(result.b_tokens),
-                    delta_str(result.token_delta, invert=True))
-    summary.add_row("Quality score", f"{result.a_score['total']}/100", f"{result.b_score['total']}/100",
-                    delta_str(result.score_delta))
-    summary.add_row("Lint issues", str(len(result.a_lint.issues)), str(len(result.b_lint.issues)),
-                    delta_str(result.lint_delta, invert=True))
-    summary.add_row("Security findings", str(len(result.a_scan.findings)), str(len(result.b_scan.findings)),
-                    delta_str(len(result.b_scan.findings) - len(result.a_scan.findings), invert=True))
+    summary.add_row(
+        "Tokens",
+        str(result.a_tokens),
+        str(result.b_tokens),
+        delta_str(result.token_delta, invert=True),
+    )
+    summary.add_row(
+        "Quality score",
+        f"{result.a_score['total']}/100",
+        f"{result.b_score['total']}/100",
+        delta_str(result.score_delta),
+    )
+    summary.add_row(
+        "Lint issues",
+        str(len(result.a_lint.issues)),
+        str(len(result.b_lint.issues)),
+        delta_str(result.lint_delta, invert=True),
+    )
+    summary.add_row(
+        "Security findings",
+        str(len(result.a_scan.findings)),
+        str(len(result.b_scan.findings)),
+        delta_str(len(result.b_scan.findings) - len(result.a_scan.findings), invert=True),
+    )
     console.print(Panel(summary, title="Summary", border_style="blue"))
 
     score_table = Table(box=box.SIMPLE, show_header=True, padding=(0, 2))
@@ -55,10 +75,10 @@ def diff_cmd(prompt_a, prompt_b, target, unified):
     console.print(Panel(score_table, title="Quality Score Breakdown", border_style="dim"))
 
     STATUS_STYLE = {
-        "added":     ("green",  "ADDED"),
-        "removed":   ("red",    "REMOVED"),
-        "changed":   ("yellow", "CHANGED"),
-        "unchanged": ("dim",    "UNCHANGED"),
+        "added": ("green", "ADDED"),
+        "removed": ("red", "REMOVED"),
+        "changed": ("yellow", "CHANGED"),
+        "unchanged": ("dim", "UNCHANGED"),
     }
     section_lines = []
     for d in result.section_deltas:
@@ -79,25 +99,38 @@ def diff_cmd(prompt_a, prompt_b, target, unified):
     lint_lines = []
     for issue in result.resolved_lint_issues:
         color = SEVERITY_COLORS.get(issue.severity, "white")
-        lint_lines.append(f"[green][RESOLVED][/green] [{color}]{issue.severity}[/{color}] [{issue.code}] {issue.message}")
+        lint_lines.append(
+            f"[green][RESOLVED][/green] [{color}]{issue.severity}[/{color}] [{issue.code}] {issue.message}"
+        )
     for issue in result.new_lint_issues:
         color = SEVERITY_COLORS.get(issue.severity, "white")
-        lint_lines.append(f"[red][NEW][/red]      [{color}]{issue.severity}[/{color}] [{issue.code}] {issue.message}")
+        lint_lines.append(
+            f"[red][NEW][/red]      [{color}]{issue.severity}[/{color}] [{issue.code}] {issue.message}"
+        )
     if lint_lines:
         console.print(Panel("\n".join(lint_lines), title="Lint Changes", border_style="yellow"))
 
     sec_lines = []
     for f in result.resolved_security_findings:
         color = RISK_COLORS.get(f.risk, "white")
-        sec_lines.append(f"[green][RESOLVED][/green] [{color}]{f.risk}[/{color}] [{f.code}] {f.message}")
+        sec_lines.append(
+            f"[green][RESOLVED][/green] [{color}]{f.risk}[/{color}] [{f.code}] {f.message}"
+        )
     for f in result.new_security_findings:
         color = RISK_COLORS.get(f.risk, "white")
-        sec_lines.append(f"[red][NEW][/red]      [{color}]{f.risk}[/{color}] [{f.code}] {f.message}")
+        sec_lines.append(
+            f"[red][NEW][/red]      [{color}]{f.risk}[/{color}] [{f.code}] {f.message}"
+        )
     if sec_lines:
         console.print(Panel("\n".join(sec_lines), title="Security Changes", border_style="red"))
     elif not result.a_scan.findings and not result.b_scan.findings:
-        console.print(Panel("[green]No security findings in either version.[/green]",
-                            title="Security Changes", border_style="green"))
+        console.print(
+            Panel(
+                "[green]No security findings in either version.[/green]",
+                title="Security Changes",
+                border_style="green",
+            )
+        )
 
     if unified and result.unified_diff:
         diff_lines = []

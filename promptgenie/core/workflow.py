@@ -65,14 +65,16 @@ Workflow file format (.workflow.yaml):
 
 from __future__ import annotations
 
+import contextlib
 import re
-import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import cast
 
-from promptgenie.core.generator import load_profile, estimate_tokens
+import yaml
+
 from promptgenie.core.context_packs import render_pack
+from promptgenie.core.generator import estimate_tokens, load_profile
 
 
 @dataclass
@@ -80,7 +82,7 @@ class WorkflowStep:
     id: str
     name: str
     objective: str
-    depends_on: Optional[str] = None
+    depends_on: str | None = None
     scope: list[str] = field(default_factory=list)
     forbidden: list[str] = field(default_factory=list)
     stop_conditions: list[str] = field(default_factory=list)
@@ -121,9 +123,9 @@ def _render_step(
     profile: dict,
     mode: str,
     context_pack_block: str = "",
-    prev_step: Optional[WorkflowStep] = None,
+    prev_step: WorkflowStep | None = None,
 ) -> RenderedStep:
-    target_name = profile.get("name", "AI")
+    _target_name = profile.get("name", "AI")
     parts: list[str] = []
 
     # Header
@@ -226,7 +228,7 @@ def _resolve_order(steps: list[WorkflowStep]) -> list[WorkflowStep]:
 
 def load_workflow(workflow_path: str) -> dict:
     with open(workflow_path) as f:
-        return yaml.safe_load(f)
+        return cast(dict, yaml.safe_load(f))
 
 
 def generate_workflow(workflow_path: str) -> WorkflowResult:
@@ -241,16 +243,19 @@ def generate_workflow(workflow_path: str) -> WorkflowResult:
     try:
         profile = load_profile(target)
     except FileNotFoundError:
-        profile = {"name": target, "required_sections": [], "forbidden_patterns": [],
-                   "stop_conditions": [], "scope_guidance": ""}
+        profile = {
+            "name": target,
+            "required_sections": [],
+            "forbidden_patterns": [],
+            "stop_conditions": [],
+            "scope_guidance": "",
+        }
 
     # Render context pack once (minimal mode for step injection)
     context_pack_block = ""
     if pack_id:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             context_pack_block = render_pack(pack_id, mode="minimal")
-        except FileNotFoundError:
-            pass
 
     raw_steps = data.get("steps", [])
     steps = [
@@ -271,7 +276,7 @@ def generate_workflow(workflow_path: str) -> WorkflowResult:
 
     ordered = _resolve_order(steps)
     total = len(ordered)
-    step_index = {s.id: s for s in ordered}
+    _step_index = {s.id: s for s in ordered}
 
     rendered: list[RenderedStep] = []
     for i, step in enumerate(ordered):

@@ -23,13 +23,15 @@ def test_cmd(test_file, verbose):
 
     status_color = "green" if result.passed else "red"
     status_label = "PASSED" if result.passed else "FAILED"
-    console.print(Panel(
-        f"[bold {status_color}]{status_label}[/bold {status_color}]  "
-        f"{result.pass_count}/{result.total} tests passed"
-        + (f"\n[dim]{result.description}[/dim]" if result.description else ""),
-        title=f"Test Suite  [dim]{test_file}[/dim]",
-        border_style=status_color,
-    ))
+    console.print(
+        Panel(
+            f"[bold {status_color}]{status_label}[/bold {status_color}]  "
+            f"{result.pass_count}/{result.total} tests passed"
+            + (f"\n[dim]{result.description}[/dim]" if result.description else ""),
+            title=f"Test Suite  [dim]{test_file}[/dim]",
+            border_style=status_color,
+        )
+    )
 
     for case in result.cases:
         icon = "[green]✓[/green]" if case.passed else "[red]✗[/red]"

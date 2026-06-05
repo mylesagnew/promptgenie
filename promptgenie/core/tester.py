@@ -43,12 +43,12 @@ Test file format (.prompt-test.yaml):
 """
 
 import re
-import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
-from promptgenie.core.generator import estimate_tokens, score_prompt, load_profile
+import yaml
+
+from promptgenie.core.generator import estimate_tokens, load_profile, score_prompt
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
 
@@ -99,119 +99,156 @@ class TestSuiteResult:
         return self.total - self.pass_count
 
 
-def _run_case(case: dict, prompt_text: str, profile: dict,
-              lint_result, scan_result, token_count: int, score: dict) -> TestCaseResult:
+def _run_case(
+    case: dict,
+    prompt_text: str,
+    profile: dict,
+    lint_result,
+    scan_result,
+    token_count: int,
+    score: dict,
+) -> TestCaseResult:
     name = case.get("name", "unnamed")
     assertions: list[TestAssertion] = []
 
     # must_include
     for phrase in case.get("must_include", []):
         found = phrase.lower() in prompt_text.lower()
-        assertions.append(TestAssertion(
-            kind="must_include",
-            detail=f'Must contain: "{phrase}"',
-            passed=found,
-            actual="found" if found else "not found",
-        ))
+        assertions.append(
+            TestAssertion(
+                kind="must_include",
+                detail=f'Must contain: "{phrase}"',
+                passed=found,
+                actual="found" if found else "not found",
+            )
+        )
 
     # must_not_include
     for phrase in case.get("must_not_include", []):
         found = phrase.lower() in prompt_text.lower()
-        assertions.append(TestAssertion(
-            kind="must_not_include",
-            detail=f'Must NOT contain: "{phrase}"',
-            passed=not found,
-            actual="not found" if not found else f'found: "{phrase}"',
-        ))
+        assertions.append(
+            TestAssertion(
+                kind="must_not_include",
+                detail=f'Must NOT contain: "{phrase}"',
+                passed=not found,
+                actual="not found" if not found else f'found: "{phrase}"',
+            )
+        )
 
     # min_score
     if "min_score" in case:
         threshold = int(case["min_score"])
         actual_score = score["total"]
-        assertions.append(TestAssertion(
-            kind="min_score",
-            detail=f"Quality score ≥ {threshold}",
-            passed=actual_score >= threshold,
-            actual=str(actual_score),
-        ))
+        assertions.append(
+            TestAssertion(
+                kind="min_score",
+                detail=f"Quality score ≥ {threshold}",
+                passed=actual_score >= threshold,
+                actual=str(actual_score),
+            )
+        )
 
     # max_tokens
     if "max_tokens" in case:
         limit = int(case["max_tokens"])
-        assertions.append(TestAssertion(
-            kind="max_tokens",
-            detail=f"Token count ≤ {limit}",
-            passed=token_count <= limit,
-            actual=str(token_count),
-        ))
+        assertions.append(
+            TestAssertion(
+                kind="max_tokens",
+                detail=f"Token count ≤ {limit}",
+                passed=token_count <= limit,
+                actual=str(token_count),
+            )
+        )
 
     # max_lint_severity
     if "max_lint_severity" in case:
         allowed = SEVERITY_ORDER.get(case["max_lint_severity"].upper(), 99)
         violations = [i for i in lint_result.issues if SEVERITY_ORDER.get(i.severity, 0) > allowed]
-        assertions.append(TestAssertion(
-            kind="max_lint_severity",
-            detail=f"No lint issues worse than {case['max_lint_severity'].upper()}",
-            passed=len(violations) == 0,
-            actual="ok" if not violations else f"{len(violations)} violation(s): " + ", ".join(f"[{v.severity}] {v.code}" for v in violations),
-        ))
+        assertions.append(
+            TestAssertion(
+                kind="max_lint_severity",
+                detail=f"No lint issues worse than {case['max_lint_severity'].upper()}",
+                passed=len(violations) == 0,
+                actual="ok"
+                if not violations
+                else f"{len(violations)} violation(s): "
+                + ", ".join(f"[{v.severity}] {v.code}" for v in violations),
+            )
+        )
 
     # max_security_risk
     if "max_security_risk" in case:
         allowed = RISK_ORDER.get(case["max_security_risk"].upper(), 99)
         violations = [f for f in scan_result.findings if RISK_ORDER.get(f.risk, 0) > allowed]
-        assertions.append(TestAssertion(
-            kind="max_security_risk",
-            detail=f"No security findings worse than {case['max_security_risk'].upper()}",
-            passed=len(violations) == 0,
-            actual="ok" if not violations else f"{len(violations)} violation(s): " + ", ".join(f"[{v.risk}] {v.code}" for v in violations),
-        ))
+        assertions.append(
+            TestAssertion(
+                kind="max_security_risk",
+                detail=f"No security findings worse than {case['max_security_risk'].upper()}",
+                passed=len(violations) == 0,
+                actual="ok"
+                if not violations
+                else f"{len(violations)} violation(s): "
+                + ", ".join(f"[{v.risk}] {v.code}" for v in violations),
+            )
+        )
 
     # required_sections
     for section in case.get("required_sections", []):
-        present = bool(re.search(rf"^##\s+{re.escape(section)}", prompt_text, re.MULTILINE | re.IGNORECASE))
-        assertions.append(TestAssertion(
-            kind="required_section",
-            detail=f"Section present: ## {section}",
-            passed=present,
-            actual="present" if present else "missing",
-        ))
+        present = bool(
+            re.search(rf"^##\s+{re.escape(section)}", prompt_text, re.MULTILINE | re.IGNORECASE)
+        )
+        assertions.append(
+            TestAssertion(
+                kind="required_section",
+                detail=f"Section present: ## {section}",
+                passed=present,
+                actual="present" if present else "missing",
+            )
+        )
 
     # regex_match — coerce to str in case YAML parsed as list/other
     for pattern in [str(p) for p in case.get("regex_match", [])]:
         try:
             matched = bool(re.search(pattern, prompt_text, re.IGNORECASE))
-            assertions.append(TestAssertion(
-                kind="regex_match",
-                detail=f"Regex match: {pattern}",
-                passed=matched,
-                actual="matched" if matched else "no match",
-            ))
-        except re.PatternError as exc:
-            assertions.append(TestAssertion(
-                kind="regex_match",
-                detail=f"Regex match: {pattern}",
-                passed=False,
-                actual=f"invalid regex: {exc}",
-            ))
+            assertions.append(
+                TestAssertion(
+                    kind="regex_match",
+                    detail=f"Regex match: {pattern}",
+                    passed=matched,
+                    actual="matched" if matched else "no match",
+                )
+            )
+        except re.error as exc:
+            assertions.append(
+                TestAssertion(
+                    kind="regex_match",
+                    detail=f"Regex match: {pattern}",
+                    passed=False,
+                    actual=f"invalid regex: {exc}",
+                )
+            )
 
     # regex_not_match — coerce to str in case YAML parsed as list/other
     for pattern in [str(p) for p in case.get("regex_not_match", [])]:
         try:
             matched = bool(re.search(pattern, prompt_text, re.IGNORECASE))
-            assertions.append(TestAssertion(
-                kind="regex_not_match",
-                detail=f"Regex must NOT match: {pattern}",
-                passed=not matched,
-                actual="no match" if not matched else "matched (unexpected)",
-            ))
-        except re.PatternError as exc:
-            assertions.append(TestAssertion(
-                kind="regex_not_match",
-                detail=f"Regex must NOT match: {pattern}",
-                passed=False,
-                actual=f"invalid regex: {exc}",
-            ))
+            assertions.append(
+                TestAssertion(
+                    kind="regex_not_match",
+                    detail=f"Regex must NOT match: {pattern}",
+                    passed=not matched,
+                    actual="no match" if not matched else "matched (unexpected)",
+                )
+            )
+        except re.error as exc:
+            assertions.append(
+                TestAssertion(
+                    kind="regex_not_match",
+                    detail=f"Regex must NOT match: {pattern}",
+                    passed=False,
+                    actual=f"invalid regex: {exc}",
+                )
+            )
 
     passed = all(a.passed for a in assertions)
     return TestCaseResult(name=name, passed=passed, assertions=assertions)
