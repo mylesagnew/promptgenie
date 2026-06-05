@@ -12,6 +12,20 @@ _Nothing yet._
 
 ---
 
+## [1.0.2] — 2026-06-05
+
+### Changed
+
+- **CLI refactor** — `cli.py` reduced from 888 lines to 35. All command logic moved into `promptgenie/commands/` (one module per command or command group) and all Rich terminal rendering consolidated into `promptgenie/renderers/rich.py`. No user-facing behaviour changes; all 140 tests pass unchanged. The `from promptgenie.cli import cli` import used by tests and the installed entry point remain stable.
+
+  New layout:
+  - `promptgenie/commands/` — `generate`, `lint`, `scan`, `diff`, `adapt`, `test`, `benchmark`, `workflow`, `ci` (group), `pack` (group), `targets`
+  - `promptgenie/renderers/rich.py` — `console`, color maps, `score_color()`, `format_lint_issues()`, `format_scan_findings()`, `delta_str()`, `delta_ab()`
+
+- **Docs** — added `CONTRIBUTING.md` (contributor guide, lint/scanner rule authoring, profile and template schema reference, PR checklist) and `CHANGELOG.md` (full version history).
+
+---
+
 ## [1.0.1] — 2026-06-05
 
 ### Fixed
@@ -93,6 +107,7 @@ Every prompt is scored across seven dimensions: target fit, task clarity, contex
 
 ---
 
-[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/mylesagnew/promptgenie/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/mylesagnew/promptgenie/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/mylesagnew/promptgenie/releases/tag/v1.0.0

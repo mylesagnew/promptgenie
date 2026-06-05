@@ -739,7 +739,21 @@ Score of 80+ is considered production-ready. Below 60 triggers lint warnings aut
 
 ```
 promptgenie/
-├── cli.py                      # Click CLI — all commands
+├── cli.py                      # Click group + command registration (35 lines)
+├── commands/
+│   ├── generate.py             # generate command
+│   ├── lint.py                 # lint command
+│   ├── scan.py                 # scan command
+│   ├── diff.py                 # diff command
+│   ├── adapt.py                # adapt command
+│   ├── test.py                 # test command
+│   ├── benchmark.py            # benchmark command
+│   ├── workflow.py             # workflow command
+│   ├── ci.py                   # ci group (init, status)
+│   ├── pack.py                 # pack group (list, show, inject, init)
+│   └── targets.py              # list-targets, list-templates
+├── renderers/
+│   └── rich.py                 # console, color constants, shared formatting helpers
 ├── core/
 │   ├── generator.py            # Prompt builder, scoring, token estimation
 │   ├── linter.py               # Lint rules engine
@@ -801,7 +815,7 @@ promptgenie/
 
 ### P0 — Must do before serious adoption
 
-- [x] **Automated test suite** — 136 tests: scanner, linter, generator, differ, adapter, CLI smoke tests, formatter output
+- [x] **Automated test suite** — 140 tests: scanner, linter, generator, differ, adapter, CLI smoke tests, formatter output
 - [x] **Developer CI pipeline** — `ci.yml`: pytest (3.10–3.12), ruff, bandit, pip-audit, build + wheel smoke test
 - [x] **Modern packaging** — `pyproject.toml` with dev dependency groups, classifiers, project URLs
 - [x] **SECURITY.md** — vulnerability reporting, scanner limitations, safe secret handling policy
@@ -816,7 +830,8 @@ promptgenie/
 - [ ] **File IO safety** — bounded reads (1 MB limit), explicit UTF-8 handling, atomic writes, overwrite protection with `--force` flag
 - [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
 - [ ] **Rule suppression and baselining** — inline suppressions, suppression file, baseline mode, configurable fail-on severity threshold
-- [ ] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
+- [x] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
+
 ---
 
 ### P2 — Scaling and enterprise readiness
