@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, quality scoring, and token estimation.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, and token estimation.
 
 ---
 
@@ -24,6 +24,7 @@ PromptGenie makes prompts:
 - **Benchmarked** — run prompts against real Claude models and score responses across 6 rubric dimensions
 - **Context-aware** — reusable project context packs inject stack, architecture, pitfalls, and style into every prompt
 - **Workflow-driven** — break complex tasks into staged prompt chains with approval gates, handoffs, and per-step scope locks
+- **CI-integrated** — GitHub Actions workflow and pre-commit hooks keep bad prompts out of your repo
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles, templates, and context packs versioned alongside your code
 
@@ -56,6 +57,8 @@ pip install -e .
 | `pack show` | Preview a context pack's rendered content |
 | `pack inject` | Inject a context pack into an existing prompt file |
 | `pack init` | Create a new blank context pack |
+| `ci init` | Scaffold GitHub Actions and pre-commit hooks into a project |
+| `ci status` | Check which CI integrations are active |
 | `list-targets` | Show all available model profiles |
 | `list-templates` | Show all available prompt templates |
 
@@ -554,6 +557,78 @@ Packs are stored in `promptgenie/context-packs/*.yaml` and can be committed alon
 
 ---
 
+### `ci`
+
+Add prompt quality gates to any project in one command. Scaffolds a GitHub Actions workflow and pre-commit hooks that automatically run lint, scan, and test on prompt files.
+
+**Set up CI in any project:**
+
+```bash
+cd my-project
+promptgenie ci init
+```
+
+Creates three files if they don't already exist:
+
+| File | Purpose |
+|---|---|
+| `.github/workflows/prompt-check.yml` | GitHub Actions — 3 parallel jobs: lint, scan, test |
+| `.pre-commit-config.yaml` | Pre-commit hooks for staged `.prompt.md` and test files |
+| `.promptignore` | Glob patterns to exclude from lint/scan checks |
+
+**Check what's active:**
+
+```bash
+promptgenie ci status
+```
+
+```
+╭──────────────────────────────────────────────┬──────────╮
+│ Integration                                  │  Status  │
+├──────────────────────────────────────────────┼──────────┤
+│ GitHub Actions (prompt-check.yml)            │ ✓ Active │
+│ Pre-commit hooks (.pre-commit-config.yaml)   │ ✓ Active │
+│ .promptignore exclusion file                 │ ✓ Active │
+│ Git repository                               │ ✓ Active │
+╰──────────────────────────────────────────────┴──────────╯
+```
+
+**GitHub Actions behaviour:**
+
+The workflow triggers on any push or pull request touching `.md`, `.prompt-test.yaml`, or `.workflow.yaml` files and runs three parallel jobs:
+
+| Job | Command | Fails on |
+|---|---|---|
+| `prompt-lint` | `promptgenie lint` per file | Any HIGH severity issue |
+| `prompt-scan` | `promptgenie scan` per file | Any HIGH or CRITICAL finding |
+| `prompt-test` | `promptgenie test` per suite | Any assertion failure |
+
+**Pre-commit hooks:**
+
+```bash
+pip install pre-commit && pre-commit install
+# Hooks run automatically on every git commit
+```
+
+Hooks check staged `.prompt.md` files with lint and scan, and staged `.prompt-test.yaml` files with test — before the commit lands.
+
+**`.promptignore`:**
+
+```
+# Exclude these paths from lint/scan
+README.md
+CHANGELOG.md
+docs/**
+```
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--dir` | Target directory (default: current directory) |
+
+---
+
 ### `list-targets`
 
 Show all available model profiles.
@@ -636,7 +711,8 @@ promptgenie/
 │   ├── tester.py               # Test runner — declarative prompt unit tests
 │   ├── benchmarker.py          # Benchmark engine — model calls, rubric scoring, cost
 │   ├── context_packs.py        # Context pack engine — load, render, inject, init
-│   └── workflow.py             # Workflow engine — staged prompt chains
+│   ├── workflow.py             # Workflow engine — staged prompt chains
+│   └── ci.py                   # CI scaffolder — GitHub Actions + pre-commit
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
@@ -649,10 +725,14 @@ promptgenie/
 │   ├── react-supabase-app.yaml             # React + Supabase SaaS
 │   ├── django-rest-api.yaml                # Django + DRF + PostgreSQL
 │   └── cyber-security-team.yaml           # Security engineering team
-└── examples/
-    ├── auth-refactor.md                    # Example prompt
-    ├── auth-refactor.prompt-test.yaml      # Example test suite
-    └── secure-login.workflow.yaml          # Example 6-step workflow
+├── examples/
+│   ├── auth-refactor.md                    # Example prompt
+│   ├── auth-refactor.prompt-test.yaml      # Example test suite
+│   └── secure-login.workflow.yaml          # Example 6-step workflow
+├── .github/
+│   └── workflows/
+│       └── prompt-check.yml                # GitHub Actions — lint, scan, test
+└── .pre-commit-config.yaml                 # Pre-commit hooks
 ```
 
 ---
@@ -668,8 +748,8 @@ promptgenie/
 - [x] `benchmark` — run prompt against Claude, score with judge model, compare versions
 - [x] Context packs — reusable project context blocks with stack, architecture, style, pitfalls
 - [x] Workflow mode — staged prompt chains with approval gates, handoffs, and per-step scope locks
+- [x] GitHub Actions + pre-commit CI integration — lint, scan, and test in every PR
 - [ ] VS Code / Cursor extension
-- [ ] GitHub Actions lint/scan integration
 - [ ] Community profile and template packs
 
 ---
