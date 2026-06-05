@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, model benchmarker, quality scoring, and token estimation.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, model benchmarker, context pack system, quality scoring, and token estimation.
 
 ---
 
@@ -22,8 +22,9 @@ PromptGenie makes prompts:
 - **Diffed** — compare two versions with token delta, score delta, section changes, and risk changes
 - **Tested** — declarative unit tests assert quality, safety, structure, and content before you ship
 - **Benchmarked** — run prompts against real Claude models and score responses across 6 rubric dimensions
+- **Context-aware** — reusable project context packs inject stack, architecture, pitfalls, and style into every prompt
 - **Scored** — rates every prompt across 7 quality dimensions
-- **Repeatable** — YAML model profiles and templates, versioned alongside your code
+- **Repeatable** — YAML model profiles, templates, and context packs versioned alongside your code
 
 ---
 
@@ -49,6 +50,10 @@ pip install -e .
 | `adapt` | Translate a prompt from one target profile to another |
 | `test` | Run a declarative prompt test suite |
 | `benchmark` | Run a prompt against a Claude model and score the output |
+| `pack list` | List available context packs |
+| `pack show` | Preview a context pack's rendered content |
+| `pack inject` | Inject a context pack into an existing prompt file |
+| `pack init` | Create a new blank context pack |
 | `list-targets` | Show all available model profiles |
 | `list-templates` | Show all available prompt templates |
 
@@ -83,6 +88,7 @@ promptgenie generate "threat model the payment API" \
 | `--output-format`, `-f` | Desired output format for the generated prompt. |
 | `--mode`, `-m` | `minimal` / `standard` / `exhaustive` |
 | `--out`, `-o` | Save prompt to file. |
+| `--pack`, `-p` | Context pack ID to inject (e.g. `react-supabase-app`). |
 | `--no-lint` | Skip inline lint pass. |
 | `--no-scan` | Skip inline security scan. |
 
@@ -350,6 +356,102 @@ The response is scored by a separate judge call (claude-haiku — fast and cheap
 
 ---
 
+### `pack`
+
+Context packs are reusable YAML files that capture everything a model needs to know about your project — stack, architecture, coding style, forbidden changes, known pitfalls, and terminology. Use them to stop repeating yourself across every prompt.
+
+**List available packs:**
+
+```bash
+promptgenie pack list
+```
+
+**Preview a pack's rendered content:**
+
+```bash
+promptgenie pack show react-supabase-app
+promptgenie pack show react-supabase-app --mode exhaustive
+```
+
+**Generate a prompt with a pack injected:**
+
+```bash
+promptgenie generate "refactor the auth module" \
+  --target claude-code \
+  --pack react-supabase-app \
+  --mode exhaustive
+```
+
+The pack is rendered at the same depth as the prompt mode and injected into the Context section automatically.
+
+**Inject a pack into an existing prompt file:**
+
+```bash
+promptgenie pack inject my-prompt.md react-supabase-app
+promptgenie pack inject my-prompt.md react-supabase-app --out enriched-prompt.md
+```
+
+**Create your own pack:**
+
+```bash
+promptgenie pack init my-project --name "My App" --description "Next.js + Prisma SaaS"
+# Edit the generated file at promptgenie/context-packs/my-project.yaml
+```
+
+**Pack file format:**
+
+```yaml
+name: react-supabase-app
+description: "React + Supabase SaaS application"
+
+stack:
+  - React 18 + TypeScript
+  - Supabase (auth, database, storage)
+  - Tailwind CSS + shadcn/ui
+
+architecture:
+  - SPA with React Router v6
+  - Supabase RLS for all data access
+
+coding_style:
+  - Functional components only
+  - Custom hooks for all data fetching
+
+forbidden_changes:
+  - Do not modify Supabase migration files directly
+  - Do not disable Row-Level Security on any table
+
+known_pitfalls:
+  - RLS policies must be updated when adding new tables
+  - Edge functions have a cold start — avoid for latency-sensitive paths
+
+terminology:
+  workspace: "Top-level organisational unit"
+  member: "A user who belongs to a workspace"
+
+preferred_output_format: "TypeScript with explicit return types"
+```
+
+**Render modes:**
+
+| Mode | Sections included |
+|---|---|
+| `minimal` | Stack only |
+| `standard` | Stack, architecture, coding style, terminology |
+| `exhaustive` | All sections including forbidden changes and known pitfalls |
+
+**Included starter packs:**
+
+| ID | Stack |
+|---|---|
+| `react-supabase-app` | React 18 + TypeScript + Supabase + Tailwind CSS |
+| `django-rest-api` | Django 5 + DRF + PostgreSQL + Celery |
+| `cyber-security-team` | Python + Splunk + Sigma + AWS + Burp Suite |
+
+Packs are stored in `promptgenie/context-packs/*.yaml` and can be committed alongside your code.
+
+---
+
 ### `list-targets`
 
 Show all available model profiles.
@@ -430,7 +532,8 @@ promptgenie/
 │   ├── differ.py               # Diff engine — token, score, section, risk delta
 │   ├── adapter.py              # Adapt engine — cross-profile prompt translation
 │   ├── tester.py               # Test runner — declarative prompt unit tests
-│   └── benchmarker.py          # Benchmark engine — model calls, rubric scoring, cost
+│   ├── benchmarker.py          # Benchmark engine — model calls, rubric scoring, cost
+│   └── context_packs.py        # Context pack engine — load, render, inject, init
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
@@ -439,6 +542,10 @@ promptgenie/
 │   └── gemini.yaml
 ├── templates/
 │   └── cyber_templates.yaml    # 7 security and coding templates
+├── context-packs/
+│   ├── react-supabase-app.yaml             # React + Supabase SaaS
+│   ├── django-rest-api.yaml                # Django + DRF + PostgreSQL
+│   └── cyber-security-team.yaml           # Security engineering team
 └── examples/
     ├── auth-refactor.md                    # Example prompt
     └── auth-refactor.prompt-test.yaml      # Example test suite
@@ -455,7 +562,7 @@ promptgenie/
 - [x] `adapt` — translate a prompt from one target profile to another
 - [x] `test` — declarative prompt unit tests with 8 assertion types, CI-safe
 - [x] `benchmark` — run prompt against Claude, score with judge model, compare versions
-- [ ] Context packs — reusable project context blocks
+- [x] Context packs — reusable project context blocks with stack, architecture, style, pitfalls
 - [ ] Workflow mode — staged prompt chains for complex agentic tasks
 - [ ] VS Code / Cursor extension
 - [ ] GitHub Actions lint/scan integration
