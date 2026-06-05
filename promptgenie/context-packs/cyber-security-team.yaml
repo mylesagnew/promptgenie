@@ -1,0 +1,45 @@
+name: cyber-security-team
+description: "Security engineering team context — threat modelling, code review, and incident response"
+
+stack:
+  - Python for scripting and tooling
+  - Splunk + Sigma for detection engineering
+  - Terraform for infrastructure
+  - AWS as primary cloud provider
+  - Burp Suite for web application testing
+
+architecture:
+  - Defence-in-depth — no single control is relied upon
+  - Zero-trust network model — verify every request
+  - All findings classified by CVSS score and business impact
+  - Threat models follow STRIDE methodology
+  - Incident response follows NIST SP 800-61
+
+coding_style:
+  - Security findings reported as: Title / Severity / CVSS / Description / Evidence / Remediation / References
+  - Threat model output: Asset / Threat / STRIDE category / Likelihood / Impact / Mitigation
+  - Sigma rules follow the official Sigma specification
+  - All code samples include a security note if relevant
+
+forbidden_changes:
+  - Do not recommend security controls that have not been validated in the environment
+  - Do not include actual exploit code in reports destined for external audiences
+  - Do not store credentials, tokens, or PII in findings documents
+  - Do not recommend disabling security controls as a workaround
+
+known_pitfalls:
+  - CVSS scores do not capture business context — always add a business impact statement
+  - Detections tuned only on known-good traffic will miss novel attacks — include adversarial test cases
+  - Remediation advice must be environment-specific — generic advice is often not actionable
+  - Prompt injection is relevant wherever user-controlled input reaches an LLM — flag in every AI app review
+
+terminology:
+  TTP: "Tactic, Technique, and Procedure (MITRE ATT&CK terminology)"
+  IOC: "Indicator of Compromise"
+  IOA: "Indicator of Attack — behaviour-based, not hash/IP based"
+  blast_radius: "The maximum potential impact if a control fails or an attacker succeeds"
+  dwell_time: "Time between initial compromise and detection"
+
+preferred_output_format: |
+  Findings in a markdown table: | Finding | Severity | CVSS | Remediation |
+  Threat models as a numbered list with STRIDE category per threat.

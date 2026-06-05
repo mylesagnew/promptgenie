@@ -1,0 +1,42 @@
+name: django-rest-api
+description: "Django REST Framework API with PostgreSQL"
+
+stack:
+  - Python 3.12 + Django 5.x
+  - Django REST Framework
+  - PostgreSQL 16
+  - Celery + Redis for background tasks
+  - pytest + factory_boy for testing
+
+architecture:
+  - DRF ViewSets with router-based URL registration
+  - JWT authentication via djangorestframework-simplejwt
+  - Serializers handle all validation — no validation in views
+  - Background tasks for email, webhooks, and slow operations
+  - Feature flags via django-waffle
+
+coding_style:
+  - Class-based views only — no function-based views
+  - All business logic in service functions, not views or models
+  - Type annotations on all functions and methods
+  - One serializer per HTTP method when request/response shapes differ
+  - Tests must use factories — no fixtures or hardcoded IDs
+
+forbidden_changes:
+  - Do not run migrations in the same PR as model changes — split into two PRs
+  - Do not add raw SQL without a code review
+  - Do not change authentication middleware without a security review
+  - Do not disable CSRF protection on any endpoint
+
+known_pitfalls:
+  - N+1 queries are common — always check select_related and prefetch_related
+  - Celery task arguments must be serialisable — do not pass model instances
+  - DRF permission classes are checked in order — place most restrictive first
+  - SimplJWT tokens are not revoked on logout by default — use token blacklist
+
+terminology:
+  tenant: "An organisation account — all data is scoped to a tenant"
+  member: "A user who belongs to a tenant with a specific role"
+  service: "A module in the services/ directory containing business logic"
+
+preferred_output_format: "Python with type annotations. Include docstrings on public methods."

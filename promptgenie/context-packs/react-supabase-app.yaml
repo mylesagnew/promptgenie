@@ -1,0 +1,44 @@
+name: react-supabase-app
+description: "React + Supabase SaaS application"
+
+stack:
+  - React 18 + TypeScript
+  - Supabase (auth, database, storage, edge functions)
+  - Tailwind CSS + shadcn/ui
+  - Vite
+  - React Query for data fetching
+  - Zod for validation
+
+architecture:
+  - SPA with React Router v6
+  - Supabase Row-Level Security for all data access
+  - Edge functions for server-side logic and webhooks
+  - Optimistic UI updates via React Query mutations
+  - Auth handled entirely by Supabase Auth — no custom auth code
+
+coding_style:
+  - Functional components only — no class components
+  - Custom hooks for all data fetching (useXxx pattern)
+  - Zod schemas for all API inputs and form validation
+  - Named exports only — no default exports
+  - Co-locate types with the component or hook that uses them
+
+forbidden_changes:
+  - Do not modify Supabase migration files directly — use supabase migration new
+  - Do not add npm packages without explicit approval
+  - Do not change the Supabase auth configuration
+  - Do not disable Row-Level Security on any table
+  - Do not store secrets in client-side code
+
+known_pitfalls:
+  - RLS policies must be created or updated whenever a new table is added
+  - Edge functions have a cold start — avoid for latency-sensitive user paths
+  - React Query cache keys must be consistent — mismatches cause stale data
+  - Supabase realtime subscriptions are not automatically cleaned up — always unsubscribe in useEffect cleanup
+
+terminology:
+  workspace: "Top-level organisational unit (equivalent to a GitHub org)"
+  member: "A user who belongs to a workspace"
+  profile: "Extended user data stored in the profiles table, separate from auth.users"
+
+preferred_output_format: "TypeScript with explicit return types. Use const arrow functions for components."

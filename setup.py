@@ -8,7 +8,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     package_data={
-        "promptgenie": ["profiles/*.yaml", "templates/*.yaml", "packs/**/*.yaml"],
+        "promptgenie": ["profiles/*.yaml", "templates/*.yaml", "packs/**/*.yaml", "context-packs/*.yaml"],
     },
     install_requires=[
         "click>=8.0",
