@@ -215,14 +215,17 @@ promptgenie diff v1.md v2.md --target claude-code --unified
 
 ### `adapt`
 
-Translate a prompt written for one target into another — rewriting model-specific language, dropping agentic safety sections for non-agentic targets, and adding sections required by the destination profile.
+Translate a prompt written for one target into another — rewriting model-specific language, preserving agentic safety sections by default, and adding sections required by the destination profile.
 
 ```bash
-# Claude Code → Cursor (same agentic category — keeps all safety sections)
+# Claude Code → Cursor (same agentic category — all safety sections kept)
 promptgenie adapt my-prompt.md --from claude-code --to cursor
 
-# Claude Code → ChatGPT (drops scope/stop conditions/constraints, warns you)
+# Claude Code → ChatGPT (safety sections preserved by default)
 promptgenie adapt my-prompt.md --from claude-code --to chatgpt --out chatgpt-prompt.md
+
+# Explicitly strip safety sections when adapting to a non-agentic target
+promptgenie adapt my-prompt.md --from claude-code --to chatgpt --strip-agentic-safety
 
 # Show original alongside adapted version
 promptgenie adapt my-prompt.md --from claude-code --to gemini --show-original
@@ -233,9 +236,12 @@ promptgenie adapt my-prompt.md --from claude-code --to gemini --show-original
 | Scenario | Behaviour |
 |---|---|
 | Agentic → Agentic (e.g. `claude-code` → `cursor`) | Keeps all sections, rewrites model name |
-| Agentic → General (e.g. `claude-code` → `chatgpt`) | Drops scope / stop conditions / constraints, warns you, trims tokens |
+| Agentic → General, default (e.g. `claude-code` → `chatgpt`) | **Preserves** scope / stop conditions / constraints; notes in change log |
+| Agentic → General with `--strip-agentic-safety` | Drops scope / stop conditions / constraints, warns you, trims tokens |
 | Missing required sections | Generates default content from the destination profile |
 | Forbidden patterns in content | Replaces with `[REMOVED — forbidden by target profile]` |
+
+> **Safety-first default:** agentic safety sections (stop conditions, forbidden actions, scope, constraints, verification) are kept when adapting to a non-agentic target. Use `--strip-agentic-safety` to opt in to stripping them — useful when you need a minimal token footprint and have verified the target context is safe.
 
 Outputs a colour-coded change log (KEPT / REWRITTEN / ADDED / DROPPED per section) and a score and token summary with delta.
 
@@ -247,6 +253,7 @@ Outputs a colour-coded change log (KEPT / REWRITTEN / ADDED / DROPPED per sectio
 | `--to` | Destination target profile |
 | `--out`, `-o` | Save adapted prompt to file |
 | `--show-original` | Print original alongside adapted version |
+| `--strip-agentic-safety` | Remove agentic safety sections when adapting to a non-agentic target (off by default) |
 
 ---
 
@@ -795,7 +802,7 @@ promptgenie/
 - [x] **Modern packaging** — `pyproject.toml` with dev dependency groups, classifiers, project URLs
 - [x] **SECURITY.md** — vulnerability reporting, scanner limitations, safe secret handling policy
 - [x] **Structured output** — `--format json` and `--format sarif` on lint and scan; SARIF uploaded to GitHub code scanning
-- [ ] **Adapter safety fix** — preserve agentic safety sections by default; add `--strip-agentic-safety` as explicit opt-in
+- [x] **Adapter safety fix** — preserve agentic safety sections by default; add `--strip-agentic-safety` as explicit opt-in
 
 ---
 
