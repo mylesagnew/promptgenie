@@ -739,6 +739,8 @@ promptgenie/
 
 ## Roadmap
 
+### Shipped
+
 - [x] `generate` — build structured prompts from rough task descriptions
 - [x] `lint` — 15+ rules for quality, scope, and agentic safety
 - [x] `scan` — security scanner for secrets, injection, and agent risks
@@ -749,8 +751,41 @@ promptgenie/
 - [x] Context packs — reusable project context blocks with stack, architecture, style, pitfalls
 - [x] Workflow mode — staged prompt chains with approval gates, handoffs, and per-step scope locks
 - [x] GitHub Actions + pre-commit CI integration — lint, scan, and test in every PR
-- [ ] VS Code / Cursor extension
-- [ ] Community profile and template packs
+
+---
+
+### P0 — Must do before serious adoption
+
+- [ ] **Automated test suite** — pytest coverage for scanner, linter, generator, differ, adapter, and CLI smoke tests via `CliRunner`
+- [ ] **Developer CI pipeline** — `.github/workflows/ci.yml` with pytest, ruff, bandit, pip-audit, and build smoke test across Python 3.10–3.12
+- [ ] **Modern packaging** — migrate from `setup.py` to `pyproject.toml` with dev dependency groups and a lockfile (`uv.lock` or `poetry.lock`)
+- [ ] **SECURITY.md** — vulnerability reporting process, supported versions, scanner limitations, and safe prompt handling policy
+- [ ] **Adapter safety fix** — preserve agentic safety sections by default when adapting; add `--strip-agentic-safety` as explicit opt-in
+- [ ] **Structured output mode** — `--format json` and `--format sarif` for lint and scan so CI tools and GitHub code scanning can ingest findings
+
+---
+
+### P1 — High-value reliability
+
+- [ ] **Schema validation** — Pydantic/jsonschema validation for profile, template, and rule YAML files; `promptgenie validate-profiles` command
+- [ ] **File IO safety** — bounded reads (1 MB limit), explicit UTF-8 handling, atomic writes, overwrite protection with `--force` flag
+- [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
+- [ ] **Rule suppression and baselining** — inline suppressions, suppression file, baseline mode, configurable fail-on severity threshold
+- [ ] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
+- [ ] **CONTRIBUTING.md and CHANGELOG** — contributor guide, rule authoring docs, profile/template schema docs, and a changelog
+
+---
+
+### P2 — Scaling and enterprise readiness
+
+- [ ] **VS Code / Cursor extension** — inline lint and scan as you write prompts
+- [ ] **Community profile and template packs** — installable packs for more stacks, models, and domains
+- [ ] **Secret scanning for the repo** — `gitleaks` / `detect-secrets` in pre-commit and CI to prevent committing real credentials
+- [ ] **SBOM and release provenance** — CycloneDX SBOM generation, PyPI trusted publishing, signed releases
+- [ ] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR
+- [ ] **Dependabot / Renovate** — automated dependency update PRs with vulnerability alerting
+- [ ] **Plugin/profile registry** — versioned remote profile and rule packs with `promptgenie pack update`
+- [ ] **Container image** — minimal non-root Dockerfile for pipeline and SaaS use, with pinned digest and vulnerability scan
 
 ---
 
