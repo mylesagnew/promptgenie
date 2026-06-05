@@ -1,0 +1,65 @@
+name: secure-login-feature
+description: "Build a secure JWT login system end-to-end"
+target: claude-code
+context_pack: react-supabase-app
+mode: standard
+
+steps:
+  - id: inspect
+    name: Inspect existing auth
+    objective: "Map the current authentication architecture — list all auth-related files, entry points, middleware, and session handling. Identify gaps and risks."
+    scope:
+      - src/auth/
+      - src/middleware/
+      - src/hooks/useAuth.ts
+    output: "Architecture summary with file map, current auth flow diagram, and a list of identified gaps or risks"
+
+  - id: plan
+    name: Propose implementation plan
+    depends_on: inspect
+    objective: "Based on the inspection output, propose a step-by-step plan to replace session auth with JWT using PyJWT. Include files to change, order of changes, and risk notes."
+    output: "Numbered implementation plan with file list, risk notes per step, and estimated effort"
+    requires_approval: true
+
+  - id: implement
+    name: Implement JWT middleware
+    depends_on: plan
+    objective: "Implement the JWT middleware as specified in the approved plan. Touch only the files listed in the plan for this step."
+    scope:
+      - src/middleware/auth.ts
+      - src/middleware/index.ts
+    forbidden:
+      - Do not modify any files outside the scope list
+      - Do not install packages without approval
+      - Do not change the database schema
+    stop_conditions:
+      - A file outside scope needs to be modified
+      - A new dependency would be added
+      - Tests fail and the fix is non-obvious
+    output: "Git diff of changed files with a short explanation of each change"
+
+  - id: tests
+    name: Add unit tests
+    depends_on: implement
+    objective: "Write unit tests for the new JWT middleware. Cover: valid token, expired token, malformed token, missing token, and role-based access."
+    scope:
+      - src/middleware/auth.test.ts
+    stop_conditions:
+      - Test suite fails after writing tests
+    output: "Test file with all tests passing. Show test run output."
+
+  - id: security-review
+    name: Security review
+    depends_on: tests
+    objective: "Perform a security review of the JWT implementation. Check: token expiry, signing algorithm, secret storage, refresh token handling, and logout behaviour."
+    output: "Findings table: | Finding | Severity | Recommendation | — plus an overall risk rating"
+    requires_approval: true
+
+  - id: verify
+    name: Final verification
+    depends_on: security-review
+    objective: "Run the full test suite, verify no regressions, and confirm the implementation matches the approved plan."
+    stop_conditions:
+      - Any test fails
+      - Behaviour differs from the approved plan
+    output: "Test run output confirming all tests pass. Summary of what was built."
