@@ -1,0 +1,56 @@
+prompt: auth-refactor.md
+target: claude-code
+description: Auth module JWT refactor prompt — quality and safety assertions
+
+tests:
+  - name: has explicit stop conditions
+    must_include:
+      - "Stop and ask"
+      - "approval"
+
+  - name: scope is restricted to auth files
+    must_include:
+      - "src/auth"
+    must_not_include:
+      - "entire codebase"
+      - "all files"
+      - "fix everything"
+
+  - name: no unsafe agentic patterns
+    must_not_include:
+      - "do whatever it takes"
+      - "deploy to production"
+      - "drop the"
+
+  - name: acceptance criteria defined
+    must_include:
+      - "Done when"
+
+  - name: quality score above threshold
+    min_score: 80
+
+  - name: token budget under 500
+    max_tokens: 500
+
+  - name: no high lint issues
+    max_lint_severity: MEDIUM
+
+  - name: no critical or high security findings
+    max_security_risk: MEDIUM
+
+  - name: required sections all present
+    required_sections:
+      - Objective
+      - Scope
+      - Constraints
+      - Stop Conditions
+      - Output Format
+      - Acceptance Criteria
+
+  - name: output format specifies diffs
+    must_include:
+      - "diffs"
+
+  - name: no production deployment allowed
+    regex_not_match:
+      - "deploy to (prod|production|live)"
