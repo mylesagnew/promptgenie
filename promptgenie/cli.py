@@ -11,6 +11,7 @@ from rich.text import Text
 from promptgenie.core.generator import generate_prompt, list_targets, list_templates
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
+from promptgenie.core.differ import diff_prompts
 
 console = Console()
 
@@ -141,6 +142,141 @@ def scan_cmd(prompt_file):
     ))
 
     sys.exit(1 if result.risk_level in ("CRITICAL", "HIGH") else 0)
+
+
+@cli.command(name="diff")
+@click.argument("prompt_a", type=click.Path(exists=True))
+@click.argument("prompt_b", type=click.Path(exists=True))
+@click.option("--target", "-t", default="claude", help="Target profile to use for scoring.")
+@click.option("--unified", "-u", is_flag=True, help="Show full unified diff.")
+def diff_cmd(prompt_a, prompt_b, target, unified):
+    """Compare two prompt versions — token delta, risk delta, quality delta, section changes."""
+    with console.status("[bold blue]Diffing prompts…"):
+        result = diff_prompts(prompt_a, prompt_b, target=target)
+
+    # ── Header ──────────────────────────────────────────────────────────────
+    console.print()
+    console.print(f"[bold]Comparing[/bold]  [cyan]{prompt_a}[/cyan]  →  [cyan]{prompt_b}[/cyan]\n")
+
+    # ── Summary table ────────────────────────────────────────────────────────
+    summary = Table(box=box.SIMPLE, show_header=True, padding=(0, 2))
+    summary.add_column("Metric", style="dim")
+    summary.add_column("Version A", justify="right")
+    summary.add_column("Version B", justify="right")
+    summary.add_column("Delta", justify="right")
+
+    def _delta_str(n: int, invert: bool = False) -> str:
+        good = n <= 0 if invert else n >= 0
+        color = "green" if (n > 0 and not invert) or (n < 0 and invert) else ("red" if n != 0 else "dim")
+        prefix = "+" if n > 0 else ""
+        return f"[{color}]{prefix}{n}[/{color}]"
+
+    summary.add_row(
+        "Tokens",
+        str(result.a_tokens),
+        str(result.b_tokens),
+        _delta_str(result.token_delta, invert=True),
+    )
+    summary.add_row(
+        "Quality score",
+        f"{result.a_score['total']}/100",
+        f"{result.b_score['total']}/100",
+        _delta_str(result.score_delta),
+    )
+    summary.add_row(
+        "Lint issues",
+        str(len(result.a_lint.issues)),
+        str(len(result.b_lint.issues)),
+        _delta_str(result.lint_delta, invert=True),
+    )
+    summary.add_row(
+        "Security findings",
+        str(len(result.a_scan.findings)),
+        str(len(result.b_scan.findings)),
+        _delta_str(len(result.b_scan.findings) - len(result.a_scan.findings), invert=True),
+    )
+    console.print(Panel(summary, title="Summary", border_style="blue"))
+
+    # ── Score breakdown ───────────────────────────────────────────────────────
+    score_table = Table(box=box.SIMPLE, show_header=True, padding=(0, 2))
+    score_table.add_column("Dimension", style="dim")
+    score_table.add_column("A", justify="right")
+    score_table.add_column("B", justify="right")
+    score_table.add_column("Δ", justify="right")
+    for dim, a_val in result.a_score["breakdown"].items():
+        b_val = result.b_score["breakdown"].get(dim, 0)
+        delta = b_val - a_val
+        score_table.add_row(
+            dim.replace("_", " ").title(),
+            f"[{score_color(a_val)}]{a_val}[/]",
+            f"[{score_color(b_val)}]{b_val}[/]",
+            _delta_str(delta),
+        )
+    console.print(Panel(score_table, title="Quality Score Breakdown", border_style="dim"))
+
+    # ── Section changes ───────────────────────────────────────────────────────
+    STATUS_STYLE = {
+        "added":     ("green",  "ADDED"),
+        "removed":   ("red",    "REMOVED"),
+        "changed":   ("yellow", "CHANGED"),
+        "unchanged": ("dim",    "UNCHANGED"),
+    }
+    section_lines = []
+    for delta in result.section_deltas:
+        color, label = STATUS_STYLE[delta.status]
+        if delta.name == "__preamble__":
+            continue
+        section_lines.append(f"[{color}][{label}][/{color}]  {delta.name}")
+        if delta.status == "changed":
+            inline = list(__import__("difflib").unified_diff(
+                delta.a_lines, delta.b_lines, lineterm="", n=1
+            ))
+            for line in inline[2:]:  # skip @@/--- headers
+                if line.startswith("+"):
+                    section_lines.append(f"  [green]{line}[/green]")
+                elif line.startswith("-"):
+                    section_lines.append(f"  [red]{line}[/red]")
+
+    if section_lines:
+        console.print(Panel("\n".join(section_lines), title="Section Changes", border_style="dim"))
+
+    # ── Lint delta ────────────────────────────────────────────────────────────
+    lint_lines = []
+    for issue in result.resolved_lint_issues:
+        color = SEVERITY_COLORS.get(issue.severity, "white")
+        lint_lines.append(f"[green][RESOLVED][/green] [{color}]{issue.severity}[/{color}] [{issue.code}] {issue.message}")
+    for issue in result.new_lint_issues:
+        color = SEVERITY_COLORS.get(issue.severity, "white")
+        lint_lines.append(f"[red][NEW][/red]      [{color}]{issue.severity}[/{color}] [{issue.code}] {issue.message}")
+    if lint_lines:
+        console.print(Panel("\n".join(lint_lines), title="Lint Changes", border_style="yellow"))
+
+    # ── Security delta ────────────────────────────────────────────────────────
+    sec_lines = []
+    for f in result.resolved_security_findings:
+        color = RISK_COLORS.get(f.risk, "white")
+        sec_lines.append(f"[green][RESOLVED][/green] [{color}]{f.risk}[/{color}] [{f.code}] {f.message}")
+    for f in result.new_security_findings:
+        color = RISK_COLORS.get(f.risk, "white")
+        sec_lines.append(f"[red][NEW][/red]      [{color}]{f.risk}[/{color}] [{f.code}] {f.message}")
+    if sec_lines:
+        console.print(Panel("\n".join(sec_lines), title="Security Changes", border_style="red"))
+    elif not result.a_scan.findings and not result.b_scan.findings:
+        console.print(Panel("[green]No security findings in either version.[/green]", title="Security Changes", border_style="green"))
+
+    # ── Full unified diff (optional) ─────────────────────────────────────────
+    if unified and result.unified_diff:
+        diff_lines = []
+        for line in result.unified_diff:
+            if line.startswith("+") and not line.startswith("+++"):
+                diff_lines.append(f"[green]{line}[/green]")
+            elif line.startswith("-") and not line.startswith("---"):
+                diff_lines.append(f"[red]{line}[/red]")
+            elif line.startswith("@@"):
+                diff_lines.append(f"[cyan]{line}[/cyan]")
+            else:
+                diff_lines.append(f"[dim]{line}[/dim]")
+        console.print(Panel("\n".join(diff_lines), title="Unified Diff", border_style="dim"))
 
 
 @cli.command("list-targets")
