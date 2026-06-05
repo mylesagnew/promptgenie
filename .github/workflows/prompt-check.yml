@@ -16,6 +16,8 @@ jobs:
   prompt-lint:
     name: Lint prompt files
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # required for SARIF upload
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +37,7 @@ jobs:
             -not -path './.venv/*' \
             \( -name '*.md' -o -name '*.prompt.md' \) \
             | grep -v README | grep -v CHANGELOG | grep -v LICENSE \
+            | grep -v SECURITY \
             | sort)
           echo "Found prompt files:"
           echo "$files"
@@ -45,19 +48,32 @@ jobs:
       - name: Lint prompt files
         run: |
           FAILED=0
+          mkdir -p sarif-results
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             echo "──────────────────────────────────────────"
             echo "Linting: $file"
+            safe=$(echo "$file" | tr '/' '_' | sed 's/^\.//')
+            promptgenie lint "$file" --format sarif --out "sarif-results/lint-${safe}.sarif" || true
             if ! promptgenie lint "$file"; then
               FAILED=1
             fi
           done <<< "${{ steps.find.outputs.files }}"
           exit $FAILED
 
+      - name: Upload lint SARIF to GitHub code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif-results/
+          category: promptgenie-lint
+        continue-on-error: true   # graceful if code scanning not enabled
+
   prompt-scan:
     name: Security scan prompt files
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -77,6 +93,7 @@ jobs:
             -not -path './.venv/*' \
             \( -name '*.md' -o -name '*.prompt.md' \) \
             | grep -v README | grep -v CHANGELOG | grep -v LICENSE \
+            | grep -v SECURITY \
             | sort)
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$files" >> $GITHUB_OUTPUT
@@ -85,15 +102,26 @@ jobs:
       - name: Scan prompt files for security risks
         run: |
           FAILED=0
+          mkdir -p sarif-results
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             echo "──────────────────────────────────────────"
             echo "Scanning: $file"
+            safe=$(echo "$file" | tr '/' '_' | sed 's/^\.//')
+            promptgenie scan "$file" --format sarif --out "sarif-results/scan-${safe}.sarif" || true
             if ! promptgenie scan "$file"; then
               FAILED=1
             fi
           done <<< "${{ steps.find.outputs.files }}"
           exit $FAILED
+
+      - name: Upload scan SARIF to GitHub code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sarif-results/
+          category: promptgenie-scan
+        continue-on-error: true
 
   prompt-test:
     name: Run prompt test suites

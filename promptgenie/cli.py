@@ -18,6 +18,10 @@ from promptgenie.core.benchmarker import run_benchmark, compare_benchmarks, DEFA
 from promptgenie.core.context_packs import list_packs, load_pack, render_pack, inject_pack_into_prompt, init_pack, SECTION_MAP
 from promptgenie.core.workflow import generate_workflow, save_workflow
 from promptgenie.core.ci import init_ci, ci_status
+from promptgenie.core.formatters import (
+    lint_to_json, lint_to_sarif,
+    scan_to_json, scan_to_sarif,
+)
 
 console = Console()
 
@@ -124,37 +128,78 @@ def generate(task, target, template, context, output_format, constraints, mode, 
 
 @cli.command(name="lint")
 @click.argument("prompt_file", type=click.Path(exists=True))
-def lintcmd(prompt_file):
+@click.option("--format", "output_format", default="rich",
+              type=click.Choice(["rich", "json", "sarif"]),
+              help="Output format (default: rich).")
+@click.option("--out", "-o", default=None, type=click.Path(),
+              help="Write output to file instead of stdout.")
+def lintcmd(prompt_file, output_format, out):
     """Lint a prompt file for quality and structural issues."""
     text = Path(prompt_file).read_text()
     result = lint(text)
 
-    color = score_color(result.score)
-    console.print(Panel(
-        _format_lint_issues(result),
-        title=f"Lint Results  [bold {color}]{result.score}/100[/bold {color}]  [dim]{prompt_file}[/dim]",
-        border_style="yellow",
-    ))
+    if output_format == "json":
+        output = lint_to_json(result, prompt_path=prompt_file)
+        if out:
+            Path(out).write_text(output)
+        else:
+            click.echo(output)
+    elif output_format == "sarif":
+        output = lint_to_sarif(result, prompt_path=prompt_file)
+        if out:
+            Path(out).write_text(output)
+        else:
+            click.echo(output)
+    else:
+        color = score_color(result.score)
+        console.print(Panel(
+            _format_lint_issues(result),
+            title=f"Lint Results  [bold {color}]{result.score}/100[/bold {color}]  [dim]{prompt_file}[/dim]",
+            border_style="yellow",
+        ))
+        if out:
+            Path(out).write_text(lint_to_json(result, prompt_path=prompt_file))
+            console.print(f"[dim]Results saved to {out}[/dim]")
 
     sys.exit(0 if not result.by_severity("HIGH") else 1)
 
 
 @cli.command(name="scan")
 @click.argument("prompt_file", type=click.Path(exists=True))
-def scan_cmd(prompt_file):
+@click.option("--format", "output_format", default="rich",
+              type=click.Choice(["rich", "json", "sarif"]),
+              help="Output format (default: rich).")
+@click.option("--out", "-o", default=None, type=click.Path(),
+              help="Write output to file instead of stdout.")
+def scan_cmd(prompt_file, output_format, out):
     """Scan a prompt file for security risks."""
     text = Path(prompt_file).read_text()
     result = scan(text)
 
-    if not result.findings:
-        console.print(Panel("[green]No security findings.[/green]", title="Security Scan", border_style="green"))
-        sys.exit(0)
-
-    console.print(Panel(
-        _format_scan_findings(result),
-        title=f"Security Scan  [bold]Risk: {result.risk_level}[/bold]  [dim]{prompt_file}[/dim]",
-        border_style="red",
-    ))
+    if output_format == "json":
+        output = scan_to_json(result, prompt_path=prompt_file)
+        if out:
+            Path(out).write_text(output)
+        else:
+            click.echo(output)
+    elif output_format == "sarif":
+        output = scan_to_sarif(result, prompt_path=prompt_file)
+        if out:
+            Path(out).write_text(output)
+        else:
+            click.echo(output)
+    else:
+        if not result.findings:
+            console.print(Panel("[green]No security findings.[/green]", title="Security Scan", border_style="green"))
+        else:
+            console.print(Panel(
+                _format_scan_findings(result),
+                title=f"Security Scan  [bold]Risk: {result.risk_level}[/bold]  [dim]{prompt_file}[/dim]",
+                border_style="red",
+            ))
+        if out:
+            Path(out).write_text(scan_to_json(result, prompt_path=prompt_file))
+            console.print(f"[dim]Results saved to {out}[/dim]")
 
     sys.exit(1 if result.risk_level in ("CRITICAL", "HIGH") else 0)
 
