@@ -8,7 +8,20 @@ promptgenie ci status         — check what CI integrations are active
 
 from pathlib import Path
 
-WORKFLOW_CONTENT = """\
+_CHECKOUT_SHA = "34e114876b0b11c390a56381ad16ebd13914f8d5"  # actions/checkout v4
+_SETUP_UV_SHA = "d0cc045d04ccac9d8b7881df0226f9e82c39688e"  # astral-sh/setup-uv v6
+
+
+def _workflow_content() -> str:
+    """Build the scaffold workflow content, pinning the current installed version."""
+    try:
+        from importlib.metadata import version as _v
+
+        pg_version = _v("promptgenie")
+    except Exception:
+        pg_version = "latest"
+
+    return f"""\
 name: Prompt Check
 
 on:
@@ -23,71 +36,74 @@ on:
       - '**.prompt-test.yaml'
       - '**.workflow.yaml'
 
+permissions:
+  contents: read
+
 jobs:
   prompt-lint:
     name: Lint prompt files
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@{_CHECKOUT_SHA} # v4
+      - uses: astral-sh/setup-uv@{_SETUP_UV_SHA} # v6
         with:
           python-version: '3.11'
-          cache: pip
       - name: Install PromptGenie
-        run: pip install promptgenie --quiet
+        run: uv pip install --system "promptgenie=={pg_version}"
       - name: Lint prompt files
         run: |
           FAILED=0
-          for file in $(find . -not -path './.git/*' -not -path './.venv/*' \\
-            \\( -name '*.prompt.md' -o -name '*.md' \\) \\
-            | grep -v README | grep -v CHANGELOG | grep -v LICENSE); do
+          while IFS= read -r file; do
             echo "Linting: $file"
             promptgenie lint "$file" || FAILED=1
-          done
+          done < <(find . -not -path './.git/*' -not -path './.venv/*' \\
+            \\( -name '*.prompt.md' -o -name '*.md' \\) \\
+            | grep -v README | grep -v CHANGELOG | grep -v LICENSE)
           exit $FAILED
 
   prompt-scan:
     name: Security scan prompt files
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@{_CHECKOUT_SHA} # v4
+      - uses: astral-sh/setup-uv@{_SETUP_UV_SHA} # v6
         with:
           python-version: '3.11'
-          cache: pip
       - name: Install PromptGenie
-        run: pip install promptgenie --quiet
+        run: uv pip install --system "promptgenie=={pg_version}"
       - name: Scan prompt files
         run: |
           FAILED=0
-          for file in $(find . -not -path './.git/*' -not -path './.venv/*' \\
-            \\( -name '*.prompt.md' -o -name '*.md' \\) \\
-            | grep -v README | grep -v CHANGELOG | grep -v LICENSE); do
+          while IFS= read -r file; do
             echo "Scanning: $file"
             promptgenie scan "$file" || FAILED=1
-          done
+          done < <(find . -not -path './.git/*' -not -path './.venv/*' \\
+            \\( -name '*.prompt.md' -o -name '*.md' \\) \\
+            | grep -v README | grep -v CHANGELOG | grep -v LICENSE)
           exit $FAILED
 
   prompt-test:
     name: Run prompt test suites
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@{_CHECKOUT_SHA} # v4
+      - uses: astral-sh/setup-uv@{_SETUP_UV_SHA} # v6
         with:
           python-version: '3.11'
-          cache: pip
       - name: Install PromptGenie
-        run: pip install promptgenie --quiet
+        run: uv pip install --system "promptgenie=={pg_version}"
       - name: Run test suites
         run: |
           FAILED=0
-          for file in $(find . -not -path './.git/*' -name '*.prompt-test.yaml'); do
+          while IFS= read -r file; do
             echo "Testing: $file"
             promptgenie test "$file" || FAILED=1
-          done
+          done < <(find . -not -path './.git/*' -name '*.prompt-test.yaml')
           exit $FAILED
 """
+
+
+WORKFLOW_CONTENT = _workflow_content()
 
 PRE_COMMIT_CONTENT = """\
 repos:

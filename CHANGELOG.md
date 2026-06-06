@@ -12,6 +12,61 @@ _Nothing yet._
 
 ---
 
+## [1.0.10] — 2026-06-06
+
+### Security
+
+- **Unicode normalization in scanner** — all text is now NFKC-normalized before pattern matching. Fullwidth ASCII letters (`ｉｇｎｏｒｅ`), compatibility ligatures, and other Unicode compatibility forms are collapsed to their canonical ASCII equivalents. Closes the most common Unicode-homoglyph evasion path against the injection and permission patterns. Note: unrelated look-alike characters (Turkish dotless ı, U+0131) are not mapped; see `TestMisses`.
+- **Split/multiline instruction override detection** (`SEC_SPLIT_001–004`) — new pattern group catches instruction overrides split across line breaks (between words), inside HTML `<!-- -->` comments, and inside `/* */` block comments. Patterns use `re.DOTALL` so `.` crosses newlines. Matched text is capped at 120 chars for clarity.
+- **Base64 payload detection** (`SEC_B64`) — new scan pass flags base64 blobs ≥40 chars that decode to >70% printable ASCII text. Catches obfuscated instruction payloads. Short blobs (UUIDs, short tokens) and binary-heavy content are excluded to limit false positives.
+- **Scanner limitations footer in rich output** — every `scan` invocation in rich mode now prints a one-line note confirming the scanner is static regex + Unicode-normalised matching and does not detect synonym substitution, indirect reference, or multi-turn attacks. Keeps `--format json` and `--format sarif` output clean.
+
+### Changed
+
+- **`anthropic` made optional** (`promptgenie[benchmark]`) — was a mandatory runtime dependency; only `benchmark` subcommand uses it. Install with `pip install promptgenie[benchmark]` to enable benchmarking. Default install no longer pulls in the full Anthropic SDK.
+- **`tiktoken` made optional** (`promptgenie[tokenizer]`) — was a mandatory runtime dependency; `generator.py` already had a `len(text)//4` fallback. Install with `pip install promptgenie[tokenizer]` for accurate token counts. Default install uses the fallback estimator.
+- **Generated CI scaffold hardened** — `ci init` now scaffolds:
+  - SHA-pinned `actions/checkout` (`34e114876b0b11c390a56381ad16ebd13914f8d5`, v4) instead of mutable `@v4`
+  - SHA-pinned `astral-sh/setup-uv` (`d0cc045d04ccac9d8b7881df0226f9e82c39688e`, v6) instead of `actions/setup-python@v5` + pip
+  - `uv pip install --system "promptgenie==<current-version>"` instead of `pip install promptgenie --quiet` (pinned to running version, not floating latest)
+  - `permissions: contents: read` top-level (least-privilege)
+  - `while IFS= read -r file` loop instead of `for file in $(find ...)` (safe for filenames with spaces)
+
+### Added
+
+- `promptgenie[benchmark]` optional extra — pulls in `anthropic>=0.100`
+- `promptgenie[tokenizer]` optional extra — pulls in `tiktoken>=0.7`
+
+### Tests
+
+**5 new `TestDetects` tests** — fullwidth Unicode normalization, split-line override, base64 payload, HTML comment smuggling, short-blob false-positive guard.
+**2 updated `TestMisses` tests** — renamed to accurately describe remaining gaps (within-word split, non-NFKC homoglyphs).
+
+**419 passed (was 414). Coverage maintained ≥87%.**
+
+---
+
+## [1.0.9] — 2026-06-06
+
+### Fixed
+
+- **Config wiring — `.promptgenie.yaml` now actually applied by the CLI** — `scan`, `lint`, `generate`, `test`, and `diff` commands previously ignored `.promptgenie.yaml` entirely; `load_config()` existed and `ScannerConfig`/`LinterConfig` were accepted by core functions, but no command ever loaded the file. All five commands now auto-discover and load `.promptgenie.yaml` from cwd and parent directories on every invocation.
+
+### Added
+
+- **`--config PATH` flag** on `scan`, `lint`, `generate`, `test`, `diff` — explicit path to a `.promptgenie.yaml` file, bypassing auto-discovery.
+- **`--no-config` flag** on `scan`, `lint`, `generate`, `test`, `diff` — run with default settings, ignoring any `.promptgenie.yaml` present in the directory tree.
+- **Config file disclosure in rich output** — when a config file is loaded, its path is printed as a dim line before results (e.g. `Config: /project/.promptgenie.yaml`). JSON and SARIF outputs are unaffected.
+- **Graceful config error handling** — a missing or malformed `--config` file emits a `Warning:` line and falls back to defaults rather than crashing with an unhandled exception.
+- **`config` param on `diff_prompts()` and `run_test_suite()`** — both core functions now accept `config: PromptGenieConfig | None`; `diff` passes `config.linter` and `config.scanner` to both sides of the comparison; `test` applies config to the lint and scan assertions run against the prompt under test.
+- **13 new `TestConfigWiring` tests** — prove end-to-end that CLI behaviour changes with config: disabled rules suppress findings, allowlists reduce scan findings, custom vague verbs trigger lint issues, all five commands accept `--config` and `--no-config`, a missing config file emits a warning instead of crashing.
+
+### Tests
+
+**414 passed (was 401). Coverage maintained ≥87%.**
+
+---
+
 ## [1.0.8] — 2026-06-06
 
 ### Fixed
@@ -164,7 +219,10 @@ Initial public release.
 
 ---
 
-[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.0.7...HEAD
+[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.0.10...HEAD
+[1.0.10]: https://github.com/mylesagnew/promptgenie/compare/v1.0.9...v1.0.10
+[1.0.9]: https://github.com/mylesagnew/promptgenie/compare/v1.0.8...v1.0.9
+[1.0.8]: https://github.com/mylesagnew/promptgenie/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/mylesagnew/promptgenie/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/mylesagnew/promptgenie/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/mylesagnew/promptgenie/compare/v1.0.4...v1.0.5

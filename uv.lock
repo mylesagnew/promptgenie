@@ -1456,17 +1456,18 @@ wheels = [
 
 [[package]]
 name = "promptgenie"
-version = "1.0.7"
+version = "1.0.10"
 source = { editable = "." }
 dependencies = [
-    { name = "anthropic" },
     { name = "click" },
     { name = "pyyaml" },
     { name = "rich" },
-    { name = "tiktoken" },
 ]
 
 [package.optional-dependencies]
+benchmark = [
+    { name = "anthropic" },
+]
 dev = [
     { name = "bandit" },
     { name = "build" },
@@ -1479,10 +1480,13 @@ dev = [
     { name = "twine" },
     { name = "types-pyyaml" },
 ]
+tokenizer = [
+    { name = "tiktoken" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.100" },
+    { name = "anthropic", marker = "extra == 'benchmark'", specifier = ">=0.100" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
     { name = "click", specifier = ">=8.0" },
@@ -1494,11 +1498,11 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "tiktoken", specifier = ">=0.7" },
+    { name = "tiktoken", marker = "extra == 'tokenizer'", specifier = ">=0.7" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["benchmark", "tokenizer", "dev"]
 
 [[package]]
 name = "py-serializable"

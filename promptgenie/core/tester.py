@@ -46,8 +46,12 @@ import re
 import signal
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from promptgenie.core.config import PromptGenieConfig
 
 from promptgenie.core.generator import estimate_tokens, load_profile, score_prompt
 from promptgenie.core.linter import lint
@@ -292,7 +296,10 @@ def _run_case(
     return PromptTestCaseResult(name=name, passed=passed, assertions=assertions)
 
 
-def run_test_suite(test_file: str) -> PromptTestSuiteResult:
+def run_test_suite(
+    test_file: str,
+    config: "PromptGenieConfig | None" = None,
+) -> PromptTestSuiteResult:
     test_path = Path(test_file)
     with open(test_path) as f:
         suite_def = yaml.safe_load(f)
@@ -314,8 +321,8 @@ def run_test_suite(test_file: str) -> PromptTestSuiteResult:
 
     token_count = estimate_tokens(prompt_text)
     score = score_prompt(prompt_text, profile)
-    lint_result = lint(prompt_text)
-    scan_result = scan(prompt_text)
+    lint_result = lint(prompt_text, config=config.linter if config is not None else None)
+    scan_result = scan(prompt_text, config=config.scanner if config is not None else None)
 
     results = PromptTestSuiteResult(
         prompt_path=str(prompt_path),

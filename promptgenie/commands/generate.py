@@ -6,6 +6,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
+from promptgenie.core.config import PromptGenieConfig, load_config
 from promptgenie.core.context_packs import render_pack
 from promptgenie.core.generator import generate_prompt
 from promptgenie.core.linter import lint
@@ -16,6 +17,22 @@ from promptgenie.renderers.rich import (
     format_scan_findings,
     score_color,
 )
+
+
+def _resolve_config(
+    config_path: str | None, no_config: bool
+) -> tuple[PromptGenieConfig, str | None]:
+    if no_config:
+        return PromptGenieConfig(), None
+    try:
+        from promptgenie.core.config import _find_config
+
+        cfg = load_config(config_path)
+        found = config_path or (str(_find_config()) if _find_config() is not None else None)
+        return cfg, found
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+        return PromptGenieConfig(), None
 
 
 @click.command()
@@ -47,10 +64,31 @@ from promptgenie.renderers.rich import (
 )
 @click.option("--no-lint", is_flag=True, help="Skip automatic lint pass.")
 @click.option("--no-scan", is_flag=True, help="Skip automatic security scan.")
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    type=click.Path(),
+    help="Path to .promptgenie.yaml config file.",
+)
+@click.option("--no-config", is_flag=True, help="Ignore .promptgenie.yaml; use default settings.")
 def generate(
-    task, target, template, context, output_format, constraints, mode, out, pack, no_lint, no_scan
+    task,
+    target,
+    template,
+    context,
+    output_format,
+    constraints,
+    mode,
+    out,
+    pack,
+    no_lint,
+    no_scan,
+    config_path,
+    no_config,
 ):
     """Generate an optimized prompt from a rough task description."""
+    cfg, cfg_file = _resolve_config(config_path, no_config)
     with console.status("[bold blue]Generating prompt…"):
         if pack:
             try:
@@ -98,8 +136,11 @@ def generate(
     score_table.add_row("[dim]Token estimate[/dim]", f"[dim]{tokens:,}[/dim]")
     console.print(Panel(score_table, title="Prompt Quality Score", border_style="dim"))
 
+    if cfg_file:
+        console.print(f"[dim]Config: {cfg_file}[/dim]")
+
     if not no_lint:
-        lint_result = lint(prompt_text)
+        lint_result = lint(prompt_text, config=cfg.linter)
         if lint_result.issues:
             console.print(
                 Panel(
@@ -110,7 +151,7 @@ def generate(
             )
 
     if not no_scan:
-        scan_result = scan(prompt_text)
+        scan_result = scan(prompt_text, config=cfg.scanner)
         if scan_result.findings:
             console.print(
                 Panel(

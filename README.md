@@ -114,7 +114,7 @@ $ promptgenie scan examples/auth-refactor.md
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
-> **Scanner scope:** `scan` is a regex/heuristic tripwire. It catches obvious prompt-injection vocabulary, hardcoded secrets, and unsafe agent permission patterns. It does not catch obfuscated attacks (Unicode homoglyphs, multiline splits, base64 encoding, synonym substitution). See `tests/test_scanner_adversarial.py` for a full list of documented detection gaps.
+> **Scanner scope:** `scan` is a regex/heuristic tripwire with Unicode normalization (NFKC). It catches obvious prompt-injection vocabulary, hardcoded secrets, unsafe agent permission patterns, split/multiline overrides, HTML and block-comment smuggling, base64-encoded payloads (≥40 chars, >70% printable), and fullwidth Unicode obfuscation. It does **not** catch within-word character splits, non-NFKC Unicode homoglyphs (e.g. Turkish ı), synonym substitution, or indirect reference attacks. See `tests/test_scanner_adversarial.py` for a full list of documented detection gaps.
 
 **Lint a prompt for quality issues:**
 
@@ -173,6 +173,13 @@ cd promptgenie
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
+
+Optional extras:
+
+| Extra | What it adds | Install |
+|---|---|---|
+| `benchmark` | `anthropic` SDK — required for `promptgenie benchmark` | `pip install "promptgenie[benchmark]"` |
+| `tokenizer` | `tiktoken` — accurate token counts (falls back to `len/4` without it) | `pip install "promptgenie[tokenizer]"` |
 
 ---
 
@@ -993,11 +1000,12 @@ promptgenie/
 - [x] CONTRIBUTING.md — contributor guide, rule authoring docs, profile/template schema reference
 - [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
 - [x] `interactive` — guided menu mode: generate, adapt, lint, scan, diff, test, workflow, list in one flow
-- [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists (scoped `AllowlistEntry` format), custom vague verbs
-- [x] Coverage gate — `fail_under = 85` enforced in CI; 401 tests, 87% coverage, 0 ruff issues across `promptgenie/` and `tests/`
+- [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists (scoped `AllowlistEntry` format), custom vague verbs; wired into all five CLI commands with `--config` / `--no-config` flags
+- [x] Coverage gate — `fail_under = 85` enforced in CI; 419 tests, 87% coverage, 0 ruff issues across `promptgenie/` and `tests/`
 - [x] CODEOWNERS — `.github/CODEOWNERS` governs all files; branch protection docs in CONTRIBUTING.md
-- [x] Adversarial scanner tests — `TestDetects` (15 caught patterns), `TestMisses` (8 documented gaps: multiline splits, homoglyphs, word-spacing, base64, synonyms, indirect reference), `TestScopedAllowlist` (regression suite for fixed allowlist logic)
+- [x] Adversarial scanner tests — `TestDetects` (21 caught patterns incl. Unicode normalization, split-line overrides, base64 blobs, HTML/block-comment smuggling), `TestMisses` (7 documented gaps: within-word splits, non-NFKC homoglyphs, word-spacing, synonyms, indirect reference, role-shift, markdown bold), `TestScopedAllowlist` (regression suite for fixed allowlist logic)
 - [x] Scoped scanner allowlist — `AllowlistEntry` replaces broken whole-prompt suppression; phrase matched against finding's `matched_text` only; rule-scoped entries filter by code first
+- [x] Scanner hardening — NFKC Unicode normalization, split/multiline override patterns (`SEC_SPLIT_001–004`), base64 payload detection (`SEC_B64`), scanner limitations footer in rich output
 
 ---
 
@@ -1005,7 +1013,8 @@ promptgenie/
 
 - [x] **Automated test suite** — 306 tests: scanner, linter, generator, differ, adapter, tester, CLI smoke tests, formatter output — 0 warnings
 - [x] **Developer CI pipeline** — `ci.yml`: pytest (3.10–3.12) with coverage gate, ruff, mypy, bandit, pip-audit, build + wheel smoke test
-- [x] **Modern packaging** — `pyproject.toml` with dev dependency groups, classifiers, project URLs; setuptools license field modernised
+- [x] **Modern packaging** — `pyproject.toml` with dev dependency groups, classifiers, project URLs; setuptools license field modernised; `anthropic` and `tiktoken` moved to optional extras (`[benchmark]`, `[tokenizer]`) — default install no longer requires an HTTP API client
+- [x] **Generated CI supply-chain hygiene** — `ci init` scaffolds SHA-pinned `actions/checkout` + `astral-sh/setup-uv` (matching the repo's own CI); installs pinned `promptgenie==<version>` via `uv pip install --system`; adds `permissions: contents: read`; replaces `for file in $(find …)` with safe `while IFS= read -r` loop
 - [x] **SECURITY.md** — vulnerability reporting, scanner limitations, safe secret handling policy
 - [x] **Structured output** — `--format json` and `--format sarif` on lint and scan; SARIF uploaded to GitHub code scanning
 - [x] **Adapter safety fix** — preserve agentic safety sections by default; add `--strip-agentic-safety` as explicit opt-in
@@ -1019,7 +1028,7 @@ promptgenie/
 - [x] **Schema validation** — thorough field-level validation for profiles (required fields, category allowlist, slug format, type checks, unknown key detection), templates (id slug, sections non-empty), and context packs; `validate-profiles` command with `--dir` and `--no-warnings` flags; errors fail CI, warnings advisory; 39 new tests
 - [ ] **File IO safety** — bounded reads (1 MB limit), explicit UTF-8 handling, atomic writes, overwrite protection with `--force` flag
 - [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
-- [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `severity_overrides`, `custom_vague_verbs`, and a scoped `allowlist` (`AllowlistEntry` with optional `rules` filter); suppression is matched against the finding's `matched_text`, not the whole prompt
+- [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `severity_overrides`, `custom_vague_verbs`, and a scoped `allowlist` (`AllowlistEntry` with optional `rules` filter); suppression is matched against the finding's `matched_text`, not the whole prompt; config is now loaded and applied by all five CLI commands (`scan`, `lint`, `generate`, `test`, `diff`) with `--config PATH` and `--no-config` flags
 - [x] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
 - [x] **Context pack path validation** — strict slug regex `^[A-Za-z0-9_-]+$` on `pack_id`; path containment enforced in `load_pack` and `init_pack`; 10 traversal rejection tests added
 - [x] **Workflow schema validation and cycle detection** — `validate_workflow()` checks duplicate IDs, required fields, unknown dependencies, and cycles (DFS with visiting/visited sets); `WorkflowValidationError` surfaced cleanly in CLI; 13 tests covering valid DAGs, cycles, self-references, and bad fields
@@ -1051,7 +1060,7 @@ promptgenie/
 
 ## Configuration
 
-Place a `.promptgenie.yaml` file in your project root (or any parent directory) to customise rule behaviour:
+Place a `.promptgenie.yaml` file in your project root (or any parent directory). The `scan`, `lint`, `generate`, `test`, and `diff` commands auto-discover and load it on every run.
 
 ```yaml
 scanner:
@@ -1087,7 +1096,16 @@ linter:
     - "polish"
 ```
 
-Copy `.promptgenie.yaml.example` from the repo root as a starting point.
+### Config CLI flags
+
+All five commands (`scan`, `lint`, `generate`, `test`, `diff`) accept:
+
+| Flag | Effect |
+|---|---|
+| `--config PATH` | Load a specific config file instead of auto-discovering `.promptgenie.yaml` |
+| `--no-config` | Ignore any `.promptgenie.yaml`; run with default settings |
+
+When a config file is loaded in rich output mode, its path is shown as a dim line before results. A missing or malformed `--config` file emits a warning and falls back to defaults.
 
 Copy `.promptgenie.yaml.example` from the repo root as a starting point.
 

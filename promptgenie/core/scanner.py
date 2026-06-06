@@ -1,4 +1,6 @@
+import base64
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -180,12 +182,80 @@ RAG_PATTERNS = [
 ]
 
 
+# Multiline / split-token override patterns.
+# Attackers embed overrides across line breaks or inject them inside structured
+# data (JSON values, markdown, comments) to evade single-line regex.
+SPLIT_OVERRIDE_PATTERNS = [
+    (
+        r"ignore\s*\n+\s*(all\s+)?(previous|prior|above)?\s*\n*\s*(instructions?|rules?|context)",
+        "HIGH",
+        "SEC_SPLIT_001",
+        "Split-line instruction override attempt.",
+        "MEDIUM",
+    ),
+    (
+        r"(system\s+prompt|your\s+instructions?)\s*\n+.*\s*(ignore|discard|forget|override)",
+        "HIGH",
+        "SEC_SPLIT_002",
+        "Multiline system-prompt override attempt.",
+        "MEDIUM",
+    ),
+    (
+        r"<!--.*?(ignore|override|forget|jailbreak).*?-->",
+        "HIGH",
+        "SEC_SPLIT_003",
+        "HTML comment used to smuggle override instruction.",
+        "MEDIUM",
+    ),
+    (
+        r"/\*.*?(ignore|override|forget|jailbreak).*?\*/",
+        "HIGH",
+        "SEC_SPLIT_004",
+        "Block comment used to smuggle override instruction.",
+        "MEDIUM",
+    ),
+]
+
+# Base64 / encoding detection — (min_length, max_length, code, message)
+# A base64 blob inside a prompt is unusual. Short blobs (≤20 chars) are common
+# false-positives (UUIDs, short tokens), so we only flag longer ones.
+_BASE64_CHARS = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
+_BASE64_MIN_LENGTH = 40
+
+
+def _looks_like_base64(blob: str) -> bool:
+    """Return True if *blob* is likely a base64-encoded payload."""
+    if len(blob) < _BASE64_MIN_LENGTH:
+        return False
+    # Must be valid base64 length (multiple of 4 after padding normalisation)
+    padded = blob + "=" * (-len(blob) % 4)
+    try:
+        decoded = base64.b64decode(padded, validate=True)
+    except Exception:
+        return False
+    # Only flag if decoded bytes look like printable ASCII / control characters —
+    # pure binary (many non-printable bytes) is probably a false positive.
+    printable = sum(32 <= b < 127 for b in decoded)
+    return printable / len(decoded) > 0.7
+
+
+def _normalize(text: str) -> str:
+    """NFKC-normalize *text* and lowercase for matching.
+
+    NFKC converts look-alike Unicode characters (homoglyphs, fullwidth letters,
+    compatibility forms) to their canonical ASCII equivalents before regex rules
+    are applied, closing the most common Unicode-obfuscation evasion path.
+    """
+    return unicodedata.normalize("NFKC", text).lower()
+
+
 def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
     from promptgenie.core.config import ScannerConfig as _ScannerConfig
 
     cfg: _ScannerConfig = config if config is not None else _ScannerConfig()
     result = ScanResult()
-    lower = prompt.lower()
+    # NFKC-normalize + lowercase: closes Unicode homoglyph / fullwidth evasion.
+    lower = _normalize(prompt)
 
     # Secret detection — search original text to preserve case for patterns like AKIA/ghp_
     for pattern, label, confidence in SECRET_PATTERNS:
@@ -256,6 +326,42 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                     line=line,
                     col=col,
                     matched_text=m.group(0),
+                )
+            )
+
+    # Multiline / split-token override patterns — use DOTALL so . crosses newlines
+    for pattern, risk, code, msg, confidence in SPLIT_OVERRIDE_PATTERNS:
+        m = re.search(pattern, lower, re.DOTALL)
+        if m:
+            line, col = _offset_to_line_col(lower, m.start())
+            result.findings.append(
+                SecurityFinding(
+                    risk=cast(Risk, risk),
+                    code=code,
+                    message=msg,
+                    recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+                    confidence=cast(Confidence, confidence),
+                    line=line,
+                    col=col,
+                    matched_text=m.group(0)[:120],
+                )
+            )
+
+    # Base64 blob detection — flag long base64 strings that decode to readable text
+    for m in _BASE64_CHARS.finditer(prompt):
+        blob = m.group(0)
+        if _looks_like_base64(blob):
+            line, col = _offset_to_line_col(prompt, m.start())
+            result.findings.append(
+                SecurityFinding(
+                    risk="MEDIUM",
+                    code="SEC_B64",
+                    message="Base64-encoded payload detected — possible obfuscated instruction.",
+                    recommendation="Decode and inspect embedded base64 blobs before processing. Reject unexplained encoded content in prompts.",
+                    confidence="MEDIUM",
+                    line=line,
+                    col=col,
+                    matched_text=blob[:80] + ("…" if len(blob) > 80 else ""),
                 )
             )
 

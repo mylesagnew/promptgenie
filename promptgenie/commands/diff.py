@@ -5,6 +5,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
+from promptgenie.core.config import PromptGenieConfig, load_config
 from promptgenie.core.differ import diff_prompts
 from promptgenie.renderers.rich import (
     RISK_COLORS,
@@ -15,17 +16,44 @@ from promptgenie.renderers.rich import (
 )
 
 
+def _resolve_config(
+    config_path: str | None, no_config: bool
+) -> tuple[PromptGenieConfig, str | None]:
+    if no_config:
+        return PromptGenieConfig(), None
+    try:
+        from promptgenie.core.config import _find_config
+
+        cfg = load_config(config_path)
+        found = config_path or (str(_find_config()) if _find_config() is not None else None)
+        return cfg, found
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+        return PromptGenieConfig(), None
+
+
 @click.command(name="diff")
 @click.argument("prompt_a", type=click.Path(exists=True))
 @click.argument("prompt_b", type=click.Path(exists=True))
 @click.option("--target", "-t", default="claude", help="Target profile to use for scoring.")
 @click.option("--unified", "-u", is_flag=True, help="Show full unified diff.")
-def diff_cmd(prompt_a, prompt_b, target, unified):
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    type=click.Path(),
+    help="Path to .promptgenie.yaml config file.",
+)
+@click.option("--no-config", is_flag=True, help="Ignore .promptgenie.yaml; use default settings.")
+def diff_cmd(prompt_a, prompt_b, target, unified, config_path, no_config):
     """Compare two prompt versions — token delta, risk delta, quality delta, section changes."""
+    cfg, cfg_file = _resolve_config(config_path, no_config)
     with console.status("[bold blue]Diffing prompts…"):
-        result = diff_prompts(prompt_a, prompt_b, target=target)
+        result = diff_prompts(prompt_a, prompt_b, target=target, config=cfg)
 
     console.print()
+    if cfg_file:
+        console.print(f"[dim]Config: {cfg_file}[/dim]")
     console.print(f"[bold]Comparing[/bold]  [cyan]{prompt_a}[/cyan]  →  [cyan]{prompt_b}[/cyan]\n")
 
     summary = Table(box=box.SIMPLE, show_header=True, padding=(0, 2))

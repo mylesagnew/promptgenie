@@ -1,10 +1,14 @@
 import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from promptgenie.core.generator import estimate_tokens, score_prompt
 from promptgenie.core.linter import LintResult, lint
 from promptgenie.core.scanner import ScanResult, scan
+
+if TYPE_CHECKING:
+    from promptgenie.core.config import PromptGenieConfig
 
 
 @dataclass
@@ -116,7 +120,12 @@ def _section_deltas(a_text: str, b_text: str) -> list[SectionDelta]:
     return deltas
 
 
-def diff_prompts(a_path: str, b_path: str, target: str = "claude") -> DiffResult:
+def diff_prompts(
+    a_path: str,
+    b_path: str,
+    target: str = "claude",
+    config: "PromptGenieConfig | None" = None,
+) -> DiffResult:
     a_text = Path(a_path).read_text()
     b_text = Path(b_path).read_text()
 
@@ -134,11 +143,14 @@ def diff_prompts(a_path: str, b_path: str, target: str = "claude") -> DiffResult
     a_score = score_prompt(a_text, profile)
     b_score = score_prompt(b_text, profile)
 
-    a_lint = lint(a_text)
-    b_lint = lint(b_text)
+    linter_cfg = config.linter if config is not None else None
+    scanner_cfg = config.scanner if config is not None else None
 
-    a_scan = scan(a_text)
-    b_scan = scan(b_text)
+    a_lint = lint(a_text, config=linter_cfg)
+    b_lint = lint(b_text, config=linter_cfg)
+
+    a_scan = scan(a_text, config=scanner_cfg)
+    b_scan = scan(b_text, config=scanner_cfg)
 
     unified = list(
         difflib.unified_diff(
