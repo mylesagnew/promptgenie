@@ -61,11 +61,24 @@ jobs:
           done <<< "${{ steps.find.outputs.files }}"
           exit $FAILED
 
+      - name: Merge lint SARIFs into one
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=(sarif-results/lint-*.sarif)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo '{"version":"2.1.0","runs":[]}' > sarif-results/lint-combined.sarif
+          else
+            jq -s '{version:.[0].version,"$schema":.[0]["$schema"],runs:[.[].runs[]]}' "${files[@]}" \
+              > sarif-results/lint-combined.sarif
+            rm "${files[@]}"
+          fi
+
       - name: Upload lint SARIF to GitHub code scanning
         if: always()
         uses: github/codeql-action/upload-sarif@66b39da20ccc656acc90dd27ea30f5d458ec33ce # v3
         with:
-          sarif_file: sarif-results/
+          sarif_file: sarif-results/lint-combined.sarif
           category: promptgenie-lint
         continue-on-error: true   # graceful if code scanning not enabled
 
@@ -115,11 +128,24 @@ jobs:
           done <<< "${{ steps.find.outputs.files }}"
           exit $FAILED
 
+      - name: Merge scan SARIFs into one
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=(sarif-results/scan-*.sarif)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo '{"version":"2.1.0","runs":[]}' > sarif-results/scan-combined.sarif
+          else
+            jq -s '{version:.[0].version,"$schema":.[0]["$schema"],runs:[.[].runs[]]}' "${files[@]}" \
+              > sarif-results/scan-combined.sarif
+            rm "${files[@]}"
+          fi
+
       - name: Upload scan SARIF to GitHub code scanning
         if: always()
         uses: github/codeql-action/upload-sarif@66b39da20ccc656acc90dd27ea30f5d458ec33ce # v3
         with:
-          sarif_file: sarif-results/
+          sarif_file: sarif-results/scan-combined.sarif
           category: promptgenie-scan
         continue-on-error: true
 
@@ -150,6 +176,8 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Run prompt test suites
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           FAILED=0
           while IFS= read -r file; do
