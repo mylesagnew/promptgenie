@@ -18,7 +18,7 @@ PromptGenie makes prompts:
 
 - **Structured** — section-by-section output matched to the target tool's requirements
 - **Linted** — catches vague verbs, missing scope, broad tasks, and agentic risks before you send
-- **Scanned** — detects secrets, prompt injection patterns, and unsafe agent permissions
+- **Scanned** — flags heuristic patterns consistent with secrets, prompt injection, and unsafe agent permissions
 - **Diffed** — compare two versions with token delta, score delta, section changes, and risk changes
 - **Tested** — declarative unit tests assert quality, safety, structure, and content before you ship
 - **Benchmarked** — run prompts against real Claude models and score responses across 6 rubric dimensions
@@ -306,15 +306,17 @@ promptgenie scan my-prompt.md --format json
 promptgenie scan my-prompt.md --format sarif --out scan-results.sarif
 ```
 
-**What it detects:**
+**What it flags (heuristic patterns):**
 
-| Category | Examples |
+| Category | Pattern examples flagged |
 |---|---|
 | Secrets | API keys, tokens, AWS credentials, private keys embedded in prompt |
 | Prompt injection | Instruction overrides, system prompt extraction, output suppression |
 | Agent permissions | Unrestricted filesystem access, arbitrary code execution, unsupervised publishing |
 | RAG risks | Instructions that follow retrieved content, untrusted input pipelines |
 | Chained risks | Web fetch + action (email/deploy/write) without approval gate |
+
+> **Confidence and severity:** findings use `HIGH`/`CRITICAL` labels to reflect the *severity of the pattern class*, not the certainty of detection. Each finding is a heuristic signal — review before treating as a confirmed vulnerability. The scanner uses static regex with NFKC Unicode normalisation and does not detect synonym substitution, indirect reference, or multi-turn attacks. See `tests/test_scanner_adversarial.py` for documented detection gaps.
 
 Exits `1` on CRITICAL or HIGH findings — safe to use in CI or pre-commit hooks.
 
@@ -540,6 +542,7 @@ The response is scored by a separate judge call (claude-haiku — fast and cheap
 | `--api-key` | Anthropic API key (or set `ANTHROPIC_API_KEY`) |
 | `--show-response` | Print full model response to terminal |
 | `--out`, `-o` | Save model response to file |
+| `--yes`, `-y` | Skip external-send confirmation prompt (for CI/non-interactive use) |
 
 ---
 
@@ -913,6 +916,8 @@ Every generated prompt is scored across 7 dimensions:
 
 Score of 80+ is considered production-ready. Below 60 triggers lint warnings automatically.
 
+> **Score note:** quality scores are local heuristic estimates based on structural markers (sections present, vague words, length, output format signals). They are not an objective measurement of prompt effectiveness — treat them as a relative hygiene signal, not a grade.
+
 ---
 
 ## Project structure
@@ -1027,7 +1032,7 @@ promptgenie/
 
 - [x] **Schema validation** — thorough field-level validation for profiles (required fields, category allowlist, slug format, type checks, unknown key detection), templates (id slug, sections non-empty), and context packs; `validate-profiles` command with `--dir` and `--no-warnings` flags; errors fail CI, warnings advisory; 39 new tests
 - [ ] **File IO safety** — bounded reads (1 MB limit), explicit UTF-8 handling, atomic writes, overwrite protection with `--force` flag
-- [ ] **Data-driven rule packs** — move hard-coded scanner/linter rules into versioned YAML rule packs with metadata, severity, CWE tags, and test fixtures
+- [x] **Data-driven rule packs** — scanner and linter rules migrated to typed `ScanRule`/`LintRule` registry with `id`, `category`, `pattern`, `risk/severity`, `confidence`, `message`, `recommendation`, and `false_positive_note`; custom rules loadable from `.promptgenie.yaml` under `scanner.custom_rules` and `linter.custom_rules`
 - [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `severity_overrides`, `custom_vague_verbs`, and a scoped `allowlist` (`AllowlistEntry` with optional `rules` filter); suppression is matched against the finding's `matched_text`, not the whole prompt; config is now loaded and applied by all five CLI commands (`scan`, `lint`, `generate`, `test`, `diff`) with `--config PATH` and `--no-config` flags
 - [x] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
 - [x] **Context pack path validation** — strict slug regex `^[A-Za-z0-9_-]+$` on `pack_id`; path containment enforced in `load_pack` and `init_pack`; 10 traversal rejection tests added
@@ -1094,6 +1099,31 @@ linter:
   custom_vague_verbs:
     - "tidy"
     - "polish"
+
+  # Add custom lint rules (appended after built-in rules)
+  custom_rules:
+    - id: MY_LINT_001
+      category: custom
+      pattern: "refactor everything"
+      severity: HIGH
+      confidence: HIGH
+      message: "Overly broad refactor instruction."
+      suggestion: "Narrow the refactor to specific modules or files."
+```
+
+**Custom scanner rules** can also be added under `scanner.custom_rules`. Each rule requires `id`, `pattern`, `risk`, `confidence`, `message`, and `recommendation`:
+
+```yaml
+scanner:
+  custom_rules:
+    - id: MY_SEC_001
+      category: custom
+      pattern: "disable (all )?logging"
+      risk: HIGH
+      confidence: MEDIUM
+      message: "Logging suppression detected — may hide audit trail."
+      recommendation: "Retain audit logs. Use log-level configuration instead."
+      false_positive_note: "May trigger on prompts about log configuration."
 ```
 
 ### Config CLI flags

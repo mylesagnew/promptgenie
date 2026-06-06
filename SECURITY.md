@@ -39,12 +39,36 @@ The `promptgenie scan` command is a **heuristic scanner** — it is not a replac
 - Guaranteed to catch all prompt injection attempts
 - A substitute for human review of high-risk agentic prompts
 
+**Severity label semantics:**
+`HIGH` and `CRITICAL` labels reflect the *severity of the pattern class*, not the certainty of detection. A `CRITICAL` finding means the matched pattern, if intentional, represents a critical risk — it does not mean the detection is certain or confirmed. Treat every finding as a heuristic signal and review before acting on it.
+
 **Known limitations:**
 - Secret detection covers common patterns (OpenAI, Anthropic, AWS, GitHub, Slack) but not all token formats
 - No entropy-based detection — low-entropy or custom secret formats may be missed
-- No allowlist or suppression mechanism yet (planned in P1 roadmap)
-- Injection detection is pattern-based and may miss novel jailbreak techniques
-- Results should be treated as advisory, not authoritative
+- Allowlist and rule suppression are available via `.promptgenie.yaml` (`scanner.allowlist`, `scanner.disabled_rules`); see README for format
+- Injection detection is pattern-based with NFKC Unicode normalisation; will miss synonym substitution, indirect reference, within-word character splits, non-NFKC homoglyphs (e.g. Turkish dotless ı), and multi-turn attacks
+- See `tests/test_scanner_adversarial.py` for the full documented detection gap list
+
+**Custom rules:**
+Project-specific scanner rules can be added under `scanner.custom_rules` in `.promptgenie.yaml` (see README Configuration section). Each rule is a `ScanRule` with `id`, `category`, `pattern`, `risk`, `confidence`, `message`, `recommendation`, and optional `false_positive_note`. Custom rules are appended after built-in rules and participate in the same allowlist and severity-override system.
+
+---
+
+## Benchmark External Transmission
+
+The `promptgenie benchmark` command sends prompt file content to Anthropic's API — once to the benchmark model, and once to the judge model. This is external transmission of your prompt data.
+
+**Before sending, the command:**
+1. Scans the prompt file with the built-in scanner and reports any secret findings with line numbers
+2. Prints an explicit notice: which file, which API endpoint, how many calls
+3. Requires interactive confirmation (`y/N`, defaulting to `N`) unless `--yes` / `-y` is passed
+
+**Do not benchmark prompt files that contain:**
+- Real API keys, tokens, or credentials
+- Personally identifiable information
+- Internal system architecture details you do not want sent to a third party
+
+Use `--yes` only in CI pipelines where the prompt content has already been reviewed and cleared for external transmission.
 
 ---
 
@@ -65,7 +89,7 @@ The `promptgenie scan` command is a **heuristic scanner** — it is not a replac
   pip install pip-audit
   pip-audit
   ```
-- Dependabot / Renovate integration is on the roadmap for automated dependency updates.
+- Dependabot is configured for weekly `uv` and `github-actions` dependency update PRs.
 
 ---
 

@@ -71,8 +71,8 @@ def scan_cmd(prompt_file, output_format, out, config_path, no_config):
         if not result.findings:
             console.print(
                 Panel(
-                    "[green]No security findings.[/green]",
-                    title="Security Scan",
+                    "[green]No heuristic security findings detected.[/green]",
+                    title="Prompt Security Scan (heuristic)",
                     border_style="green",
                 )
             )
@@ -80,7 +80,7 @@ def scan_cmd(prompt_file, output_format, out, config_path, no_config):
             console.print(
                 Panel(
                     format_scan_findings(result),
-                    title=f"Security Scan  [bold]Risk: {result.risk_level}[/bold]  [dim]{prompt_file}[/dim]",
+                    title=f"Prompt Security Scan (heuristic)  [bold]Risk: {result.risk_level}[/bold]  [dim]{prompt_file}[/dim]",
                     border_style="red",
                 )
             )
@@ -88,7 +88,10 @@ def scan_cmd(prompt_file, output_format, out, config_path, no_config):
             Path(out).write_text(scan_to_json(result, prompt_path=prompt_file))
             console.print(f"[dim]Results saved to {out}[/dim]")
         console.print(
-            "[dim]Scanner note: static regex + Unicode-normalised matching. "
+            "[dim]Scanner note: static regex heuristics with Unicode-normalised (NFKC) matching. "
+            "Findings indicate risk patterns, not confirmed vulnerabilities. "
+            "HIGH/CRITICAL labels reflect pattern severity, not detection certainty — "
+            "review each finding before treating it as authoritative. "
             "Does not detect synonym substitution, indirect reference, or multi-turn attacks.[/dim]"
         )
 

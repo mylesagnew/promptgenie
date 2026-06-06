@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dev dependencies (locked)
-        run: uv sync --frozen --extra dev
+        run: uv sync --frozen --extra dev --extra benchmark
 
       - name: Tests
         run: uv run pytest tests/ --tb=short -q

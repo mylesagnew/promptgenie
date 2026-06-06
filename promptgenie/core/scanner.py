@@ -47,177 +47,317 @@ class ScanResult:
         return [f for f in self.findings if f.risk == risk]
 
 
-# Secret patterns — (regex, label, confidence)
-SECRET_PATTERNS = [
-    (r"(api[_-]?key|apikey)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{20,}", "API key", "MEDIUM"),
-    (
-        r"(secret|token|password|passwd|pwd)\s*[:=]\s*['\"]?\S{8,}",
-        "Secret/token/password",
-        "MEDIUM",
+@dataclass
+class ScanRule:
+    """A single scanner rule entry.
+
+    Fields:
+        id               Stable rule code used in allowlists and severity overrides (e.g. SEC_001).
+        category         Logical grouping: secret | injection | permission | rag | obfuscation.
+        pattern          Python regex pattern string.
+        risk             Default severity: CRITICAL | HIGH | MEDIUM | LOW.
+        confidence       Detector confidence: HIGH | MEDIUM | LOW.
+        message          Short human-readable finding description.
+        recommendation   Actionable remediation guidance.
+        false_positive_note  Common false-positive scenarios to help reviewers triage.
+        use_original_text    Search original prompt text instead of NFKC-normalised lowercase.
+                             Set True for case-sensitive patterns (AWS keys, GitHub tokens, etc.).
+        flags            Extra re flags passed to re.search (e.g. re.DOTALL for multiline rules).
+    """
+
+    id: str
+    category: str
+    pattern: str
+    risk: Risk
+    confidence: Confidence
+    message: str
+    recommendation: str
+    false_positive_note: str = ""
+    use_original_text: bool = False
+    flags: int = 0
+
+
+# ── Built-in rule registry ────────────────────────────────────────────────────
+
+SCAN_RULES: list[ScanRule] = [
+    # Secrets — searched on original (case-sensitive) text
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"(api[_-]?key|apikey)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{20,}",
+        risk="CRITICAL",
+        confidence="MEDIUM",
+        message="Possible API key embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        false_positive_note="May trigger on example or placeholder tokens in documentation.",
+        use_original_text=True,
     ),
-    (r"sk-[A-Za-z0-9]{20,}", "OpenAI API key", "HIGH"),
-    (r"AIza[A-Za-z0-9_\-]{35}", "Google API key", "HIGH"),
-    (r"(xox[baprs]-[A-Za-z0-9\-]+)", "Slack token", "HIGH"),
-    (r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----", "Private key", "HIGH"),
-    (r"ghp_[A-Za-z0-9]{36}", "GitHub personal access token", "HIGH"),
-    (r"AKIA[A-Z0-9]{16}", "AWS access key", "HIGH"),
-    (r"(aws_secret_access_key|AWS_SECRET)\s*[:=]\s*\S{20,}", "AWS secret", "HIGH"),
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"(secret|token|password|passwd|pwd)\s*[:=]\s*['\"]?\S{8,}",
+        risk="CRITICAL",
+        confidence="MEDIUM",
+        message="Possible Secret/token/password embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        false_positive_note="May trigger on example values like 'password=changeme'.",
+        use_original_text=True,
+    ),
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"sk-[A-Za-z0-9]{20,}",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Possible OpenAI API key embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        use_original_text=True,
+    ),
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"AIza[A-Za-z0-9_\-]{35}",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Possible Google API key embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        use_original_text=True,
+    ),
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"(xox[baprs]-[A-Za-z0-9\-]+)",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Possible Slack token embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        use_original_text=True,
+    ),
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Possible Private key embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        use_original_text=True,
+    ),
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"ghp_[A-Za-z0-9]{36}",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Possible GitHub personal access token embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        use_original_text=True,
+    ),
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"AKIA[A-Z0-9]{16}",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Possible AWS access key embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        use_original_text=True,
+    ),
+    ScanRule(
+        id="SEC_SECRET",
+        category="secret",
+        pattern=r"(aws_secret_access_key|AWS_SECRET)\s*[:=]\s*\S{20,}",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Possible AWS secret embedded in prompt.",
+        recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
+        use_original_text=True,
+    ),
+    # Prompt injection
+    ScanRule(
+        id="SEC_001",
+        category="injection",
+        pattern=r"ignore (all |previous |above |prior )?(instructions?|rules?|context|prompt)",
+        risk="HIGH",
+        confidence="HIGH",
+        message="Instruction override attempt.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+        false_positive_note="May trigger on security documentation that describes this attack pattern.",
+    ),
+    ScanRule(
+        id="SEC_002",
+        category="injection",
+        pattern=r"forget (everything|all|what you were told|your instructions)",
+        risk="HIGH",
+        confidence="HIGH",
+        message="Memory wipe instruction.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+    ),
+    ScanRule(
+        id="SEC_003",
+        category="injection",
+        pattern=r"(you are now|act as|pretend (you are|to be)|roleplay as)\b.{0,60}(unrestricted|without limits|no rules|jailbreak)",
+        risk="HIGH",
+        confidence="HIGH",
+        message="Roleplay jailbreak pattern.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+    ),
+    ScanRule(
+        id="SEC_004",
+        category="injection",
+        pattern=r"(repeat|print|output|reveal|show|display|tell me) (your|the) (system prompt|instructions|rules|context|hidden)",
+        risk="HIGH",
+        confidence="HIGH",
+        message="System prompt extraction attempt.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+    ),
+    ScanRule(
+        id="SEC_005",
+        category="injection",
+        pattern=r"do not (mention|say|reveal|tell|include|show) (this|that|the above|these instructions)",
+        risk="HIGH",
+        confidence="MEDIUM",
+        message="Output suppression instruction — hides injected behaviour.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+    ),
+    ScanRule(
+        id="SEC_006",
+        category="injection",
+        pattern=r"(translate|rephrase|summarise|summarize).{0,40}(execute|run|perform|do) (it|that|the instruction)",
+        risk="MEDIUM",
+        confidence="MEDIUM",
+        message="Indirect instruction execution via translation.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+    ),
+    ScanRule(
+        id="SEC_007",
+        category="injection",
+        pattern=r"(when|if) (you see|user (says|types|sends))\b.{0,80}(then|always|you must)\b",
+        risk="MEDIUM",
+        confidence="LOW",
+        message="Conditional trigger pattern — may be a persistent injection.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+        false_positive_note="Commonly triggers on legitimate conditional instructions in structured prompts.",
+    ),
+    # Agent permission risks
+    ScanRule(
+        id="PERM_001",
+        category="permission",
+        pattern=r"(access|read|write|modify|delete).{0,30}(any file|all files|entire filesystem|/etc|/var|/root)",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Unrestricted filesystem access requested.",
+        recommendation="Restrict agent permissions to minimum required scope. Add explicit approval gates.",
+    ),
+    ScanRule(
+        id="PERM_002",
+        category="permission",
+        pattern=r"(send|make|issue|perform).{0,30}(any|all|arbitrary) (request|call|http|api)",
+        risk="HIGH",
+        confidence="HIGH",
+        message="Unrestricted network access.",
+        recommendation="Restrict agent permissions to minimum required scope. Add explicit approval gates.",
+    ),
+    ScanRule(
+        id="PERM_003",
+        category="permission",
+        pattern=r"(run|execute|eval).{0,30}(arbitrary|any|all|user.provided) (code|command|script|shell)",
+        risk="CRITICAL",
+        confidence="HIGH",
+        message="Arbitrary code execution allowed.",
+        recommendation="Restrict agent permissions to minimum required scope. Add explicit approval gates.",
+    ),
+    ScanRule(
+        id="PERM_004",
+        category="permission",
+        pattern=r"(access|use|call).{0,30}(email|calendar|contacts|phone|sms|messaging)",
+        risk="HIGH",
+        confidence="MEDIUM",
+        message="PII/communication tool access granted.",
+        recommendation="Restrict agent permissions to minimum required scope. Add explicit approval gates.",
+    ),
+    ScanRule(
+        id="PERM_005",
+        category="permission",
+        pattern=r"(post|tweet|publish|send|email|message).{0,40}(without|no) (review|approval|confirmation)",
+        risk="HIGH",
+        confidence="MEDIUM",
+        message="Allows unsupervised external publishing.",
+        recommendation="Restrict agent permissions to minimum required scope. Add explicit approval gates.",
+    ),
+    ScanRule(
+        id="PERM_006",
+        category="permission",
+        pattern=r"(install|pip install|npm install|apt install|brew install).{0,30}(any|all|whatever)",
+        risk="HIGH",
+        confidence="HIGH",
+        message="Unrestricted package installation.",
+        recommendation="Restrict agent permissions to minimum required scope. Add explicit approval gates.",
+    ),
+    # RAG and data handling risks
+    ScanRule(
+        id="RAG_001",
+        category="rag",
+        pattern=r"(trust|follow|execute|obey).{0,30}(instructions?|commands?).{0,30}(retrieved|fetched|found in|from the document)",
+        risk="HIGH",
+        confidence="HIGH",
+        message="Prompt instructs model to follow instructions found in retrieved content — RAG injection risk.",
+        recommendation="Treat retrieved content as data, not instructions. Summarise only; never execute.",
+    ),
+    ScanRule(
+        id="RAG_002",
+        category="rag",
+        pattern=r"(read|ingest|process).{0,30}(user.uploaded|user.provided|untrusted|external).{0,30}(file|document|url|webpage).{0,80}(then|and) (act|do|execute|follow)",
+        risk="MEDIUM",
+        confidence="MEDIUM",
+        message="Untrusted input pipeline may lead to indirect injection.",
+        recommendation="Treat retrieved content as data, not instructions. Summarise only; never execute.",
+    ),
+    # Multiline / split-token override patterns (DOTALL)
+    ScanRule(
+        id="SEC_SPLIT_001",
+        category="obfuscation",
+        pattern=r"ignore\s*\n+\s*(all\s+)?(previous|prior|above)?\s*\n*\s*(instructions?|rules?|context)",
+        risk="HIGH",
+        confidence="MEDIUM",
+        message="Split-line instruction override attempt.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+        flags=re.DOTALL,
+    ),
+    ScanRule(
+        id="SEC_SPLIT_002",
+        category="obfuscation",
+        pattern=r"(system\s+prompt|your\s+instructions?)\s*\n+.*\s*(ignore|discard|forget|override)",
+        risk="HIGH",
+        confidence="MEDIUM",
+        message="Multiline system-prompt override attempt.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+        flags=re.DOTALL,
+    ),
+    ScanRule(
+        id="SEC_SPLIT_003",
+        category="obfuscation",
+        pattern=r"<!--.*?(ignore|override|forget|jailbreak).*?-->",
+        risk="HIGH",
+        confidence="MEDIUM",
+        message="HTML comment used to smuggle override instruction.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+        flags=re.DOTALL,
+    ),
+    ScanRule(
+        id="SEC_SPLIT_004",
+        category="obfuscation",
+        pattern=r"/\*.*?(ignore|override|forget|jailbreak).*?\*/",
+        risk="HIGH",
+        confidence="MEDIUM",
+        message="Block comment used to smuggle override instruction.",
+        recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
+        flags=re.DOTALL,
+    ),
 ]
 
-# Prompt injection indicators — (regex, risk, code, message, confidence)
-INJECTION_PATTERNS = [
-    (
-        r"ignore (all |previous |above |prior )?(instructions?|rules?|context|prompt)",
-        "HIGH",
-        "SEC_001",
-        "Instruction override attempt.",
-        "HIGH",
-    ),
-    (
-        r"forget (everything|all|what you were told|your instructions)",
-        "HIGH",
-        "SEC_002",
-        "Memory wipe instruction.",
-        "HIGH",
-    ),
-    (
-        r"(you are now|act as|pretend (you are|to be)|roleplay as)\b.{0,60}(unrestricted|without limits|no rules|jailbreak)",
-        "HIGH",
-        "SEC_003",
-        "Roleplay jailbreak pattern.",
-        "HIGH",
-    ),
-    (
-        r"(repeat|print|output|reveal|show|display|tell me) (your|the) (system prompt|instructions|rules|context|hidden)",
-        "HIGH",
-        "SEC_004",
-        "System prompt extraction attempt.",
-        "HIGH",
-    ),
-    (
-        r"do not (mention|say|reveal|tell|include|show) (this|that|the above|these instructions)",
-        "HIGH",
-        "SEC_005",
-        "Output suppression instruction — hides injected behaviour.",
-        "MEDIUM",
-    ),
-    (
-        r"(translate|rephrase|summarise|summarize).{0,40}(execute|run|perform|do) (it|that|the instruction)",
-        "MEDIUM",
-        "SEC_006",
-        "Indirect instruction execution via translation.",
-        "MEDIUM",
-    ),
-    (
-        r"(when|if) (you see|user (says|types|sends))\b.{0,80}(then|always|you must)\b",
-        "MEDIUM",
-        "SEC_007",
-        "Conditional trigger pattern — may be a persistent injection.",
-        "LOW",
-    ),
-]
-
-# Agent permission risks — (regex, risk, code, message, confidence)
-AGENT_PERMISSION_PATTERNS = [
-    (
-        r"(access|read|write|modify|delete).{0,30}(any file|all files|entire filesystem|/etc|/var|/root)",
-        "CRITICAL",
-        "PERM_001",
-        "Unrestricted filesystem access requested.",
-        "HIGH",
-    ),
-    (
-        r"(send|make|issue|perform).{0,30}(any|all|arbitrary) (request|call|http|api)",
-        "HIGH",
-        "PERM_002",
-        "Unrestricted network access.",
-        "HIGH",
-    ),
-    (
-        r"(run|execute|eval).{0,30}(arbitrary|any|all|user.provided) (code|command|script|shell)",
-        "CRITICAL",
-        "PERM_003",
-        "Arbitrary code execution allowed.",
-        "HIGH",
-    ),
-    (
-        r"(access|use|call).{0,30}(email|calendar|contacts|phone|sms|messaging)",
-        "HIGH",
-        "PERM_004",
-        "PII/communication tool access granted.",
-        "MEDIUM",
-    ),
-    (
-        r"(post|tweet|publish|send|email|message).{0,40}(without|no) (review|approval|confirmation)",
-        "HIGH",
-        "PERM_005",
-        "Allows unsupervised external publishing.",
-        "MEDIUM",
-    ),
-    (
-        r"(install|pip install|npm install|apt install|brew install).{0,30}(any|all|whatever)",
-        "HIGH",
-        "PERM_006",
-        "Unrestricted package installation.",
-        "HIGH",
-    ),
-]
-
-# RAG and data handling risks — (regex, risk, code, message, confidence)
-RAG_PATTERNS = [
-    (
-        r"(trust|follow|execute|obey).{0,30}(instructions?|commands?).{0,30}(retrieved|fetched|found in|from the document)",
-        "HIGH",
-        "RAG_001",
-        "Prompt instructs model to follow instructions found in retrieved content — RAG injection risk.",
-        "HIGH",
-    ),
-    (
-        r"(read|ingest|process).{0,30}(user.uploaded|user.provided|untrusted|external).{0,30}(file|document|url|webpage).{0,80}(then|and) (act|do|execute|follow)",
-        "MEDIUM",
-        "RAG_002",
-        "Untrusted input pipeline may lead to indirect injection.",
-        "MEDIUM",
-    ),
-]
-
-
-# Multiline / split-token override patterns.
-# Attackers embed overrides across line breaks or inject them inside structured
-# data (JSON values, markdown, comments) to evade single-line regex.
-SPLIT_OVERRIDE_PATTERNS = [
-    (
-        r"ignore\s*\n+\s*(all\s+)?(previous|prior|above)?\s*\n*\s*(instructions?|rules?|context)",
-        "HIGH",
-        "SEC_SPLIT_001",
-        "Split-line instruction override attempt.",
-        "MEDIUM",
-    ),
-    (
-        r"(system\s+prompt|your\s+instructions?)\s*\n+.*\s*(ignore|discard|forget|override)",
-        "HIGH",
-        "SEC_SPLIT_002",
-        "Multiline system-prompt override attempt.",
-        "MEDIUM",
-    ),
-    (
-        r"<!--.*?(ignore|override|forget|jailbreak).*?-->",
-        "HIGH",
-        "SEC_SPLIT_003",
-        "HTML comment used to smuggle override instruction.",
-        "MEDIUM",
-    ),
-    (
-        r"/\*.*?(ignore|override|forget|jailbreak).*?\*/",
-        "HIGH",
-        "SEC_SPLIT_004",
-        "Block comment used to smuggle override instruction.",
-        "MEDIUM",
-    ),
-]
-
-# Base64 / encoding detection — (min_length, max_length, code, message)
-# A base64 blob inside a prompt is unusual. Short blobs (≤20 chars) are common
+# Base64 / encoding detection constants.
+# A base64 blob inside a prompt is unusual. Short blobs (≤40 chars) are common
 # false-positives (UUIDs, short tokens), so we only flag longer ones.
 _BASE64_CHARS = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
 _BASE64_MIN_LENGTH = 40
@@ -257,97 +397,31 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
     # NFKC-normalize + lowercase: closes Unicode homoglyph / fullwidth evasion.
     lower = _normalize(prompt)
 
-    # Secret detection — search original text to preserve case for patterns like AKIA/ghp_
-    for pattern, label, confidence in SECRET_PATTERNS:
-        m = re.search(pattern, prompt, re.IGNORECASE)
+    active_rules = SCAN_RULES + list(cfg.custom_scan_rules)
+
+    for rule in active_rules:
+        search_text = prompt if rule.use_original_text else lower
+        m = re.search(rule.pattern, search_text, re.IGNORECASE | rule.flags if rule.use_original_text else rule.flags)
         if m:
-            line, col = _offset_to_line_col(prompt, m.start())
+            line, col = _offset_to_line_col(search_text, m.start())
+            matched = m.group(0)
+            # Truncate long matches from multiline rules
+            display_match = matched[:120] + ("…" if len(matched) > 120 else "")
             result.findings.append(
                 SecurityFinding(
-                    risk="CRITICAL",
-                    code="SEC_SECRET",
-                    message=f"Possible {label} embedded in prompt.",
-                    recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
-                    confidence=cast(Confidence, confidence),
+                    risk=rule.risk,
+                    code=rule.id,
+                    message=rule.message,
+                    recommendation=rule.recommendation,
+                    confidence=rule.confidence,
                     line=line,
                     col=col,
-                    matched_text=m.group(0),
+                    matched_text=display_match,
                 )
             )
 
-    # Injection patterns — search lowercased text; map offset back to original
-    for pattern, risk, code, msg, confidence in INJECTION_PATTERNS:
-        m = re.search(pattern, lower)
-        if m:
-            line, col = _offset_to_line_col(lower, m.start())
-            result.findings.append(
-                SecurityFinding(
-                    risk=cast(Risk, risk),
-                    code=code,
-                    message=msg,
-                    recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
-                    confidence=cast(Confidence, confidence),
-                    line=line,
-                    col=col,
-                    matched_text=m.group(0),
-                )
-            )
-
-    # Agent permissions
-    for pattern, risk, code, msg, confidence in AGENT_PERMISSION_PATTERNS:
-        m = re.search(pattern, lower)
-        if m:
-            line, col = _offset_to_line_col(lower, m.start())
-            result.findings.append(
-                SecurityFinding(
-                    risk=cast(Risk, risk),
-                    code=code,
-                    message=msg,
-                    recommendation="Restrict agent permissions to minimum required scope. Add explicit approval gates.",
-                    confidence=cast(Confidence, confidence),
-                    line=line,
-                    col=col,
-                    matched_text=m.group(0),
-                )
-            )
-
-    # RAG risks
-    for pattern, risk, code, msg, confidence in RAG_PATTERNS:
-        m = re.search(pattern, lower)
-        if m:
-            line, col = _offset_to_line_col(lower, m.start())
-            result.findings.append(
-                SecurityFinding(
-                    risk=cast(Risk, risk),
-                    code=code,
-                    message=msg,
-                    recommendation="Treat retrieved content as data, not instructions. Summarise only; never execute.",
-                    confidence=cast(Confidence, confidence),
-                    line=line,
-                    col=col,
-                    matched_text=m.group(0),
-                )
-            )
-
-    # Multiline / split-token override patterns — use DOTALL so . crosses newlines
-    for pattern, risk, code, msg, confidence in SPLIT_OVERRIDE_PATTERNS:
-        m = re.search(pattern, lower, re.DOTALL)
-        if m:
-            line, col = _offset_to_line_col(lower, m.start())
-            result.findings.append(
-                SecurityFinding(
-                    risk=cast(Risk, risk),
-                    code=code,
-                    message=msg,
-                    recommendation="Treat this content as untrusted. Do not follow instructions embedded in retrieved or user-supplied data.",
-                    confidence=cast(Confidence, confidence),
-                    line=line,
-                    col=col,
-                    matched_text=m.group(0)[:120],
-                )
-            )
-
-    # Base64 blob detection — flag long base64 strings that decode to readable text
+    # Base64 blob detection — flag long base64 strings that decode to readable text.
+    # Not expressible as a simple regex rule; kept as special logic.
     for m in _BASE64_CHARS.finditer(prompt):
         blob = m.group(0)
         if _looks_like_base64(blob):
@@ -365,7 +439,8 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                 )
             )
 
-    # Mixed trusted/untrusted input check — no single match offset; use line 1
+    # Mixed trusted/untrusted input check — no single match offset; use line 1.
+    # Requires two independent keyword classes; not expressible as a single regex rule.
     has_web_read = any(
         w in lower for w in ["fetch", "read url", "browse", "web search", "retrieve from"]
     )

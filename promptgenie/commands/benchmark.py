@@ -13,7 +13,34 @@ from promptgenie.core.benchmarker import (
     compare_benchmarks,
     run_benchmark,
 )
+from promptgenie.core.scanner import scan
 from promptgenie.renderers.rich import console, score_color
+
+
+def _presend_check(prompt_file: str, label: str = "") -> bool:
+    """Scan prompt for secrets and warn. Returns False if user aborts."""
+    text = Path(prompt_file).read_text()
+    result = scan(text)
+    secret_findings = [f for f in result.findings if f.code.startswith("SECRET")]
+    tag = f" ({label})" if label else ""
+
+    console.print(
+        f"\n[bold yellow]External transmission notice{tag}:[/bold yellow] "
+        f"[bold]{prompt_file}[/bold] will be sent to Anthropic's API "
+        f"(benchmark model + judge model)."
+    )
+
+    if secret_findings:
+        console.print(
+            f"[bold red]Warning:[/bold red] {len(secret_findings)} potential secret(s) detected in prompt:"
+        )
+        for f in secret_findings:
+            console.print(f"  [red]•[/red] Line {f.line}: {f.message}")
+        console.print(
+            "[red]Sending this file externally may expose sensitive credentials.[/red]"
+        )
+
+    return True
 
 
 @click.command(name="benchmark")
@@ -43,8 +70,33 @@ from promptgenie.renderers.rich import console, score_color
     "--out", "-o", default=None, type=click.Path(), help="Save the model response to file."
 )
 @click.option("--show-response", is_flag=True, help="Print the full model response.")
-def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, show_response):
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Skip external-send confirmation prompt (for CI/non-interactive use).",
+)
+def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, show_response, yes):
     """Run a prompt against a Claude model and score the output with a rubric."""
+    # Pre-send privacy check: scan for secrets and confirm external transmission
+    files_to_check = [(prompt_file, ""), (compare, "compare")] if compare else [(prompt_file, "")]
+    for fpath, label in files_to_check:
+        if fpath:
+            _presend_check(fpath, label)
+
+    if not yes:
+        try:
+            confirmed = click.confirm("\nProceed and send to Anthropic?", default=False)
+        except click.Abort:
+            confirmed = False
+        if not confirmed:
+            console.print("[yellow]Aborted.[/yellow]")
+            sys.exit(0)
+    else:
+        console.print("[dim]--yes passed, skipping confirmation.[/dim]")
+
+    console.print()
     total_calls = runs * (
         2 if not compare else 4
     )  # 2 calls per run (model + judge), doubled if comparing

@@ -43,6 +43,39 @@ class LintResult:
         return [i for i in self.issues if i.severity == sev]
 
 
+@dataclass
+class LintRule:
+    """A single linter rule entry.
+
+    Fields:
+        id                Stable rule code (e.g. AGENT_001).
+        category          Logical grouping: task_quality | agentic_risk | structure.
+        pattern           Python regex pattern. For negate=True rules, the issue is emitted
+                          when the pattern does NOT match (used for missing-section checks).
+        severity          Issue severity: HIGH | MEDIUM | LOW | INFO.
+        confidence        Detector confidence: HIGH | MEDIUM | LOW.
+        message           Short human-readable issue description.
+        suggestion        Actionable fix guidance shown to the user.
+        false_positive_note  Common false-positive scenarios to help reviewers triage.
+        negate            When True, emit the issue only when pattern does NOT match.
+                          Use for "missing section" rules.
+        requires_agentic  When True, only apply this rule to agentic/substantial prompts
+                          (prompts with agentic keywords or length > 200 chars).
+    """
+
+    id: str
+    category: str
+    pattern: str
+    severity: Severity
+    confidence: Confidence
+    message: str
+    suggestion: str
+    false_positive_note: str = ""
+    negate: bool = False
+    requires_agentic: bool = False
+
+
+# Vague verbs checked as a word-boundary list (single finding per prompt).
 VAGUE_VERBS = [
     "help",
     "fix",
@@ -58,96 +91,160 @@ VAGUE_VERBS = [
     "work on",
 ]
 
-# (regex, severity, code, message, confidence)
-AGENTIC_RISK_PATTERNS = [
-    (r"do whatever it takes", "HIGH", "AGENT_001", "Unbounded agent instruction.", "HIGH"),
-    (
-        r"fix everything",
-        "HIGH",
-        "AGENT_002",
-        "Overly broad scope — agent will interpret liberally.",
-        "HIGH",
+# ── Built-in rule registry ────────────────────────────────────────────────────
+
+LINT_RULES: list[LintRule] = [
+    # Agentic risk patterns
+    LintRule(
+        id="AGENT_001",
+        category="agentic_risk",
+        pattern=r"do whatever it takes",
+        severity="HIGH",
+        confidence="HIGH",
+        message="Unbounded agent instruction.",
+        suggestion="Add explicit constraints and approval gates.",
     ),
-    (
-        r"use your judgement",
-        "MEDIUM",
-        "AGENT_003",
-        "Defers decisions to model; add explicit stop conditions.",
-        "MEDIUM",
+    LintRule(
+        id="AGENT_002",
+        category="agentic_risk",
+        pattern=r"fix everything",
+        severity="HIGH",
+        confidence="HIGH",
+        message="Overly broad scope — agent will interpret liberally.",
+        suggestion="Add explicit constraints and approval gates.",
     ),
-    (
-        r"install (any|all|whatever|the) (dependencies|packages|libs)",
-        "HIGH",
-        "AGENT_004",
-        "Allows unrestricted package installation.",
-        "HIGH",
+    LintRule(
+        id="AGENT_003",
+        category="agentic_risk",
+        pattern=r"use your judgement",
+        severity="MEDIUM",
+        confidence="MEDIUM",
+        message="Defers decisions to model; add explicit stop conditions.",
+        suggestion="Add explicit constraints and approval gates.",
     ),
-    (
-        r"deploy to (production|prod|live)",
-        "HIGH",
-        "AGENT_005",
-        "Prompt allows production deployment without approval gate.",
-        "HIGH",
+    LintRule(
+        id="AGENT_004",
+        category="agentic_risk",
+        pattern=r"install (any|all|whatever|the) (dependencies|packages|libs)",
+        severity="HIGH",
+        confidence="HIGH",
+        message="Allows unrestricted package installation.",
+        suggestion="Add explicit constraints and approval gates.",
     ),
-    (
-        r"drop (the |all )?(table|database|db|schema)",
-        "HIGH",
-        "AGENT_006",
-        "Prompt allows destructive database operations.",
-        "HIGH",
+    LintRule(
+        id="AGENT_005",
+        category="agentic_risk",
+        pattern=r"deploy to (production|prod|live)",
+        severity="HIGH",
+        confidence="HIGH",
+        message="Prompt allows production deployment without approval gate.",
+        suggestion="Add explicit constraints and approval gates.",
     ),
-    (
-        r"delete (all|every|the whole|everything)",
-        "HIGH",
-        "AGENT_007",
-        "Prompt allows mass deletion.",
-        "HIGH",
+    LintRule(
+        id="AGENT_006",
+        category="agentic_risk",
+        pattern=r"drop (the |all )?(table|database|db|schema)",
+        severity="HIGH",
+        confidence="HIGH",
+        message="Prompt allows destructive database operations.",
+        suggestion="Add explicit constraints and approval gates.",
     ),
-    (
-        r"run (as|with) (root|admin|sudo)",
-        "HIGH",
-        "AGENT_008",
-        "Prompt requests elevated privileges.",
-        "HIGH",
+    LintRule(
+        id="AGENT_007",
+        category="agentic_risk",
+        pattern=r"delete (all|every|the whole|everything)",
+        severity="HIGH",
+        confidence="HIGH",
+        message="Prompt allows mass deletion.",
+        suggestion="Add explicit constraints and approval gates.",
+    ),
+    LintRule(
+        id="AGENT_008",
+        category="agentic_risk",
+        pattern=r"run (as|with) (root|admin|sudo)",
+        severity="HIGH",
+        confidence="HIGH",
+        message="Prompt requests elevated privileges.",
+        suggestion="Add explicit constraints and approval gates.",
+    ),
+    # Missing structural sections (negate=True: emit when pattern NOT found)
+    LintRule(
+        id="STRUCT_001",
+        category="structure",
+        pattern=r"stop if|stop and ask|halt|pause|do not proceed|wait for approval",
+        severity="MEDIUM",
+        confidence="MEDIUM",
+        message="No stop conditions found for agentic prompt.",
+        suggestion="Add a stop condition section.",
+        negate=True,
+        requires_agentic=True,
+    ),
+    LintRule(
+        id="STRUCT_002",
+        category="structure",
+        pattern=r"only|limit|restrict|scope|bounded|the following files|these files",
+        severity="MEDIUM",
+        confidence="MEDIUM",
+        message="No file/task scope defined.",
+        suggestion="Add a scope definition section.",
+        negate=True,
+        requires_agentic=True,
+    ),
+    LintRule(
+        id="STRUCT_003",
+        category="structure",
+        pattern=r"do not|forbidden|must not|never|avoid|prohibited",
+        severity="LOW",
+        confidence="MEDIUM",
+        message="No forbidden actions listed.",
+        suggestion="Add a forbidden actions section.",
+        negate=True,
+        requires_agentic=True,
+    ),
+    LintRule(
+        id="STRUCT_004",
+        category="structure",
+        pattern=r"output|format|respond with|return|json|markdown|table|list",
+        severity="LOW",
+        confidence="MEDIUM",
+        message="No output format specified.",
+        suggestion="Add an output format section.",
+        negate=True,
+        requires_agentic=True,
+    ),
+    LintRule(
+        id="STRUCT_005",
+        category="structure",
+        pattern=r"done when|acceptance|success|test pass|complete when|verify that",
+        severity="LOW",
+        confidence="MEDIUM",
+        message="No acceptance criteria or success definition.",
+        suggestion="Add a success criteria section.",
+        negate=True,
+        requires_agentic=True,
+    ),
+    # Task quality — over-broad scope
+    LintRule(
+        id="TASK_004",
+        category="task_quality",
+        pattern=r"(the whole|entire|whole|all of the) (app|codebase|repo|project|system)",
+        severity="MEDIUM",
+        confidence="HIGH",
+        message="Scope is too broad — references the whole app/codebase.",
+        suggestion="Narrow scope to specific modules, files, or functions.",
     ),
 ]
 
-MISSING_SECTIONS = [
-    (
-        "stop condition",
-        ["stop if", "stop and ask", "halt", "pause", "do not proceed", "wait for approval"],
-        "MEDIUM",
-        "STRUCT_001",
-        "No stop conditions found for agentic prompt.",
-    ),
-    (
-        "scope definition",
-        ["only", "limit", "restrict", "scope", "bounded", "the following files", "these files"],
-        "MEDIUM",
-        "STRUCT_002",
-        "No file/task scope defined.",
-    ),
-    (
-        "forbidden actions",
-        ["do not", "forbidden", "must not", "never", "avoid", "prohibited"],
-        "LOW",
-        "STRUCT_003",
-        "No forbidden actions listed.",
-    ),
-    (
-        "output format",
-        ["output", "format", "respond with", "return", "json", "markdown", "table", "list"],
-        "LOW",
-        "STRUCT_004",
-        "No output format specified.",
-    ),
-    (
-        "success criteria",
-        ["done when", "acceptance", "success", "test pass", "complete when", "verify that"],
-        "LOW",
-        "STRUCT_005",
-        "No acceptance criteria or success definition.",
-    ),
+# Keywords that signal an agentic/substantial prompt context.
+_AGENTIC_KEYWORDS = [
+    "refactor",
+    "implement",
+    "build",
+    "create",
+    "migrate",
+    "agent",
+    "claude code",
+    "cursor",
 ]
 
 
@@ -158,9 +255,11 @@ def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
     result = LintResult()
     lower = prompt.lower()
 
+    is_agentic = any(w in lower for w in _AGENTIC_KEYWORDS) or len(prompt) > 200
+
     effective_vague_verbs = list(VAGUE_VERBS) + cfg.custom_vague_verbs
 
-    # Vague verb check
+    # Vague verb check — one finding per class, break after first match
     for verb in effective_vague_verbs:
         m = re.search(rf"\b{re.escape(verb)}\b", lower)
         if m:
@@ -176,9 +275,9 @@ def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
                     col=col,
                 )
             )
-            break  # one warning per class
+            break
 
-    # Multiple tasks
+    # Multiple tasks check
     task_markers = ["also", "and then", "additionally", "as well as", "plus also", "furthermore"]
     found_markers = [m for m in task_markers if m in lower]
     if len(found_markers) >= 2:
@@ -196,7 +295,7 @@ def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
             )
         )
 
-    # Missing target
+    # Missing target check
     if not any(
         t in lower
         for t in ["claude", "chatgpt", "gpt", "cursor", "gemini", "midjourney", "stable diffusion"]
@@ -213,67 +312,44 @@ def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
             )
         )
 
-    # Agentic risk patterns
-    for pattern, sev, code, msg, confidence in AGENTIC_RISK_PATTERNS:
-        m = re.search(pattern, lower)
-        if m:
-            line, col = _offset_to_line_col(lower, m.start())
+    # Rule registry — agentic risk and structure rules
+    active_rules = LINT_RULES + list(cfg.custom_lint_rules)
+    for rule in active_rules:
+        if rule.requires_agentic and not is_agentic:
+            continue
+
+        matched = re.search(rule.pattern, lower)
+
+        if rule.negate:
+            # Emit issue only when pattern is NOT found (missing section rules)
+            if matched:
+                continue
             result.issues.append(
                 LintIssue(
-                    severity=cast(Severity, sev),
-                    code=code,
-                    message=msg,
-                    suggestion="Add explicit constraints and approval gates.",
-                    confidence=cast(Confidence, confidence),
+                    severity=cast(Severity, rule.severity),
+                    code=rule.id,
+                    message=rule.message,
+                    suggestion=rule.suggestion,
+                    confidence=cast(Confidence, rule.confidence),
+                    line=1,
+                    col=1,
+                )
+            )
+        else:
+            if not matched:
+                continue
+            line, col = _offset_to_line_col(lower, matched.start())
+            result.issues.append(
+                LintIssue(
+                    severity=cast(Severity, rule.severity),
+                    code=rule.id,
+                    message=rule.message,
+                    suggestion=rule.suggestion,
+                    confidence=cast(Confidence, rule.confidence),
                     line=line,
                     col=col,
                 )
             )
-
-    # Missing structural sections (only flag if prompt looks agentic/substantial)
-    is_agentic = any(
-        w in lower
-        for w in [
-            "refactor",
-            "implement",
-            "build",
-            "create",
-            "migrate",
-            "agent",
-            "claude code",
-            "cursor",
-        ]
-    )
-    if is_agentic or len(prompt) > 200:
-        for section_name, keywords, sev, code, msg in MISSING_SECTIONS:
-            if not any(k in lower for k in keywords):
-                result.issues.append(
-                    LintIssue(
-                        severity=cast(Severity, sev),
-                        code=code,
-                        message=msg,
-                        suggestion=f"Add a {section_name} section.",
-                        confidence="MEDIUM",
-                        line=1,
-                        col=1,
-                    )
-                )
-
-    # Over-broad scope
-    m = re.search(r"(the whole|entire|whole|all of the) (app|codebase|repo|project|system)", lower)
-    if m:
-        line, col = _offset_to_line_col(lower, m.start())
-        result.issues.append(
-            LintIssue(
-                severity="MEDIUM",
-                code="TASK_004",
-                message="Scope is too broad — references the whole app/codebase.",
-                suggestion="Narrow scope to specific modules, files, or functions.",
-                confidence="HIGH",
-                line=line,
-                col=col,
-            )
-        )
 
     # Apply config: filter disabled rules
     if cfg.disabled_rules:

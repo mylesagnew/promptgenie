@@ -8,7 +8,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
-_Nothing yet._
+### Security
+
+- **Benchmark external-send disclosure** — `benchmark` command now prints an explicit transmission notice (file path + destination: Anthropic model + judge) before any API call. Runs the scanner on the prompt file first and surfaces any secret findings with line numbers before proceeding. Requires interactive confirmation (`y/N`, defaulting to `N`) unless `--yes` / `-y` is passed. For a security-branded CLI, silent external transmission of prompt content was unacceptable regardless of the benchmark use case.
+- **Typed rule registry** — scanner and linter rules migrated from raw Python tuples into `ScanRule` and `LintRule` dataclasses with stable `id`, `category`, `pattern`, `risk`/`severity`, `confidence`, `message`, `recommendation`, and `false_positive_note` fields. This makes rule intent, scope, and false-positive guidance legible to reviewers and ensures rule IDs remain stable across changes.
+- **Honest severity framing in scan output** — CLI panel title changed to `Prompt Security Scan (heuristic)`. `HIGH`/`CRITICAL` labels now carry an explicit note that they reflect the *severity of the pattern class*, not detection certainty. Scanner note footer expanded to: findings indicate risk patterns, not confirmed vulnerabilities; review required before treating as authoritative.
+
+### Added
+
+- **`benchmark --yes` / `-y` flag** — skips the interactive external-send confirmation prompt for CI and non-interactive use. Without it, the command defaults to `N` (safe by default).
+- **Custom rules from `.promptgenie.yaml`** — `scanner.custom_rules` and `linter.custom_rules` accept user-defined rules with full metadata. Scanner rules support `use_original_text` (for case-sensitive patterns) and `flags` (e.g. `re.DOTALL`). Lint rules support `negate` (emit when pattern absent — for missing-section checks) and `requires_agentic`.
+- **`ScanRule` dataclass** (`promptgenie/core/scanner.py`) — typed rule object replacing 5 separate Python tuple lists (`SECRET_PATTERNS`, `INJECTION_PATTERNS`, `AGENT_PERMISSION_PATTERNS`, `RAG_PATTERNS`, `SPLIT_OVERRIDE_PATTERNS`). Single unified scan loop with per-rule flag and text-source control.
+- **`LintRule` dataclass** (`promptgenie/core/linter.py`) — typed rule object replacing `AGENTIC_RISK_PATTERNS` and `MISSING_SECTIONS` tuples. Adds `negate` and `requires_agentic` fields.
+
+### Fixed
+
+- **CI and release workflow dependency gap** — `ci.yml` and `release.yml` installed only `--extra dev` but `tests/test_benchmarker.py::TestJudgeParsing::test_judge_parse_failed_flag_set` calls `run_benchmark()`, which imports `anthropic` (optional `benchmark` extra). Result: `1 failed, 418 passed` in CI. Fixed by adding `--extra benchmark` to both install steps. All three install lines now read `uv sync --frozen --extra dev --extra benchmark`.
+
+### Changed
+
+- **README scan section** — "What it detects" → "What it flags (heuristic patterns)"; added confidence/severity callout block; quality score section now notes scores are local heuristic estimates, not objective measurements.
+- **README configuration section** — added `custom_rules` YAML examples for scanner and linter.
+- **README benchmark options** — added `--yes` / `-y` to the options table.
+- **SECURITY.md scanner limitations** — updated to reflect: allowlist is now shipped (not planned); benchmark external-send disclosure is now enforced; typed rule registry with `false_positive_note` is available.
+
+### Tests
+
+**419 passed (unchanged — all existing tests pass against the refactored rule registry). Coverage maintained ≥87%.**
 
 ---
 
