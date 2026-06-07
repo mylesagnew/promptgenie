@@ -25,7 +25,8 @@ Output includes:
 import os
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+
+from promptgenie.core.fileio import safe_read_text
 
 JUDGE_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -199,7 +200,7 @@ def run_benchmark(
         raise ValueError("ANTHROPIC_API_KEY not set. Pass --api-key or export the env var.")
 
     client = anthropic.Anthropic(api_key=key)
-    prompt_text = Path(prompt_path).read_text()
+    prompt_text = safe_read_text(prompt_path)
     results: list[BenchmarkRun] = []
 
     for _i in range(runs):

@@ -1,18 +1,19 @@
 """validate command — check all YAML config artefacts for schema correctness."""
 
+import contextlib
 import sys
 from pathlib import Path
 
 import click
-import yaml
 
+from promptgenie.core.fileio import safe_read_yaml
 from promptgenie.models import Profile, Template, ValidationResult
 from promptgenie.renderers.rich import console
 
 
 def _validate_profile(path: Path) -> ValidationResult:
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = safe_read_yaml(path) or {}
     except Exception as exc:
         return ValidationResult(path=path, kind="profile", valid=False, errors=[str(exc)])
     if not isinstance(data, dict):
@@ -29,7 +30,7 @@ def _validate_profile(path: Path) -> ValidationResult:
 def _validate_template_file(path: Path) -> list[ValidationResult]:
     results = []
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = safe_read_yaml(path) or {}
     except Exception as exc:
         return [ValidationResult(path=path, kind="template", valid=False, errors=[str(exc)])]
     templates = data.get("templates", []) if isinstance(data, dict) else []
@@ -60,7 +61,7 @@ def _validate_template_file(path: Path) -> list[ValidationResult]:
 
 def _validate_context_pack(path: Path) -> ValidationResult:
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = safe_read_yaml(path) or {}
     except Exception as exc:
         return ValidationResult(path=path, kind="context-pack", valid=False, errors=[str(exc)])
     if not isinstance(data, dict):
@@ -81,7 +82,7 @@ def _validate_context_pack(path: Path) -> ValidationResult:
 
 def _validate_workflow_file(path: Path) -> ValidationResult:
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = safe_read_yaml(path) or {}
     except Exception as exc:
         return ValidationResult(path=path, kind="workflow", valid=False, errors=[str(exc)])
 
@@ -113,7 +114,7 @@ def _validate_workflow_file(path: Path) -> ValidationResult:
 
 def _validate_prompt_test(path: Path) -> ValidationResult:
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = safe_read_yaml(path) or {}
     except Exception as exc:
         return ValidationResult(path=path, kind="prompt-test", valid=False, errors=[str(exc)])
     errors = []
@@ -177,12 +178,8 @@ def validate_cmd(paths, validate_all):
         else:
             # Best-effort: try as workflow, then prompt-test, then context pack
             data = {}
-            try:
-                import yaml as _yaml
-
-                data = _yaml.safe_load(path.read_text()) or {}
-            except Exception:
-                pass
+            with contextlib.suppress(Exception):
+                data = safe_read_yaml(path) or {}
             if isinstance(data, dict) and "steps" in data:
                 results.append(_validate_workflow_file(path))
             elif isinstance(data, dict) and "tests" in data:

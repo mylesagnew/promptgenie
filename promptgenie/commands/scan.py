@@ -1,10 +1,10 @@
 import sys
-from pathlib import Path
 
 import click
 from rich.panel import Panel
 
 from promptgenie.core.config import PromptGenieConfig, load_config
+from promptgenie.core.fileio import FileTooLargeError, safe_read_text, safe_write_text
 from promptgenie.core.formatters import scan_to_json, scan_to_sarif
 from promptgenie.core.scanner import scan
 from promptgenie.renderers.rich import console, format_scan_findings
@@ -39,6 +39,7 @@ def _resolve_config(
 @click.option(
     "--out", "-o", default=None, type=click.Path(), help="Write output to file instead of stdout."
 )
+@click.option("--force", is_flag=True, help="Overwrite --out file if it already exists.")
 @click.option(
     "--config",
     "config_path",
@@ -47,22 +48,35 @@ def _resolve_config(
     help="Path to .promptgenie.yaml config file.",
 )
 @click.option("--no-config", is_flag=True, help="Ignore .promptgenie.yaml; use default settings.")
-def scan_cmd(prompt_file, output_format, out, config_path, no_config):
+def scan_cmd(prompt_file, output_format, out, force, config_path, no_config):
     """Scan a prompt file for security risks."""
     cfg, cfg_file = _resolve_config(config_path, no_config)
-    text = Path(prompt_file).read_text()
+    try:
+        text = safe_read_text(prompt_file)
+    except FileTooLargeError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
     result = scan(text, config=cfg.scanner)
 
     if output_format == "json":
         output = scan_to_json(result, prompt_path=prompt_file)
         if out:
-            Path(out).write_text(output)
+            try:
+                safe_write_text(out, output, force=force)
+            except FileExistsError as e:
+                console.print(f"[red]Error:[/red] {e}")
+                sys.exit(1)
         else:
             click.echo(output)
     elif output_format == "sarif":
         output = scan_to_sarif(result, prompt_path=prompt_file)
         if out:
-            Path(out).write_text(output)
+            try:
+                safe_write_text(out, output, force=force)
+            except FileExistsError as e:
+                console.print(f"[red]Error:[/red] {e}")
+                sys.exit(1)
         else:
             click.echo(output)
     else:
@@ -85,8 +99,12 @@ def scan_cmd(prompt_file, output_format, out, config_path, no_config):
                 )
             )
         if out:
-            Path(out).write_text(scan_to_json(result, prompt_path=prompt_file))
-            console.print(f"[dim]Results saved to {out}[/dim]")
+            try:
+                safe_write_text(out, scan_to_json(result, prompt_path=prompt_file), force=force)
+                console.print(f"[dim]Results saved to {out}[/dim]")
+            except FileExistsError as e:
+                console.print(f"[red]Error:[/red] {e}")
+                sys.exit(1)
         console.print(
             "[dim]Scanner note: static regex heuristics with Unicode-normalised (NFKC) matching. "
             "Findings indicate risk patterns, not confirmed vulnerabilities. "

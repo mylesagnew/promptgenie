@@ -47,7 +47,7 @@ Pack file format (promptgenie/context-packs/<name>.yaml):
 import re
 from pathlib import Path
 
-import yaml
+from promptgenie.core.fileio import safe_read_yaml, safe_write_text
 
 PACKS_DIR = Path(__file__).parent.parent / "context-packs"
 
@@ -92,8 +92,7 @@ def _packs_dir() -> Path:
 def list_packs() -> list[dict]:
     packs = []
     for f in sorted(_packs_dir().glob("*.yaml")):
-        with open(f) as fh:
-            data = yaml.safe_load(fh) or {}
+        data = safe_read_yaml(f) or {}
         packs.append(
             {
                 "id": f.stem,
@@ -110,8 +109,7 @@ def load_pack(pack_id: str) -> dict:
     path = _packs_dir() / f"{pack_id}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"Context pack not found: {pack_id}  (looked in {_packs_dir()})")
-    with open(path) as f:
-        return yaml.safe_load(f) or {}
+    return safe_read_yaml(path) or {}
 
 
 def render_pack(
@@ -215,5 +213,5 @@ terminology:
 
 preferred_output_format: "Structured markdown with code blocks"
 """
-    path.write_text(template)
+    safe_write_text(path, template, force=False)
     return path

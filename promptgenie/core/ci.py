@@ -8,6 +8,8 @@ promptgenie ci status         — check what CI integrations are active
 
 from pathlib import Path
 
+from promptgenie.core.fileio import safe_write_text
+
 _CHECKOUT_SHA = "34e114876b0b11c390a56381ad16ebd13914f8d5"  # actions/checkout v4
 _SETUP_UV_SHA = "d0cc045d04ccac9d8b7881df0226f9e82c39688e"  # astral-sh/setup-uv v6
 
@@ -151,7 +153,7 @@ def init_ci(target_dir: str = ".") -> dict[str, dict[str, Path]]:
     gha_dir.mkdir(parents=True, exist_ok=True)
     gha_path = gha_dir / "prompt-check.yml"
     if not gha_path.exists():
-        gha_path.write_text(WORKFLOW_CONTENT)
+        safe_write_text(gha_path, WORKFLOW_CONTENT, force=False)
         created["github_actions"] = gha_path
     else:
         skipped["github_actions"] = gha_path
@@ -159,7 +161,7 @@ def init_ci(target_dir: str = ".") -> dict[str, dict[str, Path]]:
     # Pre-commit config
     precommit_path = root / ".pre-commit-config.yaml"
     if not precommit_path.exists():
-        precommit_path.write_text(PRE_COMMIT_CONTENT)
+        safe_write_text(precommit_path, PRE_COMMIT_CONTENT, force=False)
         created["pre_commit"] = precommit_path
     else:
         skipped["pre_commit"] = precommit_path
@@ -167,7 +169,7 @@ def init_ci(target_dir: str = ".") -> dict[str, dict[str, Path]]:
     # .promptignore
     ignore_path = root / ".promptignore"
     if not ignore_path.exists():
-        ignore_path.write_text(PROMPT_IGNORE_CONTENT)
+        safe_write_text(ignore_path, PROMPT_IGNORE_CONTENT, force=False)
         created["promptignore"] = ignore_path
     else:
         skipped["promptignore"] = ignore_path

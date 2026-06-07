@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import cast
 
-import yaml
+from promptgenie.core.fileio import MAX_YAML_BYTES, safe_read_yaml
 
 PROFILES_DIR = Path(__file__).parent.parent / "profiles"
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
@@ -31,14 +31,12 @@ def load_profile(target: str) -> dict:
     path = PROFILES_DIR / f"{target}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"No profile found for target: {target}")
-    with open(path) as f:
-        return cast(dict, yaml.safe_load(f))
+    return cast(dict, safe_read_yaml(path))
 
 
 def load_template(template_name: str) -> dict:
     for tmpl_file in TEMPLATES_DIR.glob("*.yaml"):
-        with open(tmpl_file) as f:
-            data = cast(dict, yaml.safe_load(f))
+        data = cast(dict, safe_read_yaml(tmpl_file))
         if isinstance(data, dict) and "templates" in data:
             for t in data["templates"]:
                 if t.get("id") == template_name:
@@ -202,8 +200,7 @@ def generate_prompt(
 def list_targets() -> list[dict]:
     targets = []
     for f in sorted(PROFILES_DIR.glob("*.yaml")):
-        with open(f) as fh:
-            data = yaml.safe_load(fh)
+        data = safe_read_yaml(f, max_bytes=MAX_YAML_BYTES)
         targets.append(
             {
                 "id": f.stem,
@@ -218,8 +215,7 @@ def list_targets() -> list[dict]:
 def list_templates() -> list[dict]:
     templates = []
     for f in sorted(TEMPLATES_DIR.glob("*.yaml")):
-        with open(f) as fh:
-            data = yaml.safe_load(fh)
+        data = safe_read_yaml(f, max_bytes=MAX_YAML_BYTES)
         if isinstance(data, dict) and "templates" in data:
             for t in data["templates"]:
                 templates.append(

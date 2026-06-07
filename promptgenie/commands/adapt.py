@@ -1,4 +1,4 @@
-from pathlib import Path
+import sys
 
 import click
 from rich import box
@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from promptgenie.core.adapter import adapt
+from promptgenie.core.fileio import safe_write_text
 from promptgenie.renderers.rich import console, delta_ab
 
 
@@ -16,6 +17,7 @@ from promptgenie.renderers.rich import console, delta_ab
 )
 @click.option("--to", "to_target", required=True, help="Destination target profile (e.g. cursor).")
 @click.option("--out", "-o", default=None, type=click.Path(), help="Save adapted prompt to file.")
+@click.option("--force", is_flag=True, help="Overwrite --out file if it already exists.")
 @click.option(
     "--show-original", is_flag=True, help="Print original prompt alongside adapted version."
 )
@@ -26,7 +28,7 @@ from promptgenie.renderers.rich import console, delta_ab
     help="Remove agentic safety sections (stop conditions, scope, forbidden actions, etc.) "
     "when adapting to a non-agentic target. Off by default — safety sections are preserved.",
 )
-def adapt_cmd(prompt_file, from_target, to_target, out, show_original, strip_agentic_safety):
+def adapt_cmd(prompt_file, from_target, to_target, out, force, show_original, strip_agentic_safety):
     """Translate a prompt from one target profile to another."""
     with console.status("[bold blue]Adapting prompt…"):
         result = adapt(
@@ -89,5 +91,9 @@ def adapt_cmd(prompt_file, from_target, to_target, out, show_original, strip_age
         console.print(Panel(warn_lines, title="Warnings", border_style="yellow"))
 
     if out:
-        Path(out).write_text(result.adapted_text)
-        console.print(f"\n[green]Adapted prompt saved to {out}[/green]")
+        try:
+            safe_write_text(out, result.adapted_text, force=force)
+            console.print(f"\n[green]Adapted prompt saved to {out}[/green]")
+        except FileExistsError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)

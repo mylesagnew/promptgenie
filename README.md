@@ -1006,7 +1006,7 @@ promptgenie/
 - [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
 - [x] `interactive` — guided menu mode: generate, adapt, lint, scan, diff, test, workflow, list in one flow
 - [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists (scoped `AllowlistEntry` format), custom vague verbs; wired into all five CLI commands with `--config` / `--no-config` flags
-- [x] Coverage gate — `fail_under = 85` enforced in CI; 419 tests, 87% coverage, 0 ruff issues across `promptgenie/` and `tests/`
+- [x] Coverage gate — `fail_under = 85` enforced in CI; 445 tests, 87% coverage, 0 ruff issues across `promptgenie/` and `tests/`
 - [x] CODEOWNERS — `.github/CODEOWNERS` governs all files; branch protection docs in CONTRIBUTING.md
 - [x] Adversarial scanner tests — `TestDetects` (21 caught patterns incl. Unicode normalization, split-line overrides, base64 blobs, HTML/block-comment smuggling), `TestMisses` (7 documented gaps: within-word splits, non-NFKC homoglyphs, word-spacing, synonyms, indirect reference, role-shift, markdown bold), `TestScopedAllowlist` (regression suite for fixed allowlist logic)
 - [x] Scoped scanner allowlist — `AllowlistEntry` replaces broken whole-prompt suppression; phrase matched against finding's `matched_text` only; rule-scoped entries filter by code first
@@ -1031,7 +1031,7 @@ promptgenie/
 ### P1 — High-value reliability
 
 - [x] **Schema validation** — thorough field-level validation for profiles (required fields, category allowlist, slug format, type checks, unknown key detection), templates (id slug, sections non-empty), and context packs; `validate-profiles` command with `--dir` and `--no-warnings` flags; errors fail CI, warnings advisory; 39 new tests
-- [ ] **File IO safety** — bounded reads (1 MB limit), explicit UTF-8 handling, atomic writes, overwrite protection with `--force` flag
+- [x] **File IO safety** — `promptgenie/core/fileio.py`: `safe_read_text` (1 MB limit), `safe_read_yaml` (512 KB limit), `safe_write_text` (atomic via tempfile+rename, `--force` required to overwrite); all 38 read/write call sites migrated; explicit UTF-8 everywhere
 - [x] **Data-driven rule packs** — scanner and linter rules migrated to typed `ScanRule`/`LintRule` registry with `id`, `category`, `pattern`, `risk/severity`, `confidence`, `message`, `recommendation`, and `false_positive_note`; custom rules loadable from `.promptgenie.yaml` under `scanner.custom_rules` and `linter.custom_rules`
 - [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `severity_overrides`, `custom_vague_verbs`, and a scoped `allowlist` (`AllowlistEntry` with optional `rules` filter); suppression is matched against the finding's `matched_text`, not the whole prompt; config is now loaded and applied by all five CLI commands (`scan`, `lint`, `generate`, `test`, `diff`) with `--config PATH` and `--no-config` flags
 - [x] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output

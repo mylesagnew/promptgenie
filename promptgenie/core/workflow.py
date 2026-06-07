@@ -71,9 +71,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
-import yaml
-
 from promptgenie.core.context_packs import render_pack
+from promptgenie.core.fileio import safe_read_yaml, safe_write_text
 from promptgenie.core.generator import estimate_tokens, load_profile
 
 
@@ -287,8 +286,7 @@ def _resolve_order(steps: list[WorkflowStep]) -> list[WorkflowStep]:
 
 
 def load_workflow(workflow_path: str) -> dict:
-    with open(workflow_path) as f:
-        return cast(dict, yaml.safe_load(f))
+    return cast(dict, safe_read_yaml(workflow_path))
 
 
 def generate_workflow(workflow_path: str) -> WorkflowResult:
@@ -369,6 +367,6 @@ def save_workflow(result: WorkflowResult, output_dir: str) -> list[Path]:
         safe_name = re.sub(r"[^\w\-]", "_", rs.step.name.lower())
         filename = f"step_{rs.step_number:02d}_{safe_name}.md"
         path = out / filename
-        path.write_text(rs.prompt_text)
+        safe_write_text(path, rs.prompt_text, force=True)
         paths.append(path)
     return paths

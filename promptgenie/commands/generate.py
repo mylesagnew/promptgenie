@@ -1,5 +1,4 @@
 import sys
-from pathlib import Path
 
 import click
 from rich import box
@@ -8,6 +7,7 @@ from rich.table import Table
 
 from promptgenie.core.config import PromptGenieConfig, load_config
 from promptgenie.core.context_packs import render_pack
+from promptgenie.core.fileio import safe_write_text
 from promptgenie.core.generator import generate_prompt
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
@@ -64,6 +64,7 @@ def _resolve_config(
 )
 @click.option("--no-lint", is_flag=True, help="Skip automatic lint pass.")
 @click.option("--no-scan", is_flag=True, help="Skip automatic security scan.")
+@click.option("--force", is_flag=True, help="Overwrite --out file if it already exists.")
 @click.option(
     "--config",
     "config_path",
@@ -84,6 +85,7 @@ def generate(
     pack,
     no_lint,
     no_scan,
+    force,
     config_path,
     no_config,
 ):
@@ -162,5 +164,9 @@ def generate(
             )
 
     if out:
-        Path(out).write_text(prompt_text)
-        console.print(f"\n[green]Prompt saved to {out}[/green]")
+        try:
+            safe_write_text(out, prompt_text, force=force)
+            console.print(f"\n[green]Prompt saved to {out}[/green]")
+        except FileExistsError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)

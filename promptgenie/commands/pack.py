@@ -1,5 +1,4 @@
 import sys
-from pathlib import Path
 
 import click
 from rich import box
@@ -13,6 +12,7 @@ from promptgenie.core.context_packs import (
     load_pack,
     render_pack,
 )
+from promptgenie.core.fileio import FileTooLargeError, safe_read_text, safe_write_text
 from promptgenie.renderers.rich import console
 
 
@@ -82,16 +82,23 @@ def pack_show(pack_id, mode):
     type=click.Path(),
     help="Save result to file (defaults to overwrite prompt_file).",
 )
-def pack_inject(prompt_file, pack_id, mode, out):
+@click.option("--force", is_flag=True, help="Overwrite --out file if it already exists.")
+def pack_inject(prompt_file, pack_id, mode, out, force):
     """Inject a context pack into an existing prompt file."""
     try:
-        prompt_text = Path(prompt_file).read_text()
+        prompt_text = safe_read_text(prompt_file)
         result = inject_pack_into_prompt(prompt_text, pack_id, mode=mode)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, FileTooLargeError) as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
     dest = out or prompt_file
-    Path(dest).write_text(result)
+    # Injecting back into the source file is always an intentional overwrite
+    dest_force = force or (dest == prompt_file)
+    try:
+        safe_write_text(dest, result, force=dest_force)
+    except FileExistsError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
     console.print(Panel(result, title=f"Injected — {pack_id} → {dest}", border_style="cyan"))
     console.print(f"[green]Saved to {dest}[/green]")
 

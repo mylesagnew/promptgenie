@@ -16,8 +16,8 @@ Strategy:
 
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 
+from promptgenie.core.fileio import safe_read_text
 from promptgenie.core.generator import estimate_tokens, load_profile, score_prompt
 
 # Sections that are universally portable — always keep them.
@@ -161,7 +161,7 @@ def _build_added_section(section_name: str, profile: dict) -> list[str]:
 def adapt(
     source_path: str, from_target: str, to_target: str, strip_agentic_safety: bool = False
 ) -> AdaptResult:
-    original_text = Path(source_path).read_text()
+    original_text = safe_read_text(source_path)
 
     try:
         from_profile = load_profile(from_target)

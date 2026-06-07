@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import yaml
+from promptgenie.core.fileio import safe_read_text, safe_read_yaml
 
 if TYPE_CHECKING:
     from promptgenie.core.config import PromptGenieConfig
@@ -301,8 +301,7 @@ def run_test_suite(
     config: "PromptGenieConfig | None" = None,
 ) -> PromptTestSuiteResult:
     test_path = Path(test_file)
-    with open(test_path) as f:
-        suite_def = yaml.safe_load(f)
+    suite_def = safe_read_yaml(test_path)
 
     prompt_ref = suite_def.get("prompt", "")
     # Resolve relative to the test file's directory
@@ -310,7 +309,7 @@ def run_test_suite(
     if not prompt_path or not prompt_path.exists():
         raise FileNotFoundError(f"Prompt file not found: {prompt_ref}")
 
-    prompt_text = prompt_path.read_text()
+    prompt_text = safe_read_text(prompt_path)
     target = suite_def.get("target", "claude")
     description = suite_def.get("description", "")
 

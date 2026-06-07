@@ -13,6 +13,7 @@ from promptgenie.core.benchmarker import (
     compare_benchmarks,
     run_benchmark,
 )
+from promptgenie.core.fileio import safe_write_text
 from promptgenie.core.scanner import scan
 from promptgenie.renderers.rich import console, score_color
 
@@ -69,6 +70,7 @@ def _presend_check(prompt_file: str, label: str = "") -> bool:
 @click.option(
     "--out", "-o", default=None, type=click.Path(), help="Save the model response to file."
 )
+@click.option("--force", is_flag=True, help="Overwrite --out file if it already exists.")
 @click.option("--show-response", is_flag=True, help="Print the full model response.")
 @click.option(
     "--yes",
@@ -77,7 +79,7 @@ def _presend_check(prompt_file: str, label: str = "") -> bool:
     default=False,
     help="Skip external-send confirmation prompt (for CI/non-interactive use).",
 )
-def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, show_response, yes):
+def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, force, show_response, yes):
     """Run a prompt against a Claude model and score the output with a rubric."""
     # Pre-send privacy check: scan for secrets and confirm external transmission
     files_to_check = [(prompt_file, ""), (compare, "compare")] if compare else [(prompt_file, "")]
@@ -160,8 +162,12 @@ def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, show_response
         if show_response:
             console.print(Panel(run.response_text, title="Model Response", border_style="dim"))
         if out:
-            Path(out).write_text(run.response_text)
-            console.print(f"[green]Response saved to {out}[/green]")
+            try:
+                safe_write_text(out, run.response_text, force=force)
+                console.print(f"[green]Response saved to {out}[/green]")
+            except FileExistsError as e:
+                console.print(f"[red]Error:[/red] {e}")
+                sys.exit(1)
 
     if runs == 1:
         _render_run(results_a[0], f"Benchmark  {prompt_file}")

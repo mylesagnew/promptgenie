@@ -1,8 +1,8 @@
 import difflib
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
+from promptgenie.core.fileio import safe_read_text
 from promptgenie.core.generator import estimate_tokens, score_prompt
 from promptgenie.core.linter import LintResult, lint
 from promptgenie.core.scanner import ScanResult, scan
@@ -126,8 +126,8 @@ def diff_prompts(
     target: str = "claude",
     config: "PromptGenieConfig | None" = None,
 ) -> DiffResult:
-    a_text = Path(a_path).read_text()
-    b_text = Path(b_path).read_text()
+    a_text = safe_read_text(a_path)
+    b_text = safe_read_text(b_path)
 
     # Load profile for scoring (best-effort)
     try:

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import yaml
+from promptgenie.core.fileio import safe_read_yaml
 
 if TYPE_CHECKING:
     from promptgenie.core.linter import LintRule
@@ -198,8 +198,7 @@ def load_config(path: str | Path | None = None) -> PromptGenieConfig:
             return PromptGenieConfig()
         config_path = found
 
-    with config_path.open() as fh:
-        raw = yaml.safe_load(fh) or {}
+    raw = safe_read_yaml(config_path) or {}
 
     if not isinstance(raw, dict):
         raise ValueError(f"Config file {config_path} must be a YAML mapping.")

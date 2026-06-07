@@ -38,6 +38,36 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.0.11] — 2026-06-07
+
+### Added
+
+- **`promptgenie/core/fileio.py`** — new safe I/O module with three public helpers:
+  - `safe_read_text(path, max_bytes=1 MB)` — UTF-8 read with size guard; raises `FileTooLargeError` if the file exceeds the limit.
+  - `safe_read_yaml(path, max_bytes=512 KB)` — bounded YAML read using `safe_read_text` + `yaml.safe_load`; smaller default limit than prompts since config files have no reason to be large.
+  - `safe_write_text(path, content, force=False)` — atomic write via tempfile-then-`os.replace`; raises `FileExistsProtectedError` unless `force=True`; creates parent directories; never leaves a partially-written file on crash.
+- **`FileTooLargeError`** and **`FileExistsProtectedError`** — typed exceptions with `.path`, `.size`, `.limit` attributes for programmatic handling.
+- **`--force` flag** on `scan`, `lint`, `generate`, `adapt`, `pack inject`, and `benchmark` — required to overwrite an existing `--out` file. Default is now safe-by-default (refuse to overwrite).
+
+### Changed
+
+- All 38 `Path.read_text()`, `open()`, and `Path.write_text()` call sites across core and command modules migrated to `safe_read_text`, `safe_read_yaml`, or `safe_write_text`:
+  - Core: `config.py`, `generator.py`, `context_packs.py`, `tester.py`, `differ.py`, `adapter.py`, `benchmarker.py`, `workflow.py`, `ci.py`
+  - Commands: `scan.py`, `lint.py`, `generate.py`, `adapt.py`, `pack.py`, `benchmark.py`, `validate.py`
+- All file reads now use explicit `encoding="utf-8"`.
+- YAML config/data reads use the smaller 512 KB limit; prompt/workflow/response reads use the 1 MB limit.
+- `ci init` scaffold writes now go through `safe_write_text` (atomic, UTF-8).
+- `workflow save_workflow` step files now go through `safe_write_text(force=True)` — workflow re-renders intentionally overwrite.
+- `context_packs init_pack` uses `safe_write_text(force=False)` — duplicate pack IDs now raise cleanly instead of silently overwriting (the `init_pack` command already checked for duplicates, but the write was unprotected).
+
+### Tests
+
+**26 new tests in `tests/test_fileio.py`** — `TestSafeReadText` (8 tests), `TestSafeReadYaml` (7 tests), `TestSafeWriteText` (9 tests), `TestRoundTrip` (2 tests). Cover: UTF-8 content, emoji, string/Path args, exact-at-limit, one-over-limit, custom limit, error message format, force/no-force, atomic cleanup, parent directory creation, YAML parse errors, round-trip.
+
+**445 passed (was 419). Coverage maintained ≥87%. 0 ruff issues.**
+
+---
+
 ## [1.0.10] — 2026-06-06
 
 ### Security
@@ -245,7 +275,8 @@ Initial public release.
 
 ---
 
-[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.0.10...HEAD
+[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.0.11...HEAD
+[1.0.11]: https://github.com/mylesagnew/promptgenie/compare/v1.0.10...v1.0.11
 [1.0.10]: https://github.com/mylesagnew/promptgenie/compare/v1.0.9...v1.0.10
 [1.0.9]: https://github.com/mylesagnew/promptgenie/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/mylesagnew/promptgenie/compare/v1.0.7...v1.0.8
