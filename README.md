@@ -1054,7 +1054,7 @@ promptgenie/
 - [ ] **Community profile and template packs** — installable packs for more stacks, models, and domains
 - [ ] **Secret scanning for the repo** — `gitleaks` / `detect-secrets` in pre-commit and CI to prevent committing real credentials
 - [x] **SBOM and release provenance** — tag-triggered `release.yml` workflow: version consistency check, full test/lint/security gate, `uv build`, CycloneDX SBOM (`sbom.cyclonedx.json`), PyPI Trusted Publishing via GitHub OIDC (no stored token), GitHub artifact attestations (`actions/attest-build-provenance`), GitHub Release with wheel + sdist + SBOM attached; requires protected `release` environment
-- [ ] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR _(SecDevOps review: LOW — improves external trust and OpenSSF Scorecard rating)_
+- [x] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR and weekly schedule; uploads SARIF to GitHub Security tab _(SecDevOps review: LOW — improves external trust and OpenSSF Scorecard rating)_
 - [ ] **Dependabot / Renovate** — automated dependency update PRs with vulnerability alerting
 - [ ] **OpenSSF Scorecard** — scheduled Scorecard workflow; upload results to GitHub security tab _(SecDevOps review: LOW — baseline for external trust signals)_
 - [ ] **Plugin/profile registry** — versioned remote profile and rule packs with `promptgenie pack update`; custom rules directory; `enabled_rules`/`disabled_rules` config; severity overrides; expiring suppressions
