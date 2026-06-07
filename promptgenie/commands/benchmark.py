@@ -14,35 +14,42 @@ from promptgenie.core.benchmarker import (
     compare_benchmarks,
     run_benchmark,
 )
-from promptgenie.core.fileio import safe_write_text
+from promptgenie.core.fileio import safe_read_text, safe_write_text
 from promptgenie.core.scanner import scan
 from promptgenie.renderers.rich import console, score_color
 
 
 def _presend_check(prompt_file: str, label: str = "") -> bool:
-    """Scan prompt for secrets and warn. Returns False if user aborts."""
-    text = Path(prompt_file).read_text()
+    """Scan prompt for secrets and warn.
+
+    Returns True if potential secrets were detected (caller must gate on this),
+    False if no secret findings.  Uses safe_read_text() so the 1 MB bound is
+    enforced consistently with every other file-read in the CLI.
+    """
+    text = safe_read_text(prompt_file)
     result = scan(text)
-    secret_findings = [f for f in result.findings if f.code.startswith("SECRET")]
+    # All secret rules share code="SEC_SECRET" — filter by exact code match.
+    # (SecurityFinding has no category field; category lives on ScanRule only.)
+    secret_findings = [f for f in result.findings if f.code == "SEC_SECRET"]
     tag = f" ({label})" if label else ""
 
     console.print(
         f"\n[bold yellow]External transmission notice{tag}:[/bold yellow] "
-        f"[bold]{prompt_file}[/bold] will be sent to Anthropic's API "
-        f"(benchmark model + judge model)."
+        f"[bold]{prompt_file}[/bold] will be sent to the benchmark model and judge model."
     )
 
     if secret_findings:
         console.print(
-            f"[bold red]Warning:[/bold red] {len(secret_findings)} potential secret(s) detected in prompt:"
+            f"[bold red]Warning:[/bold red] {len(secret_findings)} potential secret(s) detected:"
         )
         for f in secret_findings:
             console.print(f"  [red]•[/red] Line {f.line}: {f.message}")
         console.print(
             "[red]Sending this file externally may expose sensitive credentials.[/red]"
         )
+        return True  # secrets found
 
-    return True
+    return False  # no secrets found
 
 
 @click.command(name="benchmark")
@@ -78,19 +85,37 @@ def _presend_check(prompt_file: str, label: str = "") -> bool:
     "-y",
     is_flag=True,
     default=False,
-    help="Skip external-send confirmation prompt (for CI/non-interactive use).",
+    help="Skip external-send confirmation (for CI). Blocked if secrets are detected — "
+    "use --allow-secrets to override.",
 )
-def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, force, show_response, yes):
+@click.option(
+    "--allow-secrets",
+    is_flag=True,
+    default=False,
+    help="Allow external send even when potential secrets are detected. Use with caution.",
+)
+def benchmark_cmd(
+    prompt_file, model, runs, compare, api_key, out, force, show_response, yes, allow_secrets
+):
     """Run a prompt against a Claude model and score the output with a rubric."""
     # Pre-send privacy check: scan for secrets and confirm external transmission
     files_to_check = [(prompt_file, ""), (compare, "compare")] if compare else [(prompt_file, "")]
+    any_secrets = False
     for fpath, label in files_to_check:
-        if fpath:
-            _presend_check(fpath, label)
+        if fpath and _presend_check(fpath, label):
+            any_secrets = True
+
+    if any_secrets and not allow_secrets:
+        console.print(
+            "\n[bold red]Aborted:[/bold red] potential secrets detected. "
+            "Review the warnings above.\n"
+            "To send anyway, re-run with [bold]--allow-secrets[/bold]."
+        )
+        sys.exit(1)
 
     if not yes:
         try:
-            confirmed = click.confirm("\nProceed and send to Anthropic?", default=False)
+            confirmed = click.confirm("\nProceed and send to the model API?", default=False)
         except click.Abort:
             confirmed = False
         if not confirmed:

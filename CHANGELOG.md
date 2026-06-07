@@ -10,6 +10,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.0.13] — 2026-06-07
+
+### Fixed
+
+- **Broken benchmark secret detection** — `_presend_check()` filtered `f.code.startswith("SECRET")` which never matched the scanner's actual code `"SEC_SECRET"`. Changed to exact match `f.code == "SEC_SECRET"`. Secrets are now correctly detected before external transmission.
+- **`_presend_check()` used unbounded file read** — replaced `Path(prompt_file).read_text()` with `safe_read_text()` so the 1 MB limit applies consistently.
+- **`_presend_check()` return value was ignored** — function now returns `True` when secrets are found; callers act on the result.
+- **`--yes` bypassed secret gate** — secrets now unconditionally abort the benchmark command regardless of `--yes`. Added `--allow-secrets` flag as the explicit opt-in override.
+- **Coverage gate failing in CI** — total coverage was 83.57% against a `fail_under = 85` gate. Added 26 targeted tests across config error paths, benchmark presend, scan/lint `--out` file-write paths, and the adapt command. Coverage is now 88.26%.
+- **CI ruff scope excluded `tests/`** — ruff found 3 issues in `tests/test_benchmarker.py` that CI was silently skipping. Fixed the two SIM117 (nested `with`) and one I001 (import order) issues; extended CI ruff check and format to include `tests/`.
+- **`.coverage` tracked in git** — removed from the index; added to `.gitignore`.
+
+### Added
+
+- **`--allow-secrets` flag on `benchmark`** — explicit opt-in to send a prompt externally even when potential secrets are detected. Requires both `--yes` and `--allow-secrets` to proceed non-interactively with secrets present.
+
+### Tests
+
+**483 passed (was 457). Coverage 88.26% (was 83.57%). 0 ruff issues across `promptgenie/` and `tests/`.**
+New tests: `TestConfigCustomRuleErrors` (9), `TestPresendCheck` (4), `TestScanLintOutPaths` (8), `TestAdaptCommand` (4), `TestBenchmarkRunOverallScore.test_total_tokens_sums_in_and_out` (1).
+
+---
+
 ## [1.0.12] — 2026-06-07
 
 ### Added

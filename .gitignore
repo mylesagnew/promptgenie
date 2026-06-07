@@ -12,3 +12,4 @@ build/
 .venv/
 venv/
 *.prompt_library.db
+.coverage

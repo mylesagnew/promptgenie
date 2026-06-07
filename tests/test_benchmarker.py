@@ -19,7 +19,6 @@ from promptgenie.core.benchmarker import (
     run_benchmark,
 )
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -199,12 +198,9 @@ class TestModelProviderProtocol:
 
 class TestAnthropicProvider:
     def test_missing_api_key_raises(self):
-        with patch.dict(os.environ, {}, clear=True):
-            # Ensure ANTHROPIC_API_KEY is absent
-            env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-            with patch.dict(os.environ, env, clear=True):
-                with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
-                    AnthropicProvider(api_key=None)
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        with patch.dict(os.environ, env, clear=True), pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+            AnthropicProvider(api_key=None)
 
     def test_missing_package_raises_import_error(self):
         import builtins
@@ -215,9 +211,8 @@ class TestAnthropicProvider:
                 raise ImportError("No module named 'anthropic'")
             return real_import(name, *args, **kwargs)
 
-        with patch("builtins.__import__", side_effect=_block_anthropic):
-            with pytest.raises(ImportError, match="anthropic"):
-                AnthropicProvider(api_key="sk-test")
+        with patch("builtins.__import__", side_effect=_block_anthropic), pytest.raises(ImportError, match="anthropic"):
+            AnthropicProvider(api_key="sk-test")
 
     def test_judge_model_returns_default(self):
         mock_anthropic = MagicMock()
