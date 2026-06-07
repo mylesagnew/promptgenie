@@ -1,0 +1,36 @@
+name: enterprise-lint
+version: "1.0.0"
+description: "Stricter lint rules for enterprise prompt governance"
+type: rules
+author: "PromptGenie Registry"
+license: MIT
+
+scanner_rules: []
+
+lint_rules:
+  - id: ENT_001
+    category: governance
+    pattern: "TODO|FIXME|PLACEHOLDER|TBD|XXX"
+    severity: HIGH
+    confidence: HIGH
+    message: "Unresolved placeholder in prompt — incomplete prompt governance."
+    suggestion: "Replace all TODOs and placeholders before committing or deploying."
+    false_positive_note: "May fire on prompts that review or search for TODOs in code."
+
+  - id: ENT_002
+    category: governance
+    pattern: "\\b(everyone|anybody|all users|all teams|all staff|everyone in the org)\\b"
+    severity: MEDIUM
+    confidence: MEDIUM
+    message: "Overly broad audience reference — prompts should target a specific, named scope."
+    suggestion: "Name the specific team, role, or service this prompt targets."
+    false_positive_note: ""
+
+  - id: ENT_003
+    category: governance
+    pattern: "(?i)\\b(password|passwd|credentials|secret|token|api.?key)\\b.{0,40}\\b(here|below|above|follows|following)\\b"
+    severity: HIGH
+    confidence: MEDIUM
+    message: "Prompt references credentials inline — possible hardcoded secret or unsafe pattern."
+    suggestion: "Use environment variables or a secrets manager. Never embed credentials in prompts."
+    false_positive_note: "May fire on prompts that discuss how to handle credentials securely."

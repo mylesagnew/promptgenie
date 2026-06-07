@@ -1,0 +1,28 @@
+format_version: "1"
+updated: "2026-06-07"
+registry_url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/index.yaml
+
+packs:
+  - id: owasp-llm-top10
+    name: "OWASP LLM Top 10"
+    version: "1.0.0"
+    description: "Scanner rules mapping to the OWASP LLM Application Security Top 10 (2025 edition)"
+    type: rules
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/owasp-llm-top10.yaml
+    sha256: ""
+
+  - id: enterprise-lint
+    name: "Enterprise Lint Rules"
+    version: "1.0.0"
+    description: "Stricter lint rules for enterprise prompt governance — placeholders, broad scope, credential references"
+    type: rules
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/enterprise-lint.yaml
+    sha256: ""
+
+  - id: ai-safety-context
+    name: "AI Safety Context Pack"
+    version: "1.0.0"
+    description: "Context pack for AI safety and alignment-aware prompt engineering"
+    type: context
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/ai-safety-context.yaml
+    sha256: ""

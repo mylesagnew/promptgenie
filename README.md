@@ -215,6 +215,10 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 | `pack show` | Preview a context pack's rendered content |
 | `pack inject` | Inject a context pack into an existing prompt file |
 | `pack init` | Create a new blank context pack |
+| `pack search` | Search the registry index for available rule/context packs |
+| `pack install` | Download and install a pack from the registry |
+| `pack update` | Fetch the remote registry and install/update all packs |
+| `pack dirs` | Show registry and user rules directories |
 | `ci init` | Scaffold GitHub Actions and pre-commit hooks into a project |
 | `ci status` | Check which CI integrations are active |
 | `list-targets` | Show all available model profiles |
@@ -684,6 +688,74 @@ See [`examples/secure-login.workflow.yaml`](examples/secure-login.workflow.yaml)
 ### `pack`
 
 Context packs are reusable YAML files that capture everything a model needs to know about your project — stack, architecture, coding style, forbidden changes, known pitfalls, and terminology. Use them to stop repeating yourself across every prompt.
+
+PromptGenie also ships a **plugin registry** — a versioned index of rule packs and context packs that can be installed with `pack update` or `pack install`. Registry packs are stored in `~/.promptgenie/registry/packs/` and loaded automatically by the scanner and linter when referenced via `rules_dirs` config.
+
+**Search the registry:**
+
+```bash
+promptgenie pack search
+promptgenie pack search owasp
+```
+
+**Install a specific pack:**
+
+```bash
+promptgenie pack install owasp-llm-top10
+```
+
+**Update all packs from the remote registry:**
+
+```bash
+promptgenie pack update
+```
+
+**Show registry and user directories:**
+
+```bash
+promptgenie pack dirs
+```
+
+**Built-in starter packs (shipped with PromptGenie, no network required):**
+
+| Pack ID | Type | Description |
+|---|---|---|
+| `owasp-llm-top10` | rules | OWASP LLM Top 10 scanner rules (2025 edition) |
+| `enterprise-lint` | rules | Enterprise prompt governance lint rules |
+| `ai-safety-context` | context | AI safety context pack for alignment-aware prompting |
+
+**Enable registry packs via config:**
+
+```yaml
+# .promptgenie.yaml
+scanner:
+  rules_dirs:
+    - ~/.promptgenie/registry/packs   # registry installs
+    - ./local-rules                   # project-local rules
+  enabled_rules:                      # whitelist — only run these codes
+    - OWASP_LLM01_001
+    - OWASP_LLM02_001
+    - SEC_SECRET
+
+linter:
+  rules_dirs:
+    - ~/.promptgenie/registry/packs
+  enabled_rules:
+    - ENT_001
+    - ENT_003
+```
+
+**Expiring allowlist entries** — time-limit exceptions with automatic re-activation after the expiry date:
+
+```yaml
+scanner:
+  allowlist:
+    - phrase: "sk-ant-ci-placeholder"
+      rules:
+        - SEC_SECRET
+      expires: "2026-12-31"
+      reason: "CI placeholder — rotate before expiry, see ticket #456"
+```
 
 **List available packs:**
 

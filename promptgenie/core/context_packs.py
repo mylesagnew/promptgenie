@@ -104,12 +104,31 @@ def list_packs() -> list[dict]:
     return packs
 
 
+def _extra_context_dirs() -> list[Path]:
+    """Return additional directories to search for context packs (registry installs)."""
+    from promptgenie.core.registry import USER_PACKS_DIR
+
+    dirs = []
+    if USER_PACKS_DIR.exists():
+        dirs.append(USER_PACKS_DIR)
+    return dirs
+
+
 def load_pack(pack_id: str) -> dict:
     _validate_pack_id(pack_id)
-    path = _packs_dir() / f"{pack_id}.yaml"
-    if not path.exists():
-        raise FileNotFoundError(f"Context pack not found: {pack_id}  (looked in {_packs_dir()})")
-    return safe_read_yaml(path) or {}
+    # Search built-in packs dir first, then registry packs dirs
+    search_dirs = [_packs_dir()] + _extra_context_dirs()
+    for search_dir in search_dirs:
+        path = search_dir / f"{pack_id}.yaml"
+        if path.exists():
+            data = safe_read_yaml(path) or {}
+            # Only return if this is a context-type pack (or has context-like keys)
+            pack_type = data.get("type", "context")
+            if pack_type == "context" or not data.get("scanner_rules") and not data.get("lint_rules"):
+                return data
+    raise FileNotFoundError(
+        f"Context pack not found: {pack_id}  (searched {', '.join(str(d) for d in search_dirs)})"
+    )
 
 
 def render_pack(

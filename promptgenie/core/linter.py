@@ -312,8 +312,19 @@ def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
             )
         )
 
+    # Load rules from rules_dirs (registry packs and custom rule dirs)
+    dir_rules: list[LintRule] = []
+    if cfg.rules_dirs:
+        from promptgenie.core.registry import load_lint_rules_from_dirs
+
+        dir_rules = load_lint_rules_from_dirs(cfg.rules_dirs)
+
     # Rule registry — agentic risk and structure rules
-    active_rules = LINT_RULES + list(cfg.custom_lint_rules)
+    active_rules = LINT_RULES + dir_rules + list(cfg.custom_lint_rules)
+
+    # enabled_rules whitelist — if set, only run rules whose id is in the list
+    if cfg.enabled_rules:
+        active_rules = [r for r in active_rules if r.id in cfg.enabled_rules]
     for rule in active_rules:
         if rule.requires_agentic and not is_agentic:
             continue
@@ -351,8 +362,10 @@ def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
                 )
             )
 
-    # Apply config: filter disabled rules
-    if cfg.disabled_rules:
+    # Apply config: filter disabled rules; if enabled_rules set, filter to only those
+    if cfg.enabled_rules:
+        result.issues = [i for i in result.issues if i.code in cfg.enabled_rules]
+    elif cfg.disabled_rules:
         result.issues = [i for i in result.issues if i.code not in cfg.disabled_rules]
 
     return result

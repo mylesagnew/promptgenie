@@ -397,7 +397,18 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
     # NFKC-normalize + lowercase: closes Unicode homoglyph / fullwidth evasion.
     lower = _normalize(prompt)
 
-    active_rules = SCAN_RULES + list(cfg.custom_scan_rules)
+    # Load rules from rules_dirs (registry packs and custom rule dirs)
+    dir_rules: list[ScanRule] = []
+    if cfg.rules_dirs:
+        from promptgenie.core.registry import load_scan_rules_from_dirs
+
+        dir_rules = load_scan_rules_from_dirs(cfg.rules_dirs)
+
+    active_rules = SCAN_RULES + dir_rules + list(cfg.custom_scan_rules)
+
+    # enabled_rules whitelist — if set, only run rules whose id is in the list
+    if cfg.enabled_rules:
+        active_rules = [r for r in active_rules if r.id in cfg.enabled_rules]
 
     for rule in active_rules:
         search_text = prompt if rule.use_original_text else lower
@@ -460,6 +471,10 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                 matched_text="",
             )
         )
+
+    # Apply config: enabled_rules (post-special-logic filter), disabled rules, allowlist, overrides.
+    if cfg.enabled_rules:
+        result.findings = [f for f in result.findings if f.code in cfg.enabled_rules]
 
     # Apply config: disabled rules, scoped allowlist, severity overrides.
     #

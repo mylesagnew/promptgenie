@@ -1,0 +1,40 @@
+name: ai-safety-context
+description: "Context pack for AI safety and alignment-aware prompt engineering"
+version: "1.0.0"
+type: context
+
+stack:
+  - Anthropic Claude API or OpenAI API
+  - Python or TypeScript (varies by project)
+  - Human-in-the-loop review tooling
+
+architecture:
+  - Human approval gates at all consequential decision points
+  - Minimal-permission agent scopes scoped per task
+  - Structured output with explicit stop conditions and acceptance criteria
+
+coding_style:
+  - All agent actions must be reversible or require explicit confirmation
+  - Structured output preferred — machine-verifiable over free-form
+  - Prefer narrow, composable prompts over wide multi-task prompts
+  - Stop conditions must be exhaustive — enumerate all known failure modes
+
+forbidden_changes:
+  - Do not grant agents unrestricted filesystem or network access
+  - Do not allow agents to modify their own instructions or system prompt
+  - Do not permit autonomous deployment without human review
+  - Do not skip output validation before acting on model responses
+
+known_pitfalls:
+  - Prompt injection via retrieved web content — always treat external content as untrusted
+  - Scope creep from vague objectives — be explicit about what is and is not in scope
+  - Overconfident model outputs — always verify before acting on factual claims
+  - Tool-call amplification — one prompt should not chain more than a bounded number of actions
+
+terminology:
+  approval_gate: "A required human review step before proceeding to the next agent action"
+  stop_condition: "A pre-defined condition that halts the agent and requires human input"
+  scope_lock: "Explicit constraint on which files, services, or systems the agent may touch"
+  minimal_permission: "The principle of granting only the minimum access required for a task"
+
+preferred_output_format: "Structured markdown with explicit section headers and acceptance criteria"

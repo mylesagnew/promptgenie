@@ -21,20 +21,58 @@ scanner:
   #     rules:
   #       - PERM_005
 
+  # Expiring suppression — automatically expires after the given ISO date.
+  # Use for time-limited exceptions (e.g. CI placeholders, short-lived tokens).
+  # After the expiry date the suppression is ignored and the finding re-appears.
+  #
+  #   - phrase: "sk-ant-ci-placeholder"
+  #     rules:
+  #       - SEC_SECRET
+  #     expires: "2026-12-31"
+  #     reason: "CI placeholder — rotate before expiry, see ticket #456"
+
   # Rule codes to disable entirely (no suppression phrase needed).
   disabled_rules:
     - SEC_007
+
+  # Whitelist mode — when set, ONLY these rule codes are run.
+  # Takes precedence over disabled_rules.
+  # Useful for running a specific subset (e.g. only OWASP rules).
+  #
+  # enabled_rules:
+  #   - OWASP_LLM01_001
+  #   - OWASP_LLM01_002
+  #   - OWASP_LLM02_001
 
   # Override the default risk level for a specific rule code.
   severity_overrides:
     PERM_005: CRITICAL
 
+  # Extra directories to load rule packs from.
+  # Each *.yaml file in these dirs is scanned for a "scanner_rules" key.
+  # Supports ~ for home directory.
+  #
+  # rules_dirs:
+  #   - ~/.promptgenie/rules
+  #   - ./local-rules
+
 linter:
   # Lint rule codes to suppress entirely.
-  disabled_rules:
-    - LINT_003
+  disabled_rules: []
+
+  # Whitelist mode — when set, ONLY these codes are checked.
+  #
+  # enabled_rules:
+  #   - TASK_001
+  #   - TASK_003
 
   # Additional vague verbs to flag beyond the built-in list.
   custom_vague_verbs:
     - "tidy"
     - "polish"
+
+  # Extra directories to load lint rule packs from.
+  #
+  # rules_dirs:
+  #   - ~/.promptgenie/rules
+  #   - ./local-rules

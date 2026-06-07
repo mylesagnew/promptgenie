@@ -1,0 +1,66 @@
+name: owasp-llm-top10
+version: "1.0.0"
+description: "Scanner rules mapping to the OWASP LLM Application Security Top 10 (2025 edition)"
+type: rules
+author: "PromptGenie Registry"
+license: MIT
+
+scanner_rules:
+  # LLM01 — Prompt Injection
+  - id: OWASP_LLM01_001
+    category: injection
+    pattern: "ignore (all )?(previous|prior|above|earlier) (instructions|context|prompt|system)"
+    risk: HIGH
+    confidence: HIGH
+    message: "OWASP LLM01: Direct prompt injection — instruction override attempt detected."
+    recommendation: "Add explicit scope locks and stop conditions. Never allow untrusted input to override system instructions."
+    false_positive_note: "May fire on documentation examples that describe injection patterns."
+
+  - id: OWASP_LLM01_002
+    category: injection
+    pattern: "you are now (a |an )?(new|different|alternative|unrestricted|jailbroken)"
+    risk: HIGH
+    confidence: HIGH
+    message: "OWASP LLM01: Role-hijacking injection pattern detected."
+    recommendation: "System prompts must not be overridable by user input. Add output monitoring."
+    false_positive_note: ""
+
+  - id: OWASP_LLM01_003
+    category: injection
+    pattern: "disregard (your |all )?(previous |prior |safety |ethical |alignment )?(instructions|guidelines|training|constraints)"
+    risk: HIGH
+    confidence: HIGH
+    message: "OWASP LLM01: Constraint-bypass injection detected."
+    recommendation: "Reject prompts containing explicit constraint-override instructions."
+    false_positive_note: ""
+
+  # LLM02 — Sensitive Information Disclosure
+  - id: OWASP_LLM02_001
+    category: injection
+    pattern: "reveal (your |the )?(system prompt|internal (prompt|instructions)|configuration|training data)"
+    risk: HIGH
+    confidence: HIGH
+    message: "OWASP LLM02: System prompt or training data extraction attempt detected."
+    recommendation: "Never allow the model to reveal its system prompt. Use output filtering."
+    false_positive_note: ""
+
+  # LLM06 — Excessive Agency
+  - id: OWASP_LLM06_001
+    category: permission
+    pattern: "autonomously (deploy|publish|delete|drop|modify|execute|run|push|send)"
+    risk: HIGH
+    confidence: HIGH
+    message: "OWASP LLM06: Excessive agency — autonomous destructive action without human oversight."
+    recommendation: "Require explicit human approval before any state-changing action."
+    false_positive_note: ""
+
+  - id: OWASP_LLM06_002
+    category: permission
+    pattern: "without (human |my |user |operator )?(approval|review|confirmation|oversight|intervention)"
+    risk: HIGH
+    confidence: MEDIUM
+    message: "OWASP LLM06: Instruction removes human oversight from agent actions."
+    recommendation: "Add explicit approval gates for all consequential actions."
+    false_positive_note: "May fire on stop conditions that use this phrase as a safeguard description."
+
+lint_rules: []

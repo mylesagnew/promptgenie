@@ -10,6 +10,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.0.14] — 2026-06-07
+
+### Added
+
+- **Plugin/profile registry** — versioned remote rule and context packs with `promptgenie pack update`.
+  - Built-in registry index (`promptgenie/registry/index.yaml`) ships three starter packs:
+    - `owasp-llm-top10` — 6 scanner rules mapping to OWASP LLM Top 10 (2025 edition)
+    - `enterprise-lint` — 3 governance lint rules (placeholder detection, over-broad scope, inline credentials)
+    - `ai-safety-context` — AI safety context pack for alignment-aware prompt engineering
+  - `promptgenie pack search [query]` — search the registry index for available packs.
+  - `promptgenie pack install <id>` — download and install a single pack from the registry.
+  - `promptgenie pack update [--url URL]` — fetch the remote index and install/update all packs; caches index locally.
+  - `promptgenie pack dirs` — show all registry and user rules directories.
+- **`enabled_rules` config** — whitelist mode for scanner and linter: only listed rule codes are run. Takes precedence over `disabled_rules`. Supports targeting specific pack rule sets.
+- **`rules_dirs` config** — extra directories scanned for rule pack YAML files. Supports `~` expansion. Works for both scanner and linter.
+- **Expiring allowlist entries** — `AllowlistEntry.expires` (ISO date string) and `AllowlistEntry.reason` (free-text documentation). Suppressions are automatically deactivated after the expiry date. `is_expired()` method added.
+- **Context pack search path extended** — `load_pack()` now searches `~/.promptgenie/registry/packs/` in addition to built-in context-packs, enabling registry-installed context packs to be used with `promptgenie pack inject`.
+- **`pyproject.toml` package data** — added `registry/*.yaml` and `registry/packs/*.yaml` glob patterns so the built-in registry ships correctly with the package.
+
+### Changed
+
+- `promptgenie pack` group description updated to "Manage context packs and registry rule packs."
+- Scanner `scan()` and linter `lint()` now load rules from `rules_dirs` before applying `enabled_rules` whitelist.
+
+---
+
 ## [1.0.13] — 2026-06-07
 
 ### Fixed

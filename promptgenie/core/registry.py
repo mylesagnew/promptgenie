@@ -1,0 +1,386 @@
+"""
+registry.py — remote profile and rule pack registry.
+
+The registry is a simple YAML index (hosted on GitHub or self-hosted) listing
+available packs. Each pack is a YAML file that can be installed locally and
+then referenced by name in CLI commands or config.
+
+Pack types
+----------
+  rules    — bundle of scanner_rules and/or lint_rules
+  context  — context pack (same format as built-in context-packs/*.yaml)
+  profile  — target profile (same format as built-in profiles/*.yaml)
+
+User data directory layout
+--------------------------
+  ~/.promptgenie/
+    registry/
+      index.yaml          # cached remote index (written by `pack update`)
+      packs/
+        owasp-llm-top10.yaml
+        ...
+    rules/                # user's own custom rule pack files (rules_dirs default)
+
+Built-in registry
+-----------------
+  promptgenie/registry/index.yaml   — shipped with the package, always available
+  promptgenie/registry/packs/*.yaml — starter packs, available without network
+
+Network access
+--------------
+  `pack update`  — fetches the remote index and downloads new/updated packs.
+  `pack install` — downloads a single pack from the registry URL.
+
+  All network calls use urllib.request (stdlib, no extra deps).
+  If the network is unavailable, commands gracefully fall back to the
+  built-in index and any already-installed packs.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import shutil
+import tempfile
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from promptgenie.core.fileio import safe_read_yaml, safe_write_text
+
+# ── paths ──────────────────────────────────────────────────────────────────────
+
+BUILTIN_REGISTRY_DIR = Path(__file__).parent.parent / "registry"
+BUILTIN_INDEX_PATH = BUILTIN_REGISTRY_DIR / "index.yaml"
+BUILTIN_PACKS_DIR = BUILTIN_REGISTRY_DIR / "packs"
+
+USER_DIR = Path.home() / ".promptgenie"
+USER_REGISTRY_DIR = USER_DIR / "registry"
+USER_PACKS_DIR = USER_REGISTRY_DIR / "packs"
+USER_RULES_DIR = USER_DIR / "rules"
+CACHED_INDEX_PATH = USER_REGISTRY_DIR / "index.yaml"
+
+DEFAULT_REGISTRY_URL = (
+    "https://raw.githubusercontent.com/mylesagnew/promptgenie/main/"
+    "promptgenie/registry/index.yaml"
+)
+
+# ── data types ────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class RegistryEntry:
+    """A single entry from the registry index."""
+
+    id: str
+    name: str
+    version: str
+    description: str
+    type: str  # "rules" | "context" | "profile"
+    url: str
+    sha256: str = ""
+
+    def is_installed(self, install_dir: Path | None = None) -> bool:
+        d = install_dir or USER_PACKS_DIR
+        return (d / f"{self.id}.yaml").exists()
+
+
+@dataclass
+class InstalledPack:
+    """Metadata for a locally installed pack."""
+
+    id: str
+    name: str
+    version: str
+    type: str
+    path: Path
+    source: str = "registry"  # "builtin" | "registry" | "local"
+
+
+@dataclass
+class UpdateResult:
+    installed: list[str] = field(default_factory=list)  # newly installed
+    updated: list[str] = field(default_factory=list)  # updated to newer version
+    skipped: list[str] = field(default_factory=list)  # already up-to-date
+    errors: list[str] = field(default_factory=list)  # download/verify failures
+
+
+# ── index loading ─────────────────────────────────────────────────────────────
+
+
+def _parse_index(raw: dict) -> list[RegistryEntry]:
+    entries = []
+    for item in raw.get("packs", []):
+        if not isinstance(item, dict):
+            continue
+        pack_id = str(item.get("id", "")).strip()
+        if not pack_id:
+            continue
+        entries.append(
+            RegistryEntry(
+                id=pack_id,
+                name=str(item.get("name", pack_id)),
+                version=str(item.get("version", "0.0.0")),
+                description=str(item.get("description", "")),
+                type=str(item.get("type", "rules")),
+                url=str(item.get("url", "")),
+                sha256=str(item.get("sha256", "")),
+            )
+        )
+    return entries
+
+
+def load_builtin_index() -> list[RegistryEntry]:
+    """Return entries from the built-in registry index shipped with the package."""
+    raw = safe_read_yaml(BUILTIN_INDEX_PATH) or {}
+    return _parse_index(raw)
+
+
+def load_cached_index() -> list[RegistryEntry]:
+    """Return entries from the locally cached remote index, if present."""
+    if not CACHED_INDEX_PATH.exists():
+        return []
+    raw = safe_read_yaml(CACHED_INDEX_PATH) or {}
+    return _parse_index(raw)
+
+
+def load_index(prefer_cached: bool = True) -> list[RegistryEntry]:
+    """Load the registry index.
+
+    Returns the cached remote index if available (and *prefer_cached* is True),
+    falling back to the built-in index.
+    """
+    if prefer_cached:
+        cached = load_cached_index()
+        if cached:
+            return cached
+    return load_builtin_index()
+
+
+def fetch_remote_index(url: str = DEFAULT_REGISTRY_URL, timeout: int = 10) -> list[RegistryEntry]:
+    """Fetch the registry index from *url* and return parsed entries.
+
+    Raises ``urllib.error.URLError`` / ``OSError`` on network failure.
+    """
+    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
+        import yaml
+
+        raw = yaml.safe_load(resp.read().decode("utf-8")) or {}
+    return _parse_index(raw)
+
+
+# ── pack installation ─────────────────────────────────────────────────────────
+
+
+def _verify_sha256(path: Path, expected: str) -> bool:
+    """Return True if *path* matches *expected* SHA-256 hex digest (or expected is empty)."""
+    if not expected:
+        return True  # no checksum provided — skip verification
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    return digest == expected.lower().removeprefix("sha256:")
+
+
+def _download_to_temp(url: str, timeout: int = 30) -> Path:
+    """Download *url* to a temp file and return its path."""
+    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
+        data = resp.read()
+    tmp = Path(tempfile.mktemp(suffix=".yaml"))  # noqa: S306
+    tmp.write_bytes(data)
+    return tmp
+
+
+def install_pack(
+    entry: RegistryEntry,
+    install_dir: Path | None = None,
+    timeout: int = 30,
+) -> Path:
+    """Download and install a single pack from *entry.url*.
+
+    Returns the path of the installed file.
+    Raises ``ValueError`` on checksum mismatch.
+    Raises ``urllib.error.URLError`` / ``OSError`` on network failure.
+    """
+    dest_dir = install_dir or USER_PACKS_DIR
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{entry.id}.yaml"
+
+    tmp = _download_to_temp(entry.url, timeout=timeout)
+    try:
+        if entry.sha256 and not _verify_sha256(tmp, entry.sha256):
+            raise ValueError(
+                f"SHA-256 mismatch for pack '{entry.id}'. "
+                f"Expected {entry.sha256}, got {hashlib.sha256(tmp.read_bytes()).hexdigest()}"
+            )
+        shutil.move(str(tmp), str(dest))
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+
+    return dest
+
+
+# ── update ────────────────────────────────────────────────────────────────────
+
+
+def _installed_version(pack_id: str, install_dir: Path) -> str:
+    """Return the version string of an installed pack, or "" if not installed."""
+    path = install_dir / f"{pack_id}.yaml"
+    if not path.exists():
+        return ""
+    raw = safe_read_yaml(path) or {}
+    return str(raw.get("version", ""))
+
+
+def update_registry(
+    url: str = DEFAULT_REGISTRY_URL,
+    install_dir: Path | None = None,
+    timeout: int = 30,
+) -> UpdateResult:
+    """Fetch the remote index and install/update all packs.
+
+    Caches the fetched index to ``CACHED_INDEX_PATH`` on success.
+    Returns an ``UpdateResult`` summarising what happened.
+    """
+    result = UpdateResult()
+    dest_dir = install_dir or USER_PACKS_DIR
+
+    try:
+        entries = fetch_remote_index(url, timeout=timeout)
+    except (urllib.error.URLError, OSError) as exc:
+        result.errors.append(f"Failed to fetch registry index from {url}: {exc}")
+        return result
+
+    # Cache the fetched index
+    try:
+        CACHED_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+        import yaml
+
+        index_raw = {
+            "format_version": "1",
+            "packs": [
+                {
+                    "id": e.id,
+                    "name": e.name,
+                    "version": e.version,
+                    "description": e.description,
+                    "type": e.type,
+                    "url": e.url,
+                    "sha256": e.sha256,
+                }
+                for e in entries
+            ],
+        }
+        safe_write_text(CACHED_INDEX_PATH, yaml.dump(index_raw, default_flow_style=False), force=True)
+    except Exception:
+        pass  # cache write failure is non-fatal
+
+    for entry in entries:
+        try:
+            installed_ver = _installed_version(entry.id, dest_dir)
+            if not installed_ver:
+                install_pack(entry, install_dir=dest_dir, timeout=timeout)
+                result.installed.append(entry.id)
+            elif installed_ver != entry.version:
+                install_pack(entry, install_dir=dest_dir, timeout=timeout)
+                result.updated.append(entry.id)
+            else:
+                result.skipped.append(entry.id)
+        except Exception as exc:
+            result.errors.append(f"{entry.id}: {exc}")
+
+    return result
+
+
+# ── installed packs listing ───────────────────────────────────────────────────
+
+
+def list_installed_packs(install_dir: Path | None = None) -> list[InstalledPack]:
+    """Return metadata for all packs installed in *install_dir*."""
+    dest_dir = install_dir or USER_PACKS_DIR
+    packs = []
+    if not dest_dir.exists():
+        return packs
+    for yaml_file in sorted(dest_dir.glob("*.yaml")):
+        raw = safe_read_yaml(yaml_file) or {}
+        packs.append(
+            InstalledPack(
+                id=yaml_file.stem,
+                name=str(raw.get("name", yaml_file.stem)),
+                version=str(raw.get("version", "")),
+                type=str(raw.get("type", "unknown")),
+                path=yaml_file,
+                source="registry",
+            )
+        )
+    return packs
+
+
+def list_builtin_packs() -> list[InstalledPack]:
+    """Return metadata for packs shipped with the package."""
+    packs = []
+    if not BUILTIN_PACKS_DIR.exists():
+        return packs
+    for yaml_file in sorted(BUILTIN_PACKS_DIR.glob("*.yaml")):
+        raw = safe_read_yaml(yaml_file) or {}
+        packs.append(
+            InstalledPack(
+                id=yaml_file.stem,
+                name=str(raw.get("name", yaml_file.stem)),
+                version=str(raw.get("version", "")),
+                type=str(raw.get("type", "unknown")),
+                path=yaml_file,
+                source="builtin",
+            )
+        )
+    return packs
+
+
+# ── rule pack loading ─────────────────────────────────────────────────────────
+
+
+def load_scan_rules_from_dirs(dirs: list[str]) -> list:
+    """Load ScanRule objects from all *.yaml rule pack files in *dirs*.
+
+    Silently skips directories that don't exist and files without
+    a ``scanner_rules`` key. Raises ``ValueError`` on rule validation errors.
+    """
+    from promptgenie.core.config import _parse_custom_scan_rules
+
+    rules = []
+    for dir_str in dirs:
+        dir_path = Path(dir_str).expanduser().resolve()
+        if not dir_path.is_dir():
+            continue
+        for yaml_file in sorted(dir_path.glob("*.yaml")):
+            try:
+                raw = safe_read_yaml(yaml_file) or {}
+                raw_rules = raw.get("scanner_rules", [])
+                if raw_rules:
+                    rules.extend(_parse_custom_scan_rules(raw_rules))
+            except Exception:
+                pass  # malformed pack files in dirs are skipped silently
+    return rules
+
+
+def load_lint_rules_from_dirs(dirs: list[str]) -> list:
+    """Load LintRule objects from all *.yaml rule pack files in *dirs*.
+
+    Silently skips directories that don't exist and files without
+    a ``lint_rules`` key. Raises ``ValueError`` on rule validation errors.
+    """
+    from promptgenie.core.config import _parse_custom_lint_rules
+
+    rules = []
+    for dir_str in dirs:
+        dir_path = Path(dir_str).expanduser().resolve()
+        if not dir_path.is_dir():
+            continue
+        for yaml_file in sorted(dir_path.glob("*.yaml")):
+            try:
+                raw = safe_read_yaml(yaml_file) or {}
+                raw_rules = raw.get("lint_rules", [])
+                if raw_rules:
+                    rules.extend(_parse_custom_lint_rules(raw_rules))
+            except Exception:
+                pass
+    return rules

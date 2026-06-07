@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "promptgenie"
-version = "1.0.13"
+version = "1.0.14"
 description = "Secure prompt engineering for AI agents and engineering teams"
 readme = "README.md"
 license = "MIT"
@@ -67,6 +67,8 @@ promptgenie = [
     "templates/*.yaml",
     "context-packs/*.yaml",
     "packs/**/*.yaml",
+    "registry/*.yaml",
+    "registry/packs/*.yaml",
 ]
 
 [tool.pytest.ini_options]

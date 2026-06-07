@@ -18,7 +18,7 @@ from promptgenie.renderers.rich import console
 
 @click.group(name="pack")
 def pack_group():
-    """Manage context packs — reusable project context blocks."""
+    """Manage context packs and registry rule packs."""
 
 
 @pack_group.command(name="list")
@@ -101,6 +101,112 @@ def pack_inject(prompt_file, pack_id, mode, out, force):
         sys.exit(1)
     console.print(Panel(result, title=f"Injected — {pack_id} → {dest}", border_style="cyan"))
     console.print(f"[green]Saved to {dest}[/green]")
+
+
+@pack_group.command(name="search")
+@click.argument("query", required=False, default="")
+def pack_search(query: str):
+    """Search the registry index for available packs."""
+    from promptgenie.core.registry import load_index
+
+    entries = load_index()
+    if query:
+        q = query.lower()
+        entries = [e for e in entries if q in e.id.lower() or q in e.name.lower() or q in e.description.lower()]
+
+    if not entries:
+        console.print("[dim]No packs found matching your query.[/dim]")
+        return
+
+    table = Table(title="Registry Packs", box=box.ROUNDED)
+    table.add_column("ID", style="cyan bold")
+    table.add_column("Name")
+    table.add_column("Version", style="dim")
+    table.add_column("Type", style="dim")
+    table.add_column("Description", style="dim")
+    for e in entries:
+        table.add_row(e.id, e.name, e.version, e.type, e.description)
+    console.print(table)
+
+
+@pack_group.command(name="install")
+@click.argument("pack_id")
+@click.option("--timeout", default=30, type=int, help="Download timeout in seconds.")
+def pack_install(pack_id: str, timeout: int):
+    """Download and install a pack from the registry."""
+    from promptgenie.core.registry import install_pack, load_index
+
+    entries = load_index()
+    matching = [e for e in entries if e.id == pack_id]
+    if not matching:
+        console.print(f"[red]Error:[/red] Pack {pack_id!r} not found in registry.")
+        console.print("[dim]Run [bold]promptgenie pack search[/bold] to list available packs.[/dim]")
+        sys.exit(1)
+
+    entry = matching[0]
+    console.print(f"Installing [bold]{entry.name}[/bold] [dim]v{entry.version}[/dim]…")
+    try:
+        path = install_pack(entry, timeout=timeout)
+        console.print(f"[green]✓[/green] Installed to {path}")
+    except ValueError as e:
+        console.print(f"[red]Checksum error:[/red] {e}")
+        sys.exit(1)
+    except OSError as e:
+        console.print(f"[red]Download failed:[/red] {e}")
+        sys.exit(1)
+
+
+@pack_group.command(name="update")
+@click.option("--url", default=None, help="Registry index URL (overrides default).")
+@click.option("--timeout", default=30, type=int, help="Download timeout in seconds.")
+def pack_update(url: str | None, timeout: int):
+    """Fetch the remote registry and install/update all packs."""
+    from promptgenie.core.registry import DEFAULT_REGISTRY_URL, update_registry
+
+    registry_url = url or DEFAULT_REGISTRY_URL
+    console.print(f"[dim]Fetching registry from {registry_url}…[/dim]")
+    result = update_registry(url=registry_url, timeout=timeout)
+
+    if result.installed:
+        console.print(f"[green]Installed:[/green] {', '.join(result.installed)}")
+    if result.updated:
+        console.print(f"[blue]Updated:[/blue]   {', '.join(result.updated)}")
+    if result.skipped:
+        console.print(f"[dim]Up-to-date: {', '.join(result.skipped)}[/dim]")
+    if result.errors:
+        for err in result.errors:
+            console.print(f"[red]Error:[/red] {err}")
+        sys.exit(1)
+
+    if not result.installed and not result.updated and not result.errors:
+        console.print("[dim]All packs are up to date.[/dim]")
+
+
+@pack_group.command(name="dirs")
+def pack_dirs():
+    """Show registry and user rules directories."""
+    from promptgenie.core.registry import (
+        BUILTIN_PACKS_DIR,
+        CACHED_INDEX_PATH,
+        USER_PACKS_DIR,
+        USER_RULES_DIR,
+    )
+
+    table = Table(title="Pack Directories", box=box.ROUNDED, show_header=True)
+    table.add_column("Purpose", style="cyan")
+    table.add_column("Path")
+    table.add_column("Exists", style="dim")
+
+    dirs = [
+        ("Built-in packs (shipped)", BUILTIN_PACKS_DIR),
+        ("Installed packs (registry)", USER_PACKS_DIR),
+        ("Custom rules dir", USER_RULES_DIR),
+        ("Cached index", CACHED_INDEX_PATH),
+    ]
+    for label, path in dirs:
+        exists = "✓" if path.exists() else "—"
+        table.add_row(label, str(path), exists)
+    console.print(table)
 
 
 @pack_group.command(name="init")
