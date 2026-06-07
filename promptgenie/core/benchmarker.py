@@ -1,5 +1,5 @@
 """
-benchmarker.py — run a prompt against a Claude model and score the output.
+benchmarker.py — run a prompt against any model and score the output.
 
 Rubric dimensions (each 0-100, averaged to an overall score):
 
@@ -8,40 +8,44 @@ Rubric dimensions (each 0-100, averaged to an overall score):
   format          Did the output match the requested format?
   safety          Did the output respect constraints and forbidden actions?
   conciseness     Was the output free of padding and unnecessary repetition?
-  actionability   Is the output specific and immediately usable?
+  actionability   Is the output specific, concrete, and immediately usable?
 
-The rubric is evaluated by a second Claude call (judge model), keeping the
+The rubric is evaluated by a second model call (judge), keeping the
 benchmark model and judge model separate so results are comparable across runs.
 
-Output includes:
-  - model response text
-  - rubric scores (per dimension + overall)
-  - token usage (input / output / cache read / cache write)
-  - estimated cost
-  - latency
-  - comparison table when multiple runs given
+Provider abstraction
+--------------------
+``run_benchmark`` accepts any object that implements ``ModelProvider``.
+The built-in ``AnthropicProvider`` wraps the Anthropic SDK.  To plug in a
+different backend, implement the protocol and pass it as ``provider=``:
+
+    class MyProvider:
+        def complete(self, model, prompt, system=None):
+            # returns (response_text, usage_dict)
+            ...
+        def judge_model(self):
+            # returns the model id to use for judging
+            ...
+        def estimate_cost(self, model, input_tokens, output_tokens,
+                          cache_read, cache_write):
+            # returns float USD (return 0.0 if not applicable)
+            ...
+
+    results = run_benchmark("my-prompt.md", provider=MyProvider(), model="my-model")
 """
 
 import os
 import time
 from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
 
 from promptgenie.core.fileio import safe_read_text
 
-JUDGE_MODEL = "claude-haiku-4-5-20251001"
-DEFAULT_MODEL = "claude-sonnet-4-6"
+# ── defaults ──────────────────────────────────────────────────────────────────
 
-# Approximate cost per million tokens (USD) — update as pricing changes
-COST_PER_M = {
-    "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_write": 18.75},
-    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_write": 3.75},
-    "claude-haiku-4-5-20251001": {
-        "input": 0.8,
-        "output": 4.0,
-        "cache_read": 0.08,
-        "cache_write": 1.0,
-    },
-}
+DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_JUDGE_MODEL = "claude-haiku-4-5-20251001"
+MAX_RUNS = 10
 
 RUBRIC_DIMENSIONS = [
     "relevance",
@@ -52,7 +56,12 @@ RUBRIC_DIMENSIONS = [
     "actionability",
 ]
 
-MAX_RUNS = 10
+# Anthropic cost table (USD per million tokens)
+_ANTHROPIC_COST_PER_M: dict[str, dict[str, float]] = {
+    "claude-opus-4-8": {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_write": 18.75},
+    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_write": 3.75},
+    DEFAULT_JUDGE_MODEL: {"input": 0.8, "output": 4.0, "cache_read": 0.08, "cache_write": 1.0},
+}
 
 JUDGE_SYSTEM = """You are an expert prompt quality evaluator.
 
@@ -83,6 +92,125 @@ Respond ONLY with a JSON object in exactly this format:
   "actionability": <0-100>,
   "reasoning": "<one sentence per dimension, pipe-separated>"
 }"""
+
+
+# ── provider protocol ─────────────────────────────────────────────────────────
+
+
+@runtime_checkable
+class ModelProvider(Protocol):
+    """Minimal interface for a model backend used by the benchmarker.
+
+    Implement this protocol to plug in any LLM provider.
+    All methods must be synchronous.
+    """
+
+    def complete(
+        self,
+        model: str,
+        prompt: str,
+        system: str | None = None,
+    ) -> tuple[str, dict[str, int]]:
+        """Send *prompt* to *model* and return ``(response_text, usage)``.
+
+        ``usage`` must contain integer keys ``input``, ``output``,
+        ``cache_read``, and ``cache_write`` (use 0 when not applicable).
+        """
+        ...
+
+    def judge_model(self) -> str:
+        """Model id to use for rubric scoring (the 'judge' call)."""
+        ...
+
+    def estimate_cost(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read: int,
+        cache_write: int,
+    ) -> float:
+        """Estimated cost in USD for one model call.  Return 0.0 if unknown."""
+        ...
+
+
+# ── built-in Anthropic provider ───────────────────────────────────────────────
+
+
+class AnthropicProvider:
+    """ModelProvider backed by the Anthropic SDK (``anthropic`` package).
+
+    Parameters
+    ----------
+    api_key:
+        Anthropic API key.  Falls back to ``ANTHROPIC_API_KEY`` env var.
+    judge_model_id:
+        Model used for rubric scoring.  Defaults to ``DEFAULT_JUDGE_MODEL``.
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        judge_model_id: str = DEFAULT_JUDGE_MODEL,
+    ) -> None:
+        try:
+            import anthropic as _anthropic
+        except ImportError as exc:
+            raise ImportError(
+                "The 'anthropic' package is required for AnthropicProvider. "
+                "Install it with: pip install 'promptgenie[benchmark]'"
+            ) from exc
+
+        key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        if not key:
+            raise ValueError("ANTHROPIC_API_KEY not set. Pass api_key= or export the env var.")
+
+        self._client = _anthropic.Anthropic(api_key=key)
+        self._judge_model_id = judge_model_id
+
+    def complete(
+        self,
+        model: str,
+        prompt: str,
+        system: str | None = None,
+    ) -> tuple[str, dict[str, int]]:
+        messages = [{"role": "user", "content": prompt}]
+        kwargs: dict = {"model": model, "max_tokens": 4096, "messages": messages}
+        if system:
+            kwargs["system"] = [
+                {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+            ]
+        response = self._client.messages.create(**kwargs)
+        text = "".join(b.text for b in response.content if hasattr(b, "text"))
+        usage = {
+            "input": response.usage.input_tokens,
+            "output": response.usage.output_tokens,
+            "cache_read": getattr(response.usage, "cache_read_input_tokens", 0) or 0,
+            "cache_write": getattr(response.usage, "cache_creation_input_tokens", 0) or 0,
+        }
+        return text, usage
+
+    def judge_model(self) -> str:
+        return self._judge_model_id
+
+    def estimate_cost(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read: int,
+        cache_write: int,
+    ) -> float:
+        rates = _ANTHROPIC_COST_PER_M.get(model, _ANTHROPIC_COST_PER_M[DEFAULT_MODEL])
+        return (
+            input_tokens * rates["input"] / 1_000_000
+            + output_tokens * rates["output"] / 1_000_000
+            + cache_read * rates["cache_read"] / 1_000_000
+            + cache_write * rates["cache_write"] / 1_000_000
+        )
+
+
+# ── data types ────────────────────────────────────────────────────────────────
 
 
 class BenchmarkEvaluationError(Exception):
@@ -116,38 +244,14 @@ class BenchmarkRun:
         return self.input_tokens + self.output_tokens
 
 
-def _estimate_cost(
-    model: str, input_tokens: int, output_tokens: int, cache_read: int, cache_write: int
-) -> float:
-    rates = COST_PER_M.get(model, COST_PER_M[DEFAULT_MODEL])
-    return (
-        input_tokens * rates["input"] / 1_000_000
-        + output_tokens * rates["output"] / 1_000_000
-        + cache_read * rates["cache_read"] / 1_000_000
-        + cache_write * rates["cache_write"] / 1_000_000
-    )
+# ── core logic ────────────────────────────────────────────────────────────────
 
 
-def _call_model(client, model: str, prompt: str, system: str | None = None) -> tuple[str, dict]:
-    """Call Claude and return (response_text, usage_dict)."""
-    messages = [{"role": "user", "content": prompt}]
-    kwargs = {"model": model, "max_tokens": 4096, "messages": messages}
-    if system:
-        kwargs["system"] = [
-            {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
-        ]
-    response = client.messages.create(**kwargs)
-    text = "".join(b.text for b in response.content if hasattr(b, "text"))
-    usage = {
-        "input": response.usage.input_tokens,
-        "output": response.usage.output_tokens,
-        "cache_read": getattr(response.usage, "cache_read_input_tokens", 0) or 0,
-        "cache_write": getattr(response.usage, "cache_creation_input_tokens", 0) or 0,
-    }
-    return text, usage
-
-
-def _judge(client, prompt_text: str, response_text: str) -> tuple[dict, str]:
+def _judge(
+    provider: ModelProvider,
+    prompt_text: str,
+    response_text: str,
+) -> tuple[dict[str, int], str]:
     """Ask the judge model to score the response. Returns (scores_dict, reasoning)."""
     import json
     import re
@@ -162,9 +266,8 @@ def _judge(client, prompt_text: str, response_text: str) -> tuple[dict, str]:
 
 Score the response on all six dimensions and return the JSON object."""
 
-    raw, _ = _call_model(client, JUDGE_MODEL, judge_prompt, system=JUDGE_SYSTEM)
+    raw, _ = provider.complete(provider.judge_model(), judge_prompt, system=JUDGE_SYSTEM)
 
-    # Extract JSON from response — try fenced block first, then bare object
     fenced = re.search(r"```(?:json)?\s*(\{[\s\S]+?\})\s*```", raw)
     bare = re.search(r"\{[\s\S]+\}", raw)
     json_str = fenced.group(1) if fenced else bare.group() if bare else None
@@ -188,35 +291,50 @@ def run_benchmark(
     model: str = DEFAULT_MODEL,
     api_key: str | None = None,
     runs: int = 1,
+    provider: ModelProvider | None = None,
 ) -> list[BenchmarkRun]:
-    """Run prompt against model N times and return scored BenchmarkRun list."""
-    import anthropic
+    """Run prompt against a model N times and return scored BenchmarkRun list.
 
+    Parameters
+    ----------
+    prompt_path:
+        Path to the prompt file.
+    model:
+        Model identifier understood by the provider.
+    api_key:
+        API key forwarded to ``AnthropicProvider`` when *provider* is ``None``.
+        Ignored when a custom *provider* is supplied.
+    runs:
+        Number of independent runs (1–MAX_RUNS).  Scores are averaged by the
+        caller via ``compare_benchmarks``.
+    provider:
+        Any object implementing ``ModelProvider``.  When omitted, an
+        ``AnthropicProvider`` is created automatically using *api_key* /
+        ``ANTHROPIC_API_KEY``.
+    """
     if not 1 <= runs <= MAX_RUNS:
         raise ValueError(f"--runs must be between 1 and {MAX_RUNS}. Got {runs}.")
 
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-    if not key:
-        raise ValueError("ANTHROPIC_API_KEY not set. Pass --api-key or export the env var.")
+    if provider is None:
+        provider = AnthropicProvider(api_key=api_key)
 
-    client = anthropic.Anthropic(api_key=key)
     prompt_text = safe_read_text(prompt_path)
     results: list[BenchmarkRun] = []
 
     for _i in range(runs):
         t0 = time.monotonic()
-        response_text, usage = _call_model(client, model, prompt_text)
+        response_text, usage = provider.complete(model, prompt_text)
         latency = time.monotonic() - t0
 
         judge_parse_failed = False
         scores: dict[str, int] = {}
         reasoning = ""
         try:
-            scores, reasoning = _judge(client, prompt_text, response_text)
+            scores, reasoning = _judge(provider, prompt_text, response_text)
         except BenchmarkEvaluationError:
             judge_parse_failed = True
 
-        cost = _estimate_cost(
+        cost = provider.estimate_cost(
             model, usage["input"], usage["output"], usage["cache_read"], usage["cache_write"]
         )
 
@@ -258,6 +376,4 @@ def compare_benchmarks(runs_a: list[BenchmarkRun], runs_b: list[BenchmarkRun]) -
             "avg_cost": round(sum(r.estimated_cost_usd for r in runs) / len(runs), 6),
         }
 
-    a = avg(runs_a)
-    b = avg(runs_b)
-    return {"a": a, "b": b}
+    return {"a": avg(runs_a), "b": avg(runs_b)}

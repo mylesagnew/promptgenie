@@ -544,6 +544,25 @@ The response is scored by a separate judge call (claude-haiku — fast and cheap
 | `--out`, `-o` | Save model response to file |
 | `--yes`, `-y` | Skip external-send confirmation prompt (for CI/non-interactive use) |
 
+**Provider abstraction:**
+
+`benchmark` is backed by a `ModelProvider` protocol. The default is `AnthropicProvider`. To plug in a different backend, implement the three-method interface and pass it to `run_benchmark()` in Python:
+
+```python
+from promptgenie.core.benchmarker import run_benchmark, ModelProvider
+
+class MyProvider:
+    def complete(self, model, prompt, system=None):
+        # returns (response_text, {"input": n, "output": n, "cache_read": 0, "cache_write": 0})
+        ...
+    def judge_model(self):
+        return "my-judge-model"
+    def estimate_cost(self, model, input_tokens, output_tokens, cache_read, cache_write):
+        return 0.0
+
+results = run_benchmark("my-prompt.md", model="my-model", provider=MyProvider())
+```
+
 ---
 
 ### `workflow`
@@ -1056,10 +1075,10 @@ promptgenie/
 - [x] **SBOM and release provenance** — tag-triggered `release.yml` workflow: version consistency check, full test/lint/security gate, `uv build`, CycloneDX SBOM (`sbom.cyclonedx.json`), PyPI Trusted Publishing via GitHub OIDC (no stored token), GitHub artifact attestations (`actions/attest-build-provenance`), GitHub Release with wheel + sdist + SBOM attached; requires protected `release` environment
 - [x] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR and weekly schedule; uploads SARIF to GitHub Security tab _(SecDevOps review: LOW — improves external trust and OpenSSF Scorecard rating)_
 - [ ] **Dependabot / Renovate** — automated dependency update PRs with vulnerability alerting
-- [ ] **OpenSSF Scorecard** — scheduled Scorecard workflow; upload results to GitHub security tab _(SecDevOps review: LOW — baseline for external trust signals)_
+- [x] **OpenSSF Scorecard** — weekly scheduled Scorecard workflow; SARIF uploaded to GitHub Security tab via `ossf/scorecard-action`; `publish_results: true` for public badge _(SecDevOps review: LOW — baseline for external trust signals)_
 - [ ] **Plugin/profile registry** — versioned remote profile and rule packs with `promptgenie pack update`; custom rules directory; `enabled_rules`/`disabled_rules` config; severity overrides; expiring suppressions
-- [ ] **Container image** — minimal non-root Dockerfile for pipeline and SaaS use, with pinned digest and vulnerability scan
-- [ ] **Benchmark model abstraction** — provider-agnostic model interface; deterministic offline rubric tests; structured JSON output from judge; adversarial evaluation cases _(SecDevOps review: MEDIUM — hard-coded Anthropic dependency limits adoption and evaluation auditability)_
+- [x] **Container image** — minimal non-root `python:3.12-slim` Dockerfile; dedicated `promptgenie` user (uid 1001); `.dockerignore` keeps image lean; `benchmark` and `tokenizer` extras included
+- [x] **Benchmark model abstraction** — `ModelProvider` protocol decouples benchmarker from Anthropic SDK; `AnthropicProvider` is the built-in implementation; pass any `provider=` to `run_benchmark()`; `api_key` still works as before; 12 new protocol tests _(SecDevOps review: MEDIUM — hard-coded Anthropic dependency limits adoption and evaluation auditability)_
 
 ---
 

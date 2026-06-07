@@ -10,6 +10,7 @@ from promptgenie.core.benchmarker import (
     DEFAULT_MODEL,
     MAX_RUNS,
     RUBRIC_DIMENSIONS,
+    AnthropicProvider,
     compare_benchmarks,
     run_benchmark,
 )
@@ -106,8 +107,14 @@ def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, force, show_r
         f"[dim]Benchmark: {total_calls} API call(s) across {runs} run(s) — model=[bold]{model}[/bold][/dim]"
     )
     try:
+        provider = AnthropicProvider(api_key=api_key)
+    except (ValueError, ImportError) as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+
+    try:
         with console.status(f"[bold blue]Benchmarking {prompt_file} against {model}…"):
-            results_a = run_benchmark(prompt_file, model=model, api_key=api_key, runs=runs)
+            results_a = run_benchmark(prompt_file, model=model, runs=runs, provider=provider)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
@@ -120,7 +127,7 @@ def benchmark_cmd(prompt_file, model, runs, compare, api_key, out, force, show_r
     results_b = None
     if compare:
         with console.status(f"[bold blue]Benchmarking {compare}…"):
-            results_b = run_benchmark(compare, model=model, api_key=api_key, runs=runs)
+            results_b = run_benchmark(compare, model=model, runs=runs, provider=provider)
 
     console.print()
 
