@@ -181,6 +181,22 @@ Optional extras:
 | `benchmark` | `anthropic` SDK — required for `promptgenie benchmark` | `pip install "promptgenie[benchmark]"` |
 | `tokenizer` | `tiktoken` — accurate token counts (falls back to `len/4` without it) | `pip install "promptgenie[tokenizer]"` |
 
+### Docker
+
+```bash
+# Build
+docker build -t promptgenie .
+
+# Run any command
+docker run --rm promptgenie generate "review this repo for security issues" --target claude-code
+
+# Benchmark (requires API key)
+docker run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  -v "$PWD":/prompts promptgenie benchmark /prompts/my-prompt.md --yes
+```
+
+The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local directory with `-v` to read and write prompt files.
+
 ---
 
 ## Commands

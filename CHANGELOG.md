@@ -8,33 +8,37 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
-### Security
+---
 
-- **Benchmark external-send disclosure** — `benchmark` command now prints an explicit transmission notice (file path + destination: Anthropic model + judge) before any API call. Runs the scanner on the prompt file first and surfaces any secret findings with line numbers before proceeding. Requires interactive confirmation (`y/N`, defaulting to `N`) unless `--yes` / `-y` is passed. For a security-branded CLI, silent external transmission of prompt content was unacceptable regardless of the benchmark use case.
-- **Typed rule registry** — scanner and linter rules migrated from raw Python tuples into `ScanRule` and `LintRule` dataclasses with stable `id`, `category`, `pattern`, `risk`/`severity`, `confidence`, `message`, `recommendation`, and `false_positive_note` fields. This makes rule intent, scope, and false-positive guidance legible to reviewers and ensures rule IDs remain stable across changes.
-- **Honest severity framing in scan output** — CLI panel title changed to `Prompt Security Scan (heuristic)`. `HIGH`/`CRITICAL` labels now carry an explicit note that they reflect the *severity of the pattern class*, not detection certainty. Scanner note footer expanded to: findings indicate risk patterns, not confirmed vulnerabilities; review required before treating as authoritative.
+## [1.0.12] — 2026-06-07
 
 ### Added
 
-- **`benchmark --yes` / `-y` flag** — skips the interactive external-send confirmation prompt for CI and non-interactive use. Without it, the command defaults to `N` (safe by default).
-- **Custom rules from `.promptgenie.yaml`** — `scanner.custom_rules` and `linter.custom_rules` accept user-defined rules with full metadata. Scanner rules support `use_original_text` (for case-sensitive patterns) and `flags` (e.g. `re.DOTALL`). Lint rules support `negate` (emit when pattern absent — for missing-section checks) and `requires_agentic`.
-- **`ScanRule` dataclass** (`promptgenie/core/scanner.py`) — typed rule object replacing 5 separate Python tuple lists (`SECRET_PATTERNS`, `INJECTION_PATTERNS`, `AGENT_PERMISSION_PATTERNS`, `RAG_PATTERNS`, `SPLIT_OVERRIDE_PATTERNS`). Single unified scan loop with per-rule flag and text-source control.
-- **`LintRule` dataclass** (`promptgenie/core/linter.py`) — typed rule object replacing `AGENTIC_RISK_PATTERNS` and `MISSING_SECTIONS` tuples. Adds `negate` and `requires_agentic` fields.
-
-### Fixed
-
-- **CI and release workflow dependency gap** — `ci.yml` and `release.yml` installed only `--extra dev` but `tests/test_benchmarker.py::TestJudgeParsing::test_judge_parse_failed_flag_set` calls `run_benchmark()`, which imports `anthropic` (optional `benchmark` extra). Result: `1 failed, 418 passed` in CI. Fixed by adding `--extra benchmark` to both install steps. All three install lines now read `uv sync --frozen --extra dev --extra benchmark`.
+- **CodeQL analysis** (`.github/workflows/codeql.yml`) — GitHub Advanced Security CodeQL for Python on every push/PR to `main` and on a weekly schedule (Monday 03:00 UTC). Runs the `security-and-quality` query suite and uploads SARIF to the GitHub Security tab. Actions SHA-pinned (`github/codeql-action@v3`). Permissions: `contents: read`, `security-events: write`.
+- **OpenSSF Scorecard** (`.github/workflows/scorecard.yml`) — weekly Scorecard analysis (Monday 04:00 UTC) plus push-to-`main` trigger. Uses `ossf/scorecard-action@v2.4.0` (SHA-pinned). SARIF uploaded to GitHub Security tab via the existing `codeql-action/upload-sarif`. `publish_results: true` enables the public Scorecard badge. `permissions: read-all` at workflow level; `security-events` and `id-token` scoped to the job.
+- **Container image** (`Dockerfile` + `.dockerignore`) — minimal non-root image on `python:3.12-slim`. Dedicated `promptgenie` user and group (uid/gid 1001, no login shell). Dependency layer separate from source copy so Docker cache survives code-only changes. Installs `benchmark` and `tokenizer` extras. `.dockerignore` excludes `.git`, tests, docs, dist, and secrets baseline to keep the image lean. `ENTRYPOINT ["promptgenie"]`; `CMD ["--help"]`.
+- **`ModelProvider` protocol** (`promptgenie/core/benchmarker.py`) — runtime-checkable `Protocol` with three methods: `complete(model, prompt, system) → (text, usage)`, `judge_model() → str`, and `estimate_cost(...) → float`. Decouples the benchmarker from the Anthropic SDK, making it provider-agnostic.
+- **`AnthropicProvider`** — built-in `ModelProvider` implementation wrapping the Anthropic SDK (unchanged behaviour). Raises `ImportError` with install instructions if `anthropic` is not installed; raises `ValueError` if no API key is found.
+- **`run_benchmark()` `provider=` parameter** — accepts any `ModelProvider`-conforming object. When omitted, an `AnthropicProvider` is created automatically using `api_key` / `ANTHROPIC_API_KEY` (fully backward-compatible).
 
 ### Changed
 
-- **README scan section** — "What it detects" → "What it flags (heuristic patterns)"; added confidence/severity callout block; quality score section now notes scores are local heuristic estimates, not objective measurements.
-- **README configuration section** — added `custom_rules` YAML examples for scanner and linter.
-- **README benchmark options** — added `--yes` / `-y` to the options table.
-- **SECURITY.md scanner limitations** — updated to reflect: allowlist is now shipped (not planned); benchmark external-send disclosure is now enforced; typed rule registry with `false_positive_note` is available.
+- **`_judge()` takes a `ModelProvider`** instead of a raw Anthropic client — judge model and judge calls are now fully provider-routed.
+- **`benchmark` command** constructs `AnthropicProvider` explicitly before calling `run_benchmark()`, surfacing import and key errors early with a clean CLI error message.
+
+### Security
+
+- **Benchmark external-send disclosure** — `benchmark` command now prints an explicit transmission notice (file path + destination: Anthropic model + judge) before any API call. Runs the scanner on the prompt file first and surfaces any secret findings with line numbers before proceeding. Requires interactive confirmation (`y/N`, defaulting to `N`) unless `--yes` / `-y` is passed.
+- **Typed rule registry** — scanner and linter rules migrated from raw Python tuples into `ScanRule` and `LintRule` dataclasses with stable `id`, `category`, `pattern`, `risk`/`severity`, `confidence`, `message`, `recommendation`, and `false_positive_note` fields.
+- **Honest severity framing in scan output** — CLI panel title changed to `Prompt Security Scan (heuristic)`. `HIGH`/`CRITICAL` labels now carry an explicit note that they reflect the *severity of the pattern class*, not detection certainty.
+
+### Fixed
+
+- **CI and release workflow dependency gap** — `ci.yml` and `release.yml` install steps now include `--extra benchmark` so benchmarker tests pass in CI.
 
 ### Tests
 
-**419 passed (unchanged — all existing tests pass against the refactored rule registry). Coverage maintained ≥87%.**
+**24 benchmarker tests (12 new)** — `TestModelProviderProtocol` (4 tests: protocol conformance, custom provider, cost delegation, multi-run), `TestAnthropicProvider` (5 tests: missing key, missing package, judge model, cost estimation, unknown model fallback), `TestCompareBenchmarks` (2 tests), `TestBenchmarkRunOverallScore` gains `test_total_tokens_sums_in_and_out`. All 457 tests pass. Coverage maintained ≥87%. 0 ruff issues.
 
 ---
 
