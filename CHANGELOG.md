@@ -10,6 +10,44 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.0.17] — 2026-06-08
+
+### Added
+
+- **VS Code / Cursor extension** (`vscode-extension/`) — TypeScript extension that brings PromptGenie lint and security scan inline into the editor.
+
+  **Core behaviour:**
+  - **Inline lint diagnostics while typing** — lint runs on every text change (debounced, default 800 ms) and maps `LintIssue` objects to VS Code squiggly underlines in the correct diagnostic collection (`"PromptGenie Lint"`).
+  - **Full lint + scan on save** — both commands run together when the file is saved; `ScanFinding` objects appear in a separate `"PromptGenie Scan"` diagnostic collection.
+  - **Status bar quality score** — shows `PG: 85/100 · 3 issues` in the bottom-right corner for the active prompt file; colour-codes red (<50), yellow (<75), green (≥75); clicking triggers a full lint & scan.
+  - **High-risk alert notifications** — a warning pop-up appears when any `HIGH` or `CRITICAL` security finding is detected, with a "Show Problems" action that focuses the Problems panel.
+
+  **Supported file types:** `.md`, `.txt`, `.prompt`, `.promptgenie` (configurable via `promptgenie.enabledFileExtensions`).
+
+  **Commands (Command Palette and context menu):**
+  - `PromptGenie: Lint File`
+  - `PromptGenie: Scan File`
+  - `PromptGenie: Lint & Scan` (also available as an editor title bar icon)
+  - `PromptGenie: Clear Diagnostics`
+
+  **Extension settings:**
+  | Setting | Default | Description |
+  |---|---|---|
+  | `promptgenie.cliPath` | `"promptgenie"` | CLI executable path |
+  | `promptgenie.target` | `""` | Default `--target` profile |
+  | `promptgenie.config` | `""` | Path to `.promptgenie.yaml` |
+  | `promptgenie.runOnSave` | `true` | Lint + scan on save |
+  | `promptgenie.runOnChange` | `true` | Lint on change (debounced) |
+  | `promptgenie.debounceMs` | `800` | On-change debounce delay (ms) |
+  | `promptgenie.showScoreInStatusBar` | `true` | Score in status bar |
+  | `promptgenie.severityMapping` | `{HIGH: error, …}` | Risk level → VS Code severity |
+
+  **Architecture:** `runner.ts` spawns the CLI as a child process with `--format json` and parses the output; `diagnostics.ts` converts typed output to `vscode.Diagnostic` objects; `statusBar.ts` owns the status bar item; `extension.ts` wires all events and registers commands.
+
+  **Build:** `npm run compile` → TypeScript → `out/`; `npm run package` → `.vsix` for distribution.
+
+---
+
 ## [1.0.16] — 2026-06-08
 
 ### Added

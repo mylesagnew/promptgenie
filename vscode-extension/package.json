@@ -1,0 +1,172 @@
+{
+  "name": "promptgenie",
+  "displayName": "PromptGenie",
+  "description": "Inline lint and security scan for AI prompt files — powered by the PromptGenie CLI.",
+  "version": "1.0.0",
+  "publisher": "promptgenie",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mylesagnew/promptgenie"
+  },
+  "homepage": "https://github.com/mylesagnew/promptgenie/tree/main/vscode-extension",
+  "bugs": {
+    "url": "https://github.com/mylesagnew/promptgenie/issues"
+  },
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "prompt engineering",
+    "AI",
+    "LLM",
+    "security",
+    "lint",
+    "promptgenie",
+    "claude",
+    "cursor"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown",
+    "onLanguage:plaintext",
+    "workspaceContains:**/*.prompt",
+    "workspaceContains:**/*.promptgenie"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "promptgenie.lintFile",
+        "title": "PromptGenie: Lint File",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "promptgenie.scanFile",
+        "title": "PromptGenie: Scan File",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "promptgenie.lintAndScan",
+        "title": "PromptGenie: Lint & Scan",
+        "icon": "$(inspect)"
+      },
+      {
+        "command": "promptgenie.clearDiagnostics",
+        "title": "PromptGenie: Clear Diagnostics"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "promptgenie.lintAndScan",
+          "when": "resourceExtname == .md || resourceExtname == .txt || resourceExtname == .prompt",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "promptgenie.lintFile",
+          "when": "resourceExtname == .md || resourceExtname == .txt || resourceExtname == .prompt",
+          "group": "promptgenie"
+        },
+        {
+          "command": "promptgenie.scanFile",
+          "when": "resourceExtname == .md || resourceExtname == .txt || resourceExtname == .prompt",
+          "group": "promptgenie"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PromptGenie",
+      "properties": {
+        "promptgenie.cliPath": {
+          "type": "string",
+          "default": "promptgenie",
+          "description": "Path to the promptgenie CLI executable. Defaults to 'promptgenie' (must be on PATH). Use an absolute path if installed in a virtualenv, e.g. '/home/user/.venv/bin/promptgenie'."
+        },
+        "promptgenie.target": {
+          "type": "string",
+          "default": "",
+          "description": "Default --target profile passed to generate and adapt (e.g. 'claude-code', 'cursor', 'gpt-4o'). Leave empty to omit the flag."
+        },
+        "promptgenie.config": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a .promptgenie.yaml config file. Leave empty to use auto-discovery."
+        },
+        "promptgenie.runOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run lint and scan automatically when a prompt file is saved."
+        },
+        "promptgenie.runOnChange": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run lint automatically while typing (debounced). Scan only runs on save."
+        },
+        "promptgenie.debounceMs": {
+          "type": "number",
+          "default": 800,
+          "minimum": 200,
+          "maximum": 5000,
+          "description": "Milliseconds to debounce lint-on-change. Lower values give faster feedback; higher values reduce CPU usage."
+        },
+        "promptgenie.enabledFileExtensions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [".md", ".txt", ".prompt", ".promptgenie"],
+          "description": "File extensions that activate PromptGenie diagnostics."
+        },
+        "promptgenie.showScoreInStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the prompt quality score in the status bar for active prompt files."
+        },
+        "promptgenie.severityMapping": {
+          "type": "object",
+          "default": {
+            "HIGH": "error",
+            "MEDIUM": "warning",
+            "LOW": "information",
+            "CRITICAL": "error"
+          },
+          "description": "Map PromptGenie severity/risk levels to VS Code diagnostic severity. Values: 'error', 'warning', 'information', 'hint'."
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "promptgenie",
+        "aliases": ["PromptGenie", "prompt"],
+        "extensions": [".prompt", ".promptgenie"],
+        "configuration": "./language-configuration.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}

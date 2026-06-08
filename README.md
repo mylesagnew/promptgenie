@@ -1119,6 +1119,16 @@ promptgenie/
 ├── SECURITY.md                             # Vulnerability reporting and scanner limitations
 ├── CONTRIBUTING.md                         # Contributor guide, rule authoring, profile/template schema
 ├── CHANGELOG.md                            # Version history
+├── vscode-extension/                       # VS Code / Cursor extension
+│   ├── package.json                        # Extension manifest (commands, settings, activation events)
+│   ├── tsconfig.json
+│   ├── src/
+│   │   ├── extension.ts                    # Activate / deactivate, event wiring
+│   │   ├── runner.ts                       # CLI subprocess wrapper (lint/scan → JSON)
+│   │   ├── diagnostics.ts                  # LintOutput / ScanOutput → VS Code Diagnostics
+│   │   ├── statusBar.ts                    # Score + issue count in the status bar
+│   │   └── types.ts                        # TypeScript interfaces for CLI JSON output
+│   └── README.md                           # Extension-specific docs
 └── pyproject.toml                          # Modern packaging, coverage gate, dev dependency groups
 ```
 
@@ -1186,7 +1196,7 @@ promptgenie/
 
 ### P2 — Scaling and enterprise readiness
 
-- [ ] **VS Code / Cursor extension** — inline lint and scan as you write prompts
+- [x] **VS Code / Cursor extension** — `vscode-extension/` TypeScript extension; inline lint diagnostics while typing (debounced), full lint + scan on save, status bar quality score, high-risk security alerts, command palette integration (`PromptGenie: Lint File`, `Scan File`, `Lint & Scan`); configurable CLI path, target profile, debounce delay, severity mapping; activates on `.md`, `.txt`, `.prompt`, `.promptgenie` files
 - [x] **Community profile and template packs** — 14 built-in registry packs: 4 model profiles (`gpt-4o`, `mistral`, `llama3`, `github-copilot`), 5 domain template packs (DevOps/SRE, Data Science/ML, Legal/Compliance, Product Management, Customer Support), 3 context packs (AI Safety, Responsible AI, Regulated Industries), 2 rule packs (OWASP LLM Top 10, Enterprise Lint); all tagged for search; installable and updatable via `promptgenie pack install / update`
 - [x] **Secret scanning for the repo** — `detect-secrets` (SHA-pinned, v1.5.0) wired into pre-commit hooks; `.secrets.baseline` committed; runs on every staged commit
 - [x] **SBOM and release provenance** — tag-triggered `release.yml` workflow: version consistency check, full test/lint/security gate, `uv build`, CycloneDX SBOM (`sbom.cyclonedx.json`), PyPI Trusted Publishing via GitHub OIDC (no stored token), GitHub artifact attestations (`actions/attest-build-provenance`), GitHub Release with wheel + sdist + SBOM attached; requires protected `release` environment
