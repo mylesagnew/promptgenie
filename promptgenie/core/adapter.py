@@ -199,8 +199,8 @@ def adapt(
         except FileNotFoundError:
             to_profile = _empty_profile(to_target)
     else:
-        from_profile = load_profile(from_target)   # raises FileNotFoundError on bad target
-        to_profile = load_profile(to_target)       # raises FileNotFoundError on bad target
+        from_profile = load_profile(from_target)  # raises FileNotFoundError on bad target
+        to_profile = load_profile(to_target)  # raises FileNotFoundError on bad target
 
     to_name = to_profile.get("name", to_target)
     _to_required = {s.lower() for s in to_profile.get("required_sections", [])}

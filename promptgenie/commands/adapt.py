@@ -37,7 +37,16 @@ from promptgenie.renderers.rich import console, delta_ab
         "fatal errors."
     ),
 )
-def adapt_cmd(prompt_file, from_target, to_target, out, force, show_original, strip_agentic_safety, best_effort):
+def adapt_cmd(
+    prompt_file,
+    from_target,
+    to_target,
+    out,
+    force,
+    show_original,
+    strip_agentic_safety,
+    best_effort,
+):
     """Translate a prompt from one target profile to another."""
     try:
         with console.status("[bold blue]Adapting prompt…"):

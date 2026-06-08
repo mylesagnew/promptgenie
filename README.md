@@ -206,6 +206,7 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 | `generate` | Build an optimised prompt from a rough task description |
 | `lint` | Check a prompt file for quality and structural issues |
 | `scan` | Scan a prompt file for security risks |
+| `policy` | CI policy gate — fail the build if findings breach configurable thresholds |
 | `diff` | Compare two prompt versions — token, score, section, and risk delta |
 | `adapt` | Translate a prompt from one target profile to another |
 | `test` | Run a declarative prompt test suite |
@@ -348,6 +349,54 @@ The scanner reports the **class** of secret found, never the secret value itself
 |---|---|
 | `--format` | Output format: `rich` (default) / `json` / `sarif` |
 | `--out`, `-o` | Write output to file instead of stdout |
+
+**Scan JSON output** includes `category` (rule category: `secret`, `injection`, `permission`, `rag`, `obfuscation`) and `source` (`builtin` / `registry` / `custom`) on every finding. Secret rules use unique codes (`SEC_SECRET_AWS_KEY`, `SEC_SECRET_GITHUB`, `SEC_SECRET_OPENAI`, etc.) — use the `SEC_SECRET` alias in `enabled_rules` / `disabled_rules` config to target all secret rules at once.
+
+---
+
+### `policy`
+
+CI policy gate — run lint and scan together and exit non-zero if findings exceed configurable thresholds. Designed to be dropped into any GitHub Actions step or pre-push hook.
+
+```bash
+# Fail if any HIGH-or-above security finding exists (default)
+promptgenie policy my-prompt.md
+
+# Fail if any CRITICAL finding exists, AND lint score drops below 70
+promptgenie policy my-prompt.md --max-risk CRITICAL --min-score 70
+
+# Allow up to 2 MEDIUM findings before failing
+promptgenie policy my-prompt.md --max-risk MEDIUM --max-findings 2
+
+# Machine-readable JSON output for CI dashboards
+promptgenie policy my-prompt.md --format json
+```
+
+**Exit codes:**
+
+| Code | Meaning |
+|---|---|
+| `0` | All thresholds passed — prompt is clean |
+| `1` | One or more thresholds exceeded — findings printed |
+| `2` | Usage / configuration error (bad file path, invalid config) |
+
+**Options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--max-risk` | `HIGH` | Fail if any security finding is at or above this level (`CRITICAL` / `HIGH` / `MEDIUM` / `LOW`) |
+| `--max-findings` | `0` | Fail if total qualifying findings exceed this count; `0` = any qualifying finding fails |
+| `--min-score` | `0` | Fail if lint quality score is below this value; `0` = lint score not checked |
+| `--format` | `text` | Output format: `text` (Rich table) or `json` (machine-readable) |
+| `--config PATH` | — | Path to `.promptgenie.yaml` |
+| `--no-config` | — | Ignore any `.promptgenie.yaml` |
+
+**Example GitHub Actions step:**
+
+```yaml
+- name: PromptGenie policy gate
+  run: promptgenie policy my-prompt.md --max-risk HIGH --min-score 75 --format json
+```
 
 ---
 
@@ -746,7 +795,7 @@ scanner:
   enabled_rules:                      # whitelist — only run these codes
     - OWASP_LLM01_001
     - OWASP_LLM02_001
-    - SEC_SECRET
+    - SEC_SECRET                      # alias — expands to all SEC_SECRET_* sub-rules
 
 linter:
   rules_dirs:
@@ -1042,7 +1091,7 @@ Score of 80+ is considered production-ready. Below 60 triggers lint warnings aut
 
 ```
 promptgenie/
-├── cli.py                      # Click group + command registration (35 lines)
+├── cli.py                      # Click group + command registration
 ├── commands/
 │   ├── generate.py             # generate command
 │   ├── lint.py                 # lint command
@@ -1054,6 +1103,7 @@ promptgenie/
 │   ├── workflow.py             # workflow command
 │   ├── ci.py                   # ci group (init, status)
 │   ├── pack.py                 # pack group (list, show, inject, init, search, install, update, dirs)
+│   ├── policy.py               # policy command — CI gate (exit 0/1/2)
 │   ├── targets.py              # list-targets, list-templates
 │   └── interactive.py          # guided interactive menu mode
 ├── renderers/
@@ -1152,7 +1202,7 @@ promptgenie/
 - [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
 - [x] `interactive` — guided menu mode: generate, adapt, lint, scan, diff, test, workflow, list in one flow
 - [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists (scoped `AllowlistEntry` format), custom vague verbs; wired into all five CLI commands with `--config` / `--no-config` flags
-- [x] Coverage gate — `fail_under = 85` enforced in CI; 528 tests, 85.20% coverage, 0 ruff issues across `promptgenie/` and `tests/`
+- [x] Coverage gate — `fail_under = 85` enforced in CI; 528 tests, 0 ruff issues, 0 mypy issues, 0 bandit issues across `promptgenie/` and `tests/`
 - [x] CODEOWNERS — `.github/CODEOWNERS` governs all files; branch protection docs in CONTRIBUTING.md
 - [x] Adversarial scanner tests — `TestDetects` (21 caught patterns incl. Unicode normalization, split-line overrides, base64 blobs, HTML/block-comment smuggling), `TestMisses` (7 documented gaps: within-word splits, non-NFKC homoglyphs, word-spacing, synonyms, indirect reference, role-shift, markdown bold), `TestScopedAllowlist` (regression suite for fixed allowlist logic)
 - [x] Scoped scanner allowlist — `AllowlistEntry` replaces broken whole-prompt suppression; phrase matched against finding's `matched_text` only; rule-scoped entries filter by code first
@@ -1206,6 +1256,10 @@ promptgenie/
 - [x] **Plugin/profile registry** — versioned remote rule and context packs; `promptgenie pack update/install/search/dirs`; `~/.promptgenie/registry/packs/` user install dir; `rules_dirs` config for custom rule directories; `enabled_rules` whitelist mode; `disabled_rules` blacklist; severity overrides; expiring allowlist entries (`expires`, `reason`); 14 built-in packs (2 rule, 4 profile, 5 template, 3 context); SHA-256 checksum verification on downloads; stdlib `urllib.request` only — no new deps
 - [x] **Container image** — minimal non-root `python:3.12-slim` Dockerfile; dedicated `promptgenie` user (uid 1001); `.dockerignore` keeps image lean; `benchmark` and `tokenizer` extras included
 - [x] **Benchmark model abstraction** — `ModelProvider` protocol decouples benchmarker from Anthropic SDK; `AnthropicProvider` is the built-in implementation; pass any `provider=` to `run_benchmark()`; `api_key` still works as before; 12 new protocol tests _(SecDevOps review: MEDIUM — hard-coded Anthropic dependency limits adoption and evaluation auditability)_
+- [x] **Registry hardening** — URL scheme allowlist (HTTPS-only, all `file://`/`http://`/`ftp://` schemes blocked); 1 MiB download cap on all remote fetches; `require_checksum=True` mode for strict CI; fail-closed rule-pack loader (malformed `scanner_rules`/`lint_rules` raises `ValueError`, not silently skipped); fail-closed allowlist expiry (malformed date string treated as expired); `# nosec: B310` annotations with rationale on `urlopen` calls
+- [x] **Production-shaped scanner findings** — 9 secret rules now carry unique codes (`SEC_SECRET_APIKEY`, `SEC_SECRET_TOKEN`, `SEC_SECRET_OPENAI`, `SEC_SECRET_GOOGLE`, `SEC_SECRET_SLACK`, `SEC_SECRET_PRIVKEY`, `SEC_SECRET_GITHUB`, `SEC_SECRET_AWS_KEY`, `SEC_SECRET_AWS_SECRET`); `SEC_SECRET_CODES` frozenset for backwards-compatible filtering; `SecurityFinding` gains `category` and `source` fields; `ScanResult.risk_level` returns `"NONE"` (not `"LOW"`) when no findings; scanner uses `re.finditer` + `enumerate()` with `MAX_FINDINGS_PER_RULE = 5` cap per rule
+- [x] **`policy` command** — CI gate: `promptgenie policy <file> [--max-risk HIGH] [--max-findings 0] [--min-score 0] [--format text|json]`; exits 0 (pass), 1 (violations), 2 (usage error); text output is a Rich findings table; JSON is machine-readable for dashboards and GitHub step summaries
+- [x] **Quality gates green** — `ruff format`: 0 files need reformatting; `mypy`: no issues in 36 source files; `bandit`: no issues identified; all 528 tests pass
 
 ---
 
@@ -1241,6 +1295,7 @@ scanner:
     - SEC_007
 
   # Whitelist mode — ONLY run these rule codes (takes precedence over disabled_rules)
+  # Use SEC_SECRET to target all secret sub-rules at once (SEC_SECRET_AWS_KEY, SEC_SECRET_GITHUB, etc.)
   # enabled_rules:
   #   - SEC_SECRET
   #   - OWASP_LLM01_001

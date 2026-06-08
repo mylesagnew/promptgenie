@@ -70,7 +70,9 @@ def scan_cmd(prompt_file, output_format, out, force, config_path, no_config, bes
         cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
     except (FileNotFoundError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
-        console.print("[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]")
+        console.print(
+            "[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]"
+        )
         sys.exit(1)
     try:
         text = safe_read_text(prompt_file)

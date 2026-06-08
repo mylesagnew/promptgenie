@@ -144,8 +144,8 @@ def generate_prompt(
         except FileNotFoundError:
             sections = ["Objective", "Scope", "Constraints", "Acceptance Criteria", "Output Format"]
     else:
-        profile = load_profile(target)   # raises FileNotFoundError on bad target
-        tmpl = load_template(template)   # raises FileNotFoundError on bad template
+        profile = load_profile(target)  # raises FileNotFoundError on bad target
+        tmpl = load_template(template)  # raises FileNotFoundError on bad template
         sections = tmpl.get("sections", [])
 
     parts = []

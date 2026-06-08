@@ -109,7 +109,9 @@ def generate(
         cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
     except (FileNotFoundError, ValueError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
-        console.print("[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]")
+        console.print(
+            "[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]"
+        )
         sys.exit(1)
 
     with console.status("[bold blue]Generating prompt…"):

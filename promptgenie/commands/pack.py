@@ -112,7 +112,11 @@ def pack_search(query: str):
     entries = load_index()
     if query:
         q = query.lower()
-        entries = [e for e in entries if q in e.id.lower() or q in e.name.lower() or q in e.description.lower()]
+        entries = [
+            e
+            for e in entries
+            if q in e.id.lower() or q in e.name.lower() or q in e.description.lower()
+        ]
 
     if not entries:
         console.print("[dim]No packs found matching your query.[/dim]")
@@ -140,7 +144,9 @@ def pack_install(pack_id: str, timeout: int):
     matching = [e for e in entries if e.id == pack_id]
     if not matching:
         console.print(f"[red]Error:[/red] Pack {pack_id!r} not found in registry.")
-        console.print("[dim]Run [bold]promptgenie pack search[/bold] to list available packs.[/dim]")
+        console.print(
+            "[dim]Run [bold]promptgenie pack search[/bold] to list available packs.[/dim]"
+        )
         sys.exit(1)
 
     entry = matching[0]
