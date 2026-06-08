@@ -136,8 +136,21 @@ def pack_search(query: str):
 @pack_group.command(name="install")
 @click.argument("pack_id")
 @click.option("--timeout", default=30, type=int, help="Download timeout in seconds.")
-def pack_install(pack_id: str, timeout: int):
-    """Download and install a pack from the registry."""
+@click.option(
+    "--allow-unverified",
+    is_flag=True,
+    default=False,
+    help=(
+        "Skip SHA-256 checksum requirement.  Use only with a private registry "
+        "that does not yet publish checksums.  Not recommended for production."
+    ),
+)
+def pack_install(pack_id: str, timeout: int, allow_unverified: bool):
+    """Download and install a pack from the registry.
+
+    Refuses packs without a SHA-256 checksum by default.  Pass --allow-unverified
+    to skip integrity verification (not recommended).
+    """
     from promptgenie.core.registry import install_pack, load_index
 
     entries = load_index()
@@ -151,8 +164,13 @@ def pack_install(pack_id: str, timeout: int):
 
     entry = matching[0]
     console.print(f"Installing [bold]{entry.name}[/bold] [dim]v{entry.version}[/dim]…")
+    if allow_unverified:
+        console.print(
+            "[yellow]Warning:[/yellow] --allow-unverified set — "
+            "SHA-256 checksum requirement bypassed."
+        )
     try:
-        path = install_pack(entry, timeout=timeout)
+        path = install_pack(entry, timeout=timeout, require_checksum=not allow_unverified)
         console.print(f"[green]✓[/green] Installed to {path}")
     except ValueError as e:
         console.print(f"[red]Checksum error:[/red] {e}")
@@ -165,13 +183,33 @@ def pack_install(pack_id: str, timeout: int):
 @pack_group.command(name="update")
 @click.option("--url", default=None, help="Registry index URL (overrides default).")
 @click.option("--timeout", default=30, type=int, help="Download timeout in seconds.")
-def pack_update(url: str | None, timeout: int):
-    """Fetch the remote registry and install/update all packs."""
+@click.option(
+    "--allow-unverified",
+    is_flag=True,
+    default=False,
+    help=(
+        "Skip SHA-256 checksum requirement for packs without a checksum in the index.  "
+        "Use only with a private registry that does not yet publish checksums."
+    ),
+)
+def pack_update(url: str | None, timeout: int, allow_unverified: bool):
+    """Fetch the remote registry and install/update all packs.
+
+    Refuses packs without a SHA-256 checksum by default.  Pass --allow-unverified
+    to skip integrity verification (not recommended).
+    """
     from promptgenie.core.registry import DEFAULT_REGISTRY_URL, update_registry
 
     registry_url = url or DEFAULT_REGISTRY_URL
+    if allow_unverified:
+        console.print(
+            "[yellow]Warning:[/yellow] --allow-unverified set — "
+            "SHA-256 checksum requirement bypassed."
+        )
     console.print(f"[dim]Fetching registry from {registry_url}…[/dim]")
-    result = update_registry(url=registry_url, timeout=timeout)
+    result = update_registry(
+        url=registry_url, timeout=timeout, require_checksum=not allow_unverified
+    )
 
     if result.installed:
         console.print(f"[green]Installed:[/green] {', '.join(result.installed)}")

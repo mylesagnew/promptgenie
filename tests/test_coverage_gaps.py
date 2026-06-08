@@ -373,7 +373,9 @@ class TestConfigCustomRuleErrors:
         from promptgenie.core.config import load_config
 
         with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
-            f.write("scanner:\n  custom_rules:\n    - pattern: 'foo'\n      risk: HIGH\n      confidence: HIGH\n      message: m\n      recommendation: r\n")
+            f.write(
+                "scanner:\n  custom_rules:\n    - pattern: 'foo'\n      risk: HIGH\n      confidence: HIGH\n      message: m\n      recommendation: r\n"
+            )
             path = f.name
         with pytest.raises(ValueError, match="missing 'id'"):
             load_config(path)
@@ -382,7 +384,9 @@ class TestConfigCustomRuleErrors:
         from promptgenie.core.config import load_config
 
         with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
-            f.write("scanner:\n  custom_rules:\n    - id: MY_001\n      risk: HIGH\n      confidence: HIGH\n      message: m\n      recommendation: r\n")
+            f.write(
+                "scanner:\n  custom_rules:\n    - id: MY_001\n      risk: HIGH\n      confidence: HIGH\n      message: m\n      recommendation: r\n"
+            )
             path = f.name
         with pytest.raises(ValueError, match="missing 'pattern'"):
             load_config(path)
@@ -391,7 +395,9 @@ class TestConfigCustomRuleErrors:
         from promptgenie.core.config import load_config
 
         with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
-            f.write("scanner:\n  custom_rules:\n    - id: MY_001\n      pattern: 'foo'\n      risk: EXTREME\n      confidence: HIGH\n      message: m\n      recommendation: r\n")
+            f.write(
+                "scanner:\n  custom_rules:\n    - id: MY_001\n      pattern: 'foo'\n      risk: EXTREME\n      confidence: HIGH\n      message: m\n      recommendation: r\n"
+            )
             path = f.name
         with pytest.raises(ValueError, match="invalid risk"):
             load_config(path)
@@ -400,7 +406,9 @@ class TestConfigCustomRuleErrors:
         from promptgenie.core.config import load_config
 
         with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
-            f.write("scanner:\n  custom_rules:\n    - id: MY_001\n      pattern: 'foo'\n      risk: HIGH\n      confidence: UNKNOWN\n      message: m\n      recommendation: r\n")
+            f.write(
+                "scanner:\n  custom_rules:\n    - id: MY_001\n      pattern: 'foo'\n      risk: HIGH\n      confidence: UNKNOWN\n      message: m\n      recommendation: r\n"
+            )
             path = f.name
         with pytest.raises(ValueError, match="invalid confidence"):
             load_config(path)
@@ -418,7 +426,9 @@ class TestConfigCustomRuleErrors:
         from promptgenie.core.config import load_config
 
         with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
-            f.write("linter:\n  custom_rules:\n    - pattern: 'foo'\n      severity: HIGH\n      confidence: HIGH\n      message: m\n")
+            f.write(
+                "linter:\n  custom_rules:\n    - pattern: 'foo'\n      severity: HIGH\n      confidence: HIGH\n      message: m\n"
+            )
             path = f.name
         with pytest.raises(ValueError, match="missing 'id'"):
             load_config(path)
@@ -427,7 +437,9 @@ class TestConfigCustomRuleErrors:
         from promptgenie.core.config import load_config
 
         with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
-            f.write("linter:\n  custom_rules:\n    - id: MY_L01\n      pattern: 'foo'\n      severity: EXTREME\n      confidence: HIGH\n      message: m\n")
+            f.write(
+                "linter:\n  custom_rules:\n    - id: MY_L01\n      pattern: 'foo'\n      severity: EXTREME\n      confidence: HIGH\n      message: m\n"
+            )
             path = f.name
         with pytest.raises(ValueError, match="invalid severity"):
             load_config(path)
@@ -582,9 +594,7 @@ class TestAdaptCommand:
 
     def test_adapt_claude_code_to_cursor(self):
         path = self._prompt_file()
-        result = self.runner.invoke(
-            cli, ["adapt", path, "--from", "claude-code", "--to", "cursor"]
-        )
+        result = self.runner.invoke(cli, ["adapt", path, "--from", "claude-code", "--to", "cursor"])
         assert result.exit_code == 0
 
     def test_adapt_show_original(self):

@@ -306,11 +306,20 @@ def update_registry(
     url: str = DEFAULT_REGISTRY_URL,
     install_dir: Path | None = None,
     timeout: int = 30,
+    require_checksum: bool = True,
 ) -> UpdateResult:
     """Fetch the remote index and install/update all packs.
 
     Caches the fetched index to ``CACHED_INDEX_PATH`` on success.
     Returns an ``UpdateResult`` summarising what happened.
+
+    Args:
+        url:               Remote registry index URL.
+        install_dir:       Directory to install packs into (default: ``USER_PACKS_DIR``).
+        timeout:           Network timeout in seconds.
+        require_checksum:  If ``True`` (default), packs without a ``sha256`` in the index
+                           are refused.  Pass ``False`` only when using a private registry
+                           that does not yet publish checksums.
     """
     result = UpdateResult()
     dest_dir = install_dir or USER_PACKS_DIR
@@ -351,10 +360,20 @@ def update_registry(
         try:
             installed_ver = _installed_version(entry.id, dest_dir)
             if not installed_ver:
-                install_pack(entry, install_dir=dest_dir, timeout=timeout)
+                install_pack(
+                    entry,
+                    install_dir=dest_dir,
+                    timeout=timeout,
+                    require_checksum=require_checksum,
+                )
                 result.installed.append(entry.id)
             elif installed_ver != entry.version:
-                install_pack(entry, install_dir=dest_dir, timeout=timeout)
+                install_pack(
+                    entry,
+                    install_dir=dest_dir,
+                    timeout=timeout,
+                    require_checksum=require_checksum,
+                )
                 result.updated.append(entry.id)
             else:
                 result.skipped.append(entry.id)

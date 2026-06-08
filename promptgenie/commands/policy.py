@@ -22,6 +22,7 @@ from rich.console import Console
 from rich.table import Table
 
 from promptgenie.core.fileio import safe_read_text
+from promptgenie.core.formatters import lint_to_sarif, scan_to_sarif
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
 
@@ -71,10 +72,10 @@ def _risk_at_or_above(level: str, threshold: str) -> bool:
 @click.option(
     "--format",
     "output_format",
-    type=click.Choice(["text", "json"]),
+    type=click.Choice(["text", "json", "sarif"]),
     default="text",
     show_default=True,
-    help="Output format.",
+    help="Output format: text (Rich table), json (machine-readable), or sarif (SARIF v2.1.0).",
 )
 @click.option(
     "--config",
@@ -149,10 +150,32 @@ def policy(
     if min_score > 0 and lint_result.score < min_score:
         violations.append(f"lint score {lint_result.score}/100 is below minimum {min_score}")
 
+    # ── Warn on expired / malformed allowlist entries ─────────────────────────
+    allowlist_warnings: list[str] = []
+    if cfg and cfg.scanner.allowlist:
+        for entry in cfg.scanner.allowlist:
+            if entry.expires and entry.is_expired():
+                allowlist_warnings.append(
+                    f"Allowlist entry for phrase {entry.phrase!r} "
+                    f"(expires: {entry.expires or 'malformed'}) is expired or malformed — "
+                    "suppression is inactive."
+                )
+
     passed = len(violations) == 0
 
     # ── Output ────────────────────────────────────────────────────────────────
-    if output_format == "json":
+    if output_format == "sarif":
+        # Emit a combined SARIF document with both lint and scan results.
+        # SARIF does not natively model policy-pass/fail, so we include both
+        # run objects and let the CI system interpret the findings count.
+        import json as _json
+
+        lint_sarif = _json.loads(lint_to_sarif(lint_result, file))
+        scan_sarif = _json.loads(scan_to_sarif(scan_result, file))
+        combined = lint_sarif.copy()
+        combined["runs"] = lint_sarif["runs"] + scan_sarif["runs"]
+        click.echo(_json.dumps(combined, indent=2))
+    elif output_format == "json":
         out = {
             "passed": passed,
             "file": file,
@@ -168,6 +191,7 @@ def policy(
                 "lint_issues": len(lint_result.issues),
             },
             "violations": violations,
+            "allowlist_warnings": allowlist_warnings,
             "findings": [
                 {
                     "code": f.code,
@@ -206,6 +230,9 @@ def policy(
                 f"Lint score: [{score_colour}]{lint_result.score}/100[/{score_colour}]"
                 f"  (minimum: {min_score})"
             )
+
+        for warning in allowlist_warnings:
+            console.print(f"[yellow]⚠ Allowlist:[/yellow] {warning}")
 
         if violations:
             console.print("\n[bold red]Violations:[/bold red]")

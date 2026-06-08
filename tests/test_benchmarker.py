@@ -136,8 +136,12 @@ class TestBenchmarkRunOverallScore:
 
     def test_total_tokens_sums_in_and_out(self):
         run = BenchmarkRun(
-            model="m", prompt_path="p", prompt_text="t", response_text="r",
-            input_tokens=100, output_tokens=50,
+            model="m",
+            prompt_path="p",
+            prompt_text="t",
+            response_text="r",
+            input_tokens=100,
+            output_tokens=50,
         )
         assert run.total_tokens == 150
 
@@ -199,11 +203,15 @@ class TestModelProviderProtocol:
 class TestAnthropicProvider:
     def test_missing_api_key_raises(self):
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-        with patch.dict(os.environ, env, clear=True), pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+        with (
+            patch.dict(os.environ, env, clear=True),
+            pytest.raises(ValueError, match="ANTHROPIC_API_KEY"),
+        ):
             AnthropicProvider(api_key=None)
 
     def test_missing_package_raises_import_error(self):
         import builtins
+
         real_import = builtins.__import__
 
         def _block_anthropic(name, *args, **kwargs):
@@ -211,7 +219,10 @@ class TestAnthropicProvider:
                 raise ImportError("No module named 'anthropic'")
             return real_import(name, *args, **kwargs)
 
-        with patch("builtins.__import__", side_effect=_block_anthropic), pytest.raises(ImportError, match="anthropic"):
+        with (
+            patch("builtins.__import__", side_effect=_block_anthropic),
+            pytest.raises(ImportError, match="anthropic"),
+        ):
             AnthropicProvider(api_key="sk-test")
 
     def test_judge_model_returns_default(self):
@@ -241,7 +252,10 @@ class TestAnthropicProvider:
 class TestCompareBenchmarks:
     def _run(self, score: int) -> BenchmarkRun:
         return BenchmarkRun(
-            model="m", prompt_path="p", prompt_text="t", response_text="r",
+            model="m",
+            prompt_path="p",
+            prompt_text="t",
+            response_text="r",
             rubric_scores=dict.fromkeys(RUBRIC_DIMENSIONS, score),
         )
 

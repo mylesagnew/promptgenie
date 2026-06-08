@@ -11,7 +11,7 @@ packs:
     type: rules
     tags: [security, owasp, scanner]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/owasp-llm-top10.yaml
-    sha256: ""
+    sha256: "5b064aec4bfb43a40fc3bb0f0b45d1558c75d893ed09f8a95a9091d1e107c607"
 
   - id: enterprise-lint
     name: "Enterprise Lint Rules"
@@ -20,7 +20,7 @@ packs:
     type: rules
     tags: [enterprise, lint, governance]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/enterprise-lint.yaml
-    sha256: ""
+    sha256: "80326ba0186a2923156d1556a4e709317c0c183970ea7085c32f9119cd3fa0e4"
 
   # ── Profile packs ────────────────────────────────────────────────────────────
   - id: gpt-4o
@@ -30,7 +30,7 @@ packs:
     type: profile
     tags: [profile, openai, gpt4o, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/gpt-4o.yaml
-    sha256: ""
+    sha256: "3e68e37205c95a5b629ffa564c7060afcffa1cb903f38af490eec899bb72e0dd"
 
   - id: mistral
     name: "Mistral Profile"
@@ -39,7 +39,7 @@ packs:
     type: profile
     tags: [profile, mistral, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/mistral.yaml
-    sha256: ""
+    sha256: "af606d88677286ab94e2d4869d015f67d3b0049f5a604a6333885cde43f2d815"
 
   - id: llama3
     name: "Llama 3 Profile"
@@ -48,7 +48,7 @@ packs:
     type: profile
     tags: [profile, meta, llama, open-source, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/llama3.yaml
-    sha256: ""
+    sha256: "93e8974abd65dc4285a95fb4535c5bcb8d7e9de47af8e31c4911bbb87b6cd98b"
 
   - id: github-copilot
     name: "GitHub Copilot Profile"
@@ -57,7 +57,7 @@ packs:
     type: profile
     tags: [profile, copilot, code, github, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/github-copilot.yaml
-    sha256: ""
+    sha256: "87680eb75054662c61f38f138f7c25aeb325decce8fbc7dca2b61e770bc71783"
 
   # ── Template packs ───────────────────────────────────────────────────────────
   - id: devops-templates
@@ -67,7 +67,7 @@ packs:
     type: template
     tags: [templates, devops, sre, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/devops-templates.yaml
-    sha256: ""
+    sha256: "5035507f28e4655541f0c5044d33c013732c4c74ca103877119e15b058231c6f"
 
   - id: data-science-templates
     name: "Data Science & ML Templates"
@@ -76,7 +76,7 @@ packs:
     type: template
     tags: [templates, data-science, ml, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/data-science-templates.yaml
-    sha256: ""
+    sha256: "f52fd2e9c738fca5319ba2ec4757c69808310373377b40c8f9a4c63f667799d2"
 
   - id: legal-compliance-templates
     name: "Legal & Compliance Templates"
@@ -85,7 +85,7 @@ packs:
     type: template
     tags: [templates, legal, compliance, gdpr, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/legal-compliance-templates.yaml
-    sha256: ""
+    sha256: "8064ebbc895b7cebd989eabe506fc685e5513359d6a0df6a3e3bb948bc35ab55"
 
   - id: product-management-templates
     name: "Product Management Templates"
@@ -94,7 +94,7 @@ packs:
     type: template
     tags: [templates, product, agile, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/product-management-templates.yaml
-    sha256: ""
+    sha256: "2535d638e1a043e55e66cb537a92f6d9ed2f2b24ac42346538e98fe11048213d"
 
   - id: customer-support-templates
     name: "Customer Support & Success Templates"
@@ -103,7 +103,7 @@ packs:
     type: template
     tags: [templates, support, customer-success, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/customer-support-templates.yaml
-    sha256: ""
+    sha256: "f76220746f487a4a891e8822187e98948939b1bd982741ad0e02de23855841b7"
 
   # ── Context packs ────────────────────────────────────────────────────────────
   - id: ai-safety-context
@@ -113,7 +113,7 @@ packs:
     type: context
     tags: [context, safety, alignment]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/ai-safety-context.yaml
-    sha256: ""
+    sha256: "bd56bdc6b06d526dbb4e188608d28fe2216f12358874922eb2afb9c444cb5412"
 
   - id: responsible-ai-context
     name: "Responsible AI Context Pack"
@@ -122,7 +122,7 @@ packs:
     type: context
     tags: [context, responsible-ai, fairness, ethics, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/responsible-ai-context.yaml
-    sha256: ""
+    sha256: "7a259a9230e20f08a429cb0fd557fd95ac68fd2c73e696c2d4bde09dc9c3a19f"
 
   - id: regulated-industries-context
     name: "Regulated Industries Context Pack"
@@ -131,4 +131,4 @@ packs:
     type: context
     tags: [context, hipaa, sox, pci-dss, compliance, community]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/regulated-industries-context.yaml
-    sha256: ""
+    sha256: "bb16fbc698a3121cfa474f68c1b7f12673579b666c8da0f616b546601c425e10"

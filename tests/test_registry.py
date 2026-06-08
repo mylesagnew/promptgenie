@@ -174,7 +174,12 @@ class TestParseIndex:
         assert entries[0].version == "1.0.0"
 
     def test_skips_non_dict_items(self):
-        raw = {"packs": ["not-a-dict", {"id": "real", "name": "Real", "version": "1", "type": "rules", "url": ""}]}
+        raw = {
+            "packs": [
+                "not-a-dict",
+                {"id": "real", "name": "Real", "version": "1", "type": "rules", "url": ""},
+            ]
+        }
         entries = _parse_index(raw)
         assert len(entries) == 1
         assert entries[0].id == "real"
@@ -224,9 +229,7 @@ class TestListInstalledPacks:
 
     def test_reads_installed_pack(self, tmp_path):
         pack_yaml = tmp_path / "my-pack.yaml"
-        pack_yaml.write_text(
-            yaml.dump({"name": "My Pack", "version": "2.0.0", "type": "rules"})
-        )
+        pack_yaml.write_text(yaml.dump({"name": "My Pack", "version": "2.0.0", "type": "rules"}))
         packs = list_installed_packs(install_dir=tmp_path)
         assert len(packs) == 1
         assert packs[0].id == "my-pack"
@@ -369,9 +372,17 @@ class TestUpdateRegistryMocked:
             tmp_file.write_text(pack_content)
             mock_dl.return_value = tmp_file
 
-            result = update_registry(url="http://example.com/index.yaml", install_dir=tmp_path)
+            result = update_registry(
+                url="http://example.com/index.yaml",
+                install_dir=tmp_path,
+                require_checksum=False,  # mock entry has no sha256
+            )
 
-        assert "test-pack" in result.installed or "test-pack" in result.skipped or "test-pack" in result.updated
+        assert (
+            "test-pack" in result.installed
+            or "test-pack" in result.skipped
+            or "test-pack" in result.updated
+        )
 
     def test_already_installed_skipped(self, tmp_path):
         from promptgenie.core.registry import update_registry
@@ -417,7 +428,10 @@ class TestInstallPackMocked:
         tmp_file = tmp_path / "_dl.yaml"
         tmp_file.write_bytes(b"real content")
 
-        with patch("promptgenie.core.registry._download_to_temp", return_value=tmp_file), pytest.raises(ValueError, match="SHA-256 mismatch"):
+        with (
+            patch("promptgenie.core.registry._download_to_temp", return_value=tmp_file),
+            pytest.raises(ValueError, match="SHA-256 mismatch"),
+        ):
             install_pack(entry, install_dir=tmp_path)
 
 

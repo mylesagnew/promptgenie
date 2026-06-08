@@ -122,8 +122,15 @@
         },
         "promptgenie.enabledFileExtensions": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": [".md", ".txt", ".prompt", ".promptgenie"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".md",
+            ".txt",
+            ".prompt",
+            ".promptgenie"
+          ],
           "description": "File extensions that activate PromptGenie diagnostics."
         },
         "promptgenie.showScoreInStatusBar": {
@@ -146,8 +153,14 @@
     "languages": [
       {
         "id": "promptgenie",
-        "aliases": ["PromptGenie", "prompt"],
-        "extensions": [".prompt", ".promptgenie"],
+        "aliases": [
+          "PromptGenie",
+          "prompt"
+        ],
+        "extensions": [
+          ".prompt",
+          ".promptgenie"
+        ],
         "configuration": "./language-configuration.json"
       }
     ]
@@ -163,10 +176,10 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
+    "@vscode/vsce": "^2.22.0",
     "eslint": "^8.0.0",
-    "typescript": "^5.3.0",
-    "@vscode/vsce": "^2.22.0"
+    "typescript": "^5.3.0"
   }
 }

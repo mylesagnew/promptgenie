@@ -1456,7 +1456,7 @@ wheels = [
 
 [[package]]
 name = "promptgenie"
-version = "1.0.12"
+version = "1.0.18"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

@@ -13,3 +13,5 @@ build/
 venv/
 *.prompt_library.db
 .coverage
+vscode-extension/node_modules/
+vscode-extension/out/
