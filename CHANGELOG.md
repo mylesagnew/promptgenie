@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+
+- **2 additional coverage tests** — `test_test_cmd_verbose_shows_passing_assertions` covers the `--verbose` passing-assertion render path in `commands/test.py`; `test_lint_bad_config_path_falls_back_to_defaults` covers the `FileNotFoundError` config fallback in `commands/lint.py`. Total: 567 tests, 85.31% coverage.
+
 ---
 
 ## [1.0.19] — 2026-06-08
