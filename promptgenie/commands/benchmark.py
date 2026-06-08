@@ -28,9 +28,10 @@ def _presend_check(prompt_file: str, label: str = "") -> bool:
     """
     text = safe_read_text(prompt_file)
     result = scan(text)
-    # All secret rules share code="SEC_SECRET" — filter by exact code match.
-    # (SecurityFinding has no category field; category lives on ScanRule only.)
-    secret_findings = [f for f in result.findings if f.code == "SEC_SECRET"]
+    # All secret sub-rules are covered by SEC_SECRET_CODES alias set.
+    from promptgenie.core.scanner import SEC_SECRET_CODES
+
+    secret_findings = [f for f in result.findings if f.code in SEC_SECRET_CODES]
     tag = f" ({label})" if label else ""
 
     console.print(
@@ -44,9 +45,7 @@ def _presend_check(prompt_file: str, label: str = "") -> bool:
         )
         for f in secret_findings:
             console.print(f"  [red]•[/red] Line {f.line}: {f.message}")
-        console.print(
-            "[red]Sending this file externally may expose sensitive credentials.[/red]"
-        )
+        console.print("[red]Sending this file externally may expose sensitive credentials.[/red]")
         return True  # secrets found
 
     return False  # no secrets found

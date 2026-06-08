@@ -7,8 +7,13 @@ from typing import TYPE_CHECKING, Literal, cast
 if TYPE_CHECKING:
     from promptgenie.core.config import ScannerConfig
 
-Risk = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+FindingRisk = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+ScanRisk = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"]
+Risk = FindingRisk  # backwards-compat alias used by callers
 Confidence = Literal["HIGH", "MEDIUM", "LOW"]
+
+# Maximum findings emitted per rule per scan (prevents finding-flood on adversarial input).
+MAX_FINDINGS_PER_RULE: int = 5
 
 
 def _offset_to_line_col(text: str, offset: int) -> tuple[int, int]:
@@ -21,7 +26,7 @@ def _offset_to_line_col(text: str, offset: int) -> tuple[int, int]:
 
 @dataclass
 class SecurityFinding:
-    risk: Risk
+    risk: FindingRisk
     code: str
     message: str
     detail: str = ""
@@ -30,6 +35,8 @@ class SecurityFinding:
     line: int = 0
     col: int = 0
     matched_text: str = ""  # the text that triggered this finding (used for scoped allowlisting)
+    category: str = ""  # rule category: secret | injection | permission | rag | obfuscation
+    source: str = "builtin"  # "builtin" | "registry" | "custom"
 
 
 @dataclass
@@ -37,11 +44,12 @@ class ScanResult:
     findings: list[SecurityFinding] = field(default_factory=list)
 
     @property
-    def risk_level(self) -> Risk:
+    def risk_level(self) -> ScanRisk:
+        """Highest risk across all findings, or ``"NONE"`` when there are none."""
         for level in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
             if any(f.risk == level for f in self.findings):
                 return level
-        return "LOW"
+        return "NONE"
 
     def by_risk(self, risk: Risk) -> list[SecurityFinding]:
         return [f for f in self.findings if f.risk == risk]
@@ -79,10 +87,27 @@ class ScanRule:
 
 # ── Built-in rule registry ────────────────────────────────────────────────────
 
+# Backwards-compat alias set: ``SEC_SECRET`` in ``disabled_rules`` or ``enabled_rules``
+# now matches all secret sub-rules.  Individual sub-rules can also be targeted directly.
+SEC_SECRET_CODES: frozenset[str] = frozenset(
+    {
+        "SEC_SECRET",  # wildcard alias
+        "SEC_SECRET_APIKEY",
+        "SEC_SECRET_TOKEN",
+        "SEC_SECRET_OPENAI",
+        "SEC_SECRET_GOOGLE",
+        "SEC_SECRET_SLACK",
+        "SEC_SECRET_PRIVKEY",
+        "SEC_SECRET_GITHUB",
+        "SEC_SECRET_AWS_KEY",
+        "SEC_SECRET_AWS_SECRET",
+    }
+)
+
 SCAN_RULES: list[ScanRule] = [
-    # Secrets — searched on original (case-sensitive) text
+    # ── Secret detection (case-sensitive, original text) ─────────────────────
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_APIKEY",
         category="secret",
         pattern=r"(api[_-]?key|apikey)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{20,}",
         risk="CRITICAL",
@@ -93,18 +118,18 @@ SCAN_RULES: list[ScanRule] = [
         use_original_text=True,
     ),
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_TOKEN",
         category="secret",
         pattern=r"(secret|token|password|passwd|pwd)\s*[:=]\s*['\"]?\S{8,}",
         risk="CRITICAL",
         confidence="MEDIUM",
-        message="Possible Secret/token/password embedded in prompt.",
+        message="Possible secret/token/password embedded in prompt.",
         recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
         false_positive_note="May trigger on example values like 'password=changeme'.",
         use_original_text=True,
     ),
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_OPENAI",
         category="secret",
         pattern=r"sk-[A-Za-z0-9]{20,}",
         risk="CRITICAL",
@@ -114,7 +139,7 @@ SCAN_RULES: list[ScanRule] = [
         use_original_text=True,
     ),
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_GOOGLE",
         category="secret",
         pattern=r"AIza[A-Za-z0-9_\-]{35}",
         risk="CRITICAL",
@@ -124,7 +149,7 @@ SCAN_RULES: list[ScanRule] = [
         use_original_text=True,
     ),
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_SLACK",
         category="secret",
         pattern=r"(xox[baprs]-[A-Za-z0-9\-]+)",
         risk="CRITICAL",
@@ -134,17 +159,17 @@ SCAN_RULES: list[ScanRule] = [
         use_original_text=True,
     ),
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_PRIVKEY",
         category="secret",
         pattern=r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----",
         risk="CRITICAL",
         confidence="HIGH",
-        message="Possible Private key embedded in prompt.",
+        message="Possible private key embedded in prompt.",
         recommendation="Remove secrets from prompts. Use environment variables or secret references instead.",
         use_original_text=True,
     ),
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_GITHUB",
         category="secret",
         pattern=r"ghp_[A-Za-z0-9]{36}",
         risk="CRITICAL",
@@ -154,7 +179,7 @@ SCAN_RULES: list[ScanRule] = [
         use_original_text=True,
     ),
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_AWS_KEY",
         category="secret",
         pattern=r"AKIA[A-Z0-9]{16}",
         risk="CRITICAL",
@@ -164,7 +189,7 @@ SCAN_RULES: list[ScanRule] = [
         use_original_text=True,
     ),
     ScanRule(
-        id="SEC_SECRET",
+        id="SEC_SECRET_AWS_SECRET",
         category="secret",
         pattern=r"(aws_secret_access_key|AWS_SECRET)\s*[:=]\s*\S{20,}",
         risk="CRITICAL",
@@ -408,8 +433,10 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
 
     for rule in active_rules:
         search_text = prompt if rule.use_original_text else lower
-        m = re.search(rule.pattern, search_text, re.IGNORECASE | rule.flags if rule.use_original_text else rule.flags)
-        if m:
+        flags = re.IGNORECASE | rule.flags if rule.use_original_text else rule.flags
+        for _count, m in enumerate(re.finditer(rule.pattern, search_text, flags)):
+            if _count >= MAX_FINDINGS_PER_RULE:
+                break
             line, col = _offset_to_line_col(search_text, m.start())
             matched = m.group(0)
             # Truncate long matches from multiline rules
@@ -418,6 +445,7 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                 SecurityFinding(
                     risk=rule.risk,
                     code=rule.id,
+                    category=rule.category,
                     message=rule.message,
                     recommendation=rule.recommendation,
                     confidence=rule.confidence,
@@ -468,9 +496,14 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
             )
         )
 
-    # Apply config: enabled_rules (post-special-logic filter), disabled rules, allowlist, overrides.
+    # Apply config: enabled_rules whitelist (post-special-logic filter).
+    # "SEC_SECRET" in enabled_rules matches all SEC_SECRET_* sub-rule codes via the alias set.
     if cfg.enabled_rules:
-        result.findings = [f for f in result.findings if f.code in cfg.enabled_rules]
+        enabled_set = set(cfg.enabled_rules)
+        # Expand "SEC_SECRET" alias so users don't need to list all sub-codes.
+        if "SEC_SECRET" in enabled_set:
+            enabled_set.update(SEC_SECRET_CODES)
+        result.findings = [f for f in result.findings if f.code in enabled_set]
 
     # Apply config: disabled rules, scoped allowlist, severity overrides.
     #
@@ -479,9 +512,14 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
     #   - suppression only fires when entry.phrase appears in the finding's matched_text
     #     (not anywhere in the whole prompt — that was the original broken behaviour)
     if cfg.allowlist or cfg.disabled_rules or cfg.severity_overrides:
+        # Expand "SEC_SECRET" alias in disabled_rules too.
+        disabled_set = set(cfg.disabled_rules)
+        if "SEC_SECRET" in disabled_set:
+            disabled_set.update(SEC_SECRET_CODES)
+
         filtered: list[SecurityFinding] = []
         for finding in result.findings:
-            if finding.code in cfg.disabled_rules:
+            if finding.code in disabled_set:
                 continue
             if cfg.allowlist and any(
                 entry.suppresses(finding.code, finding.matched_text) for entry in cfg.allowlist
@@ -489,8 +527,10 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                 continue
             if finding.code in cfg.severity_overrides:
                 finding = SecurityFinding(
-                    risk=cast(Risk, cfg.severity_overrides[finding.code]),
+                    risk=cast(FindingRisk, cfg.severity_overrides[finding.code]),
                     code=finding.code,
+                    category=finding.category,
+                    source=finding.source,
                     message=finding.message,
                     detail=finding.detail,
                     recommendation=finding.recommendation,

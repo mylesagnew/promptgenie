@@ -43,8 +43,8 @@ class AllowlistEntry:
 
     phrase: str
     rules: list[str] = field(default_factory=list)  # empty = applies to all rules
-    expires: str = ""   # ISO date "YYYY-MM-DD", empty = never expires
-    reason: str = ""    # documentation / ticket reference (not used in matching)
+    expires: str = ""  # ISO date "YYYY-MM-DD", empty = never expires
+    reason: str = ""  # documentation / ticket reference (not used in matching)
 
     def is_expired(self) -> bool:
         """Return True if this suppression has passed its expiry date."""
@@ -53,7 +53,7 @@ class AllowlistEntry:
         try:
             return date.today() > date.fromisoformat(self.expires)
         except ValueError:
-            return False  # malformed date — treat as unexpired
+            return True  # malformed date — fail closed: treat as expired so suppression is inactive
 
     def suppresses(self, finding_code: str, matched_text: str) -> bool:
         """Return True if this entry suppresses the given finding."""
@@ -68,19 +68,19 @@ class AllowlistEntry:
 class ScannerConfig:
     allowlist: list[AllowlistEntry] = field(default_factory=list)
     disabled_rules: list[str] = field(default_factory=list)
-    enabled_rules: list[str] = field(default_factory=list)   # whitelist — only these codes run
+    enabled_rules: list[str] = field(default_factory=list)  # whitelist — only these codes run
     severity_overrides: dict[str, str] = field(default_factory=dict)
     custom_scan_rules: list[ScanRule] = field(default_factory=list)
-    rules_dirs: list[str] = field(default_factory=list)       # extra rule pack directories
+    rules_dirs: list[str] = field(default_factory=list)  # extra rule pack directories
 
 
 @dataclass
 class LinterConfig:
     disabled_rules: list[str] = field(default_factory=list)
-    enabled_rules: list[str] = field(default_factory=list)   # whitelist — only these codes run
+    enabled_rules: list[str] = field(default_factory=list)  # whitelist — only these codes run
     custom_vague_verbs: list[str] = field(default_factory=list)
     custom_lint_rules: list[LintRule] = field(default_factory=list)
-    rules_dirs: list[str] = field(default_factory=list)       # extra rule pack directories
+    rules_dirs: list[str] = field(default_factory=list)  # extra rule pack directories
 
 
 @dataclass
@@ -104,7 +104,9 @@ def _parse_allowlist(raw_entries: list[Any]) -> list[AllowlistEntry]:
             rules = [str(r) for r in item.get("rules", [])]
             expires = str(item.get("expires", "")).strip()
             reason = str(item.get("reason", "")).strip()
-            entries.append(AllowlistEntry(phrase=phrase, rules=rules, expires=expires, reason=reason))
+            entries.append(
+                AllowlistEntry(phrase=phrase, rules=rules, expires=expires, reason=reason)
+            )
         else:
             raise ValueError(
                 f"Allowlist entry must be a string or a mapping, got {type(item).__name__}: {item!r}"

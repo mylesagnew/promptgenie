@@ -239,9 +239,9 @@ class TestScannerConfigPaths:
         result = scan(prompt, config=cfg)
         # SEC_001 suppressed (SAFE_MARKER in matched text of SEC_001 finding? No —
         # SAFE_MARKER is NOT in "ignore previous instructions", so it won't suppress.
-        # SEC_SECRET (AWS key) should still be reported.
+        # SEC_SECRET_AWS_KEY should still be reported.
         codes = [f.code for f in result.findings]
-        assert "SEC_SECRET" in codes
+        assert "SEC_SECRET_AWS_KEY" in codes
 
     def test_rag_pattern_detected(self):
         from promptgenie.core.scanner import scan

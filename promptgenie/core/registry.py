@@ -46,8 +46,19 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 from promptgenie.core.fileio import safe_read_yaml, safe_write_text
+
+# ── constants ─────────────────────────────────────────────────────────────────
+
+# Only HTTPS is permitted for remote registry and pack downloads.
+# file://, http://, ftp://, data:, and custom schemes are blocked.
+_ALLOWED_URL_SCHEMES: frozenset[str] = frozenset({"https"})
+
+# Maximum bytes accepted from a single network response (1 MiB).
+# Prevents memory exhaustion from malicious or misconfigured servers.
+_MAX_DOWNLOAD_BYTES: int = 1 * 1024 * 1024  # 1 MiB
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 
@@ -62,8 +73,7 @@ USER_RULES_DIR = USER_DIR / "rules"
 CACHED_INDEX_PATH = USER_REGISTRY_DIR / "index.yaml"
 
 DEFAULT_REGISTRY_URL = (
-    "https://raw.githubusercontent.com/mylesagnew/promptgenie/main/"
-    "promptgenie/registry/index.yaml"
+    "https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/index.yaml"
 )
 
 # ── data types ────────────────────────────────────────────────────────────────
@@ -158,15 +168,40 @@ def load_index(prefer_cached: bool = True) -> list[RegistryEntry]:
     return load_builtin_index()
 
 
+def _validate_url(url: str) -> None:
+    """Raise ``ValueError`` if *url* uses a disallowed scheme.
+
+    Only HTTPS is permitted. ``file://``, ``http://``, ``ftp://``, ``data:``,
+    and any custom schemes are rejected to prevent SSRF-style local file
+    exfiltration via a poisoned registry index.
+    """
+    if not url:
+        raise ValueError("Pack URL must not be empty.")
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_URL_SCHEMES:
+        raise ValueError(
+            f"Disallowed URL scheme {parsed.scheme!r} in pack URL {url!r}. "
+            f"Only {sorted(_ALLOWED_URL_SCHEMES)} are permitted."
+        )
+
+
 def fetch_remote_index(url: str = DEFAULT_REGISTRY_URL, timeout: int = 10) -> list[RegistryEntry]:
     """Fetch the registry index from *url* and return parsed entries.
 
+    Raises ``ValueError`` on disallowed URL scheme.
     Raises ``urllib.error.URLError`` / ``OSError`` on network failure.
     """
-    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
+    _validate_url(url)
+    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310  # nosec: B310 — scheme validated by _validate_url
         import yaml
 
-        raw = yaml.safe_load(resp.read().decode("utf-8")) or {}
+        data = resp.read(_MAX_DOWNLOAD_BYTES + 1)
+    if len(data) > _MAX_DOWNLOAD_BYTES:
+        raise ValueError(
+            f"Registry index download exceeded {_MAX_DOWNLOAD_BYTES} byte limit "
+            f"(got ≥{len(data)} bytes from {url!r}). Aborting."
+        )
+    raw = yaml.safe_load(data.decode("utf-8")) or {}
     return _parse_index(raw)
 
 
@@ -181,10 +216,20 @@ def _verify_sha256(path: Path, expected: str) -> bool:
     return digest == expected.lower().removeprefix("sha256:")
 
 
-def _download_to_temp(url: str, timeout: int = 30) -> Path:
-    """Download *url* to a temp file and return its path."""
-    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
-        data = resp.read()
+def _download_to_temp(url: str, timeout: int = 30, max_bytes: int = _MAX_DOWNLOAD_BYTES) -> Path:
+    """Download *url* to a temp file and return its path.
+
+    Raises ``ValueError`` on disallowed scheme or response exceeding *max_bytes*.
+    Uses ``mkstemp`` to avoid TOCTOU races (no ``mktemp``).
+    """
+    _validate_url(url)
+    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310  # nosec: B310 — scheme validated by _validate_url
+        data = resp.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ValueError(
+            f"Pack download exceeded {max_bytes} byte limit "
+            f"(got ≥{len(data)} bytes from {url!r}). Aborting."
+        )
     fd, tmp_str = tempfile.mkstemp(suffix=".yaml")
     try:
         os.write(fd, data)
@@ -197,13 +242,34 @@ def install_pack(
     entry: RegistryEntry,
     install_dir: Path | None = None,
     timeout: int = 30,
+    require_checksum: bool = False,
 ) -> Path:
     """Download and install a single pack from *entry.url*.
 
     Returns the path of the installed file.
-    Raises ``ValueError`` on checksum mismatch.
-    Raises ``urllib.error.URLError`` / ``OSError`` on network failure.
+
+    Args:
+        entry:             Registry entry describing the pack to install.
+        install_dir:       Directory to install into (default: ``USER_PACKS_DIR``).
+        timeout:           Network timeout in seconds.
+        require_checksum:  If ``True``, raise ``ValueError`` when the registry
+                           entry has no ``sha256`` field.  Defaults to ``False``
+                           for backwards compatibility with existing index entries
+                           that carry empty checksums; set ``True`` in strict CI
+                           environments.
+
+    Raises:
+        ``ValueError`` on disallowed URL scheme, checksum absence (strict mode),
+        or checksum mismatch.
+        ``urllib.error.URLError`` / ``OSError`` on network failure.
     """
+    if require_checksum and not entry.sha256:
+        raise ValueError(
+            f"Pack '{entry.id}' has no SHA-256 checksum in the registry index. "
+            "Update the index with a sha256 field, or pass require_checksum=False "
+            "to skip integrity verification."
+        )
+
     dest_dir = install_dir or USER_PACKS_DIR
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{entry.id}.yaml"
@@ -213,7 +279,8 @@ def install_pack(
         if entry.sha256 and not _verify_sha256(tmp, entry.sha256):
             raise ValueError(
                 f"SHA-256 mismatch for pack '{entry.id}'. "
-                f"Expected {entry.sha256}, got {hashlib.sha256(tmp.read_bytes()).hexdigest()}"
+                f"Expected {entry.sha256}, "
+                f"got {hashlib.sha256(tmp.read_bytes()).hexdigest()}"
             )
         shutil.move(str(tmp), str(dest))
     finally:
@@ -274,7 +341,9 @@ def update_registry(
                 for e in entries
             ],
         }
-        safe_write_text(CACHED_INDEX_PATH, yaml.dump(index_raw, default_flow_style=False), force=True)
+        safe_write_text(
+            CACHED_INDEX_PATH, yaml.dump(index_raw, default_flow_style=False), force=True
+        )
     except Exception:
         pass  # cache write failure is non-fatal
 
@@ -301,7 +370,7 @@ def update_registry(
 def list_installed_packs(install_dir: Path | None = None) -> list[InstalledPack]:
     """Return metadata for all packs installed in *install_dir*."""
     dest_dir = install_dir or USER_PACKS_DIR
-    packs = []
+    packs: list[InstalledPack] = []
     if not dest_dir.exists():
         return packs
     for yaml_file in sorted(dest_dir.glob("*.yaml")):
@@ -321,7 +390,7 @@ def list_installed_packs(install_dir: Path | None = None) -> list[InstalledPack]
 
 def list_builtin_packs() -> list[InstalledPack]:
     """Return metadata for packs shipped with the package."""
-    packs = []
+    packs: list[InstalledPack] = []
     if not BUILTIN_PACKS_DIR.exists():
         return packs
     for yaml_file in sorted(BUILTIN_PACKS_DIR.glob("*.yaml")):
@@ -345,8 +414,12 @@ def list_builtin_packs() -> list[InstalledPack]:
 def load_scan_rules_from_dirs(dirs: list[str]) -> list:
     """Load ScanRule objects from all *.yaml rule pack files in *dirs*.
 
-    Silently skips directories that don't exist and files without
-    a ``scanner_rules`` key. Raises ``ValueError`` on rule validation errors.
+    Silently skips non-existent directories and files with no ``scanner_rules``
+    key (those are context/profile packs, not rule packs).
+
+    Raises ``ValueError`` if a file *does* contain a ``scanner_rules`` key but
+    the rules cannot be parsed.  Fail-closed: a malformed rule pack is never
+    silently ignored — degraded scan coverage is worse than a hard error.
     """
     from promptgenie.core.config import _parse_custom_scan_rules
 
@@ -358,19 +431,25 @@ def load_scan_rules_from_dirs(dirs: list[str]) -> list:
         for yaml_file in sorted(dir_path.glob("*.yaml")):
             try:
                 raw = safe_read_yaml(yaml_file) or {}
-                raw_rules = raw.get("scanner_rules", [])
-                if raw_rules:
-                    rules.extend(_parse_custom_scan_rules(raw_rules))
             except Exception:
-                pass  # malformed pack files in dirs are skipped silently
+                continue  # unreadable / unparseable YAML — not a rule pack, skip silently
+            raw_rules = raw.get("scanner_rules", [])
+            if not raw_rules:
+                continue
+            # File declares scanner_rules — any further parse error is surfaced, not swallowed.
+            try:
+                rules.extend(_parse_custom_scan_rules(raw_rules))
+            except Exception as exc:
+                raise ValueError(f"Malformed scanner rule pack '{yaml_file}': {exc}") from exc
     return rules
 
 
 def load_lint_rules_from_dirs(dirs: list[str]) -> list:
     """Load LintRule objects from all *.yaml rule pack files in *dirs*.
 
-    Silently skips directories that don't exist and files without
-    a ``lint_rules`` key. Raises ``ValueError`` on rule validation errors.
+    Silently skips non-existent directories and files with no ``lint_rules``
+    key.  Raises ``ValueError`` if a file declares ``lint_rules`` but they
+    cannot be parsed (fail-closed — see ``load_scan_rules_from_dirs``).
     """
     from promptgenie.core.config import _parse_custom_lint_rules
 
@@ -382,9 +461,13 @@ def load_lint_rules_from_dirs(dirs: list[str]) -> list:
         for yaml_file in sorted(dir_path.glob("*.yaml")):
             try:
                 raw = safe_read_yaml(yaml_file) or {}
-                raw_rules = raw.get("lint_rules", [])
-                if raw_rules:
-                    rules.extend(_parse_custom_lint_rules(raw_rules))
             except Exception:
-                pass
+                continue  # unreadable / unparseable YAML — not a rule pack, skip silently
+            raw_rules = raw.get("lint_rules", [])
+            if not raw_rules:
+                continue
+            try:
+                rules.extend(_parse_custom_lint_rules(raw_rules))
+            except Exception as exc:
+                raise ValueError(f"Malformed lint rule pack '{yaml_file}': {exc}") from exc
     return rules

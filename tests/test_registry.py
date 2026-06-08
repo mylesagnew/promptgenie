@@ -48,9 +48,10 @@ class TestAllowlistExpiry:
         entry = AllowlistEntry(phrase="foo", expires=past)
         assert entry.is_expired()
 
-    def test_malformed_date_not_expired(self):
+    def test_malformed_date_is_expired_fail_closed(self):
+        # Fail-closed: malformed date string is treated as expired so the suppression is inactive.
         entry = AllowlistEntry(phrase="foo", expires="not-a-date")
-        assert not entry.is_expired()
+        assert entry.is_expired()
 
     def test_suppresses_returns_false_when_expired(self):
         past = (date.today() - timedelta(days=1)).isoformat()

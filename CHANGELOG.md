@@ -10,6 +10,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.0.18] — 2026-06-08
+
+### Security
+
+- **Registry hardening — YAML parse errors no longer silently skipped in rule-pack loader:** `load_scan_rules_from_dirs()` and `load_lint_rules_from_dirs()` now raise `ValueError` when a file that declares `scanner_rules`/`lint_rules` fails to parse (fail-closed; malformed YAML files with no rule key are still silently skipped).
+- **Allowlist expiry is now fail-closed:** `AllowlistEntry.is_expired()` returns `True` (expired) for malformed date strings instead of `False`, so a corrupt expiry never silently keeps a suppression alive.
+
+### Changed
+
+- **Unique SEC_SECRET rule IDs** — all nine secret-detection rules now carry distinct codes (`SEC_SECRET_APIKEY`, `SEC_SECRET_TOKEN`, `SEC_SECRET_OPENAI`, `SEC_SECRET_GOOGLE`, `SEC_SECRET_SLACK`, `SEC_SECRET_PRIVKEY`, `SEC_SECRET_GITHUB`, `SEC_SECRET_AWS_KEY`, `SEC_SECRET_AWS_SECRET`). The `SEC_SECRET` alias set (`SEC_SECRET_CODES` frozenset) provides backwards-compatible filtering.
+- **`SecurityFinding` now carries `category` and `source` fields** — scan JSON output and the `policy` command include both fields per finding.
+- **`ScanResult.risk_level` returns `"NONE"` (not `"LOW"`) when there are no findings** — callers checking for `"LOW"` should update to handle `"NONE"`.
+- **Multiple-match support with per-rule cap** — scanner uses `re.finditer` + `enumerate()` and caps each rule at `MAX_FINDINGS_PER_RULE = 5` matches per prompt.
+
+### Added
+
+- **`policy` command** — CI gate: `promptgenie policy <file> [--max-risk HIGH] [--max-findings 0] [--min-score 0] [--format text|json]`. Exits 0 (pass), 1 (violations), or 2 (usage error). Text output uses a Rich table; JSON output is machine-readable.
+- **`benchmark.py` secret check updated** — `_presend_check()` now correctly detects all `SEC_SECRET_*` sub-rules via `SEC_SECRET_CODES`.
+
+### Fixed
+
+- All test files updated for `SEC_SECRET` → `SEC_SECRET_*` rename (`test_scanner.py`, `test_sarif_locations.py`, `test_coverage_gaps.py`, `test_scanner_adversarial.py`, `test_registry.py`).
+- `test_registry.py::test_malformed_date_not_expired` renamed to `test_malformed_date_is_expired_fail_closed` and assertion inverted to match new fail-closed behaviour.
+- `test_scanner.py::test_risk_level_low_when_clean` updated to assert `"NONE"` not `"LOW"`.
+
+---
+
 ## [1.0.17] — 2026-06-08
 
 ### Added

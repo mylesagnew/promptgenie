@@ -4,7 +4,7 @@ import json
 
 from promptgenie.core.formatters import lint_to_sarif, scan_to_sarif
 from promptgenie.core.linter import lint
-from promptgenie.core.scanner import _offset_to_line_col, scan
+from promptgenie.core.scanner import SEC_SECRET_CODES, _offset_to_line_col, scan
 
 
 class TestOffsetToLineCol:
@@ -60,7 +60,7 @@ class TestScannerLineTracking:
     def test_secret_high_confidence(self):
         # ghp_ + exactly 36 alphanumeric chars
         result = scan("key: ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890")
-        hits = [f for f in result.findings if f.code == "SEC_SECRET"]
+        hits = [f for f in result.findings if f.code in SEC_SECRET_CODES]
         assert hits
         assert hits[0].confidence == "HIGH"
 

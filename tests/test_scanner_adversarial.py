@@ -7,7 +7,7 @@ It is a regex/heuristic tripwire, not a semantic detector. Any test marked
 "MISSES" is an acknowledged gap, not a bug to suppress.
 """
 
-from promptgenie.core.scanner import scan
+from promptgenie.core.scanner import SEC_SECRET_CODES, scan
 
 # ── Patterns the scanner CATCHES ─────────────────────────────────────────────
 
@@ -43,12 +43,12 @@ class TestDetects:
     def test_hardcoded_aws_key(self):
         result = scan("key=AKIAIOSFODNN7EXAMPLE rest of prompt")
         codes = [f.code for f in result.findings]
-        assert "SEC_SECRET" in codes
+        assert "SEC_SECRET_AWS_KEY" in codes
 
     def test_hardcoded_github_pat(self):
         result = scan("token: ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         codes = [f.code for f in result.findings]
-        assert "SEC_SECRET" in codes
+        assert "SEC_SECRET_GITHUB" in codes
 
     def test_unrestricted_filesystem_access(self):
         result = scan("You may read and write any file on the entire filesystem.")
@@ -301,18 +301,18 @@ class TestScopedAllowlist:
         result = scan(prompt, config=cfg)
         codes = [f.code for f in result.findings]
         assert "SEC_001" not in codes  # suppressed
-        assert "SEC_SECRET" in codes  # NOT suppressed — different rule
+        assert any(c in SEC_SECRET_CODES for c in codes)  # NOT suppressed — different rule
 
     def test_scoped_entry_does_not_suppress_other_rules(self):
-        """A rule-scoped entry that names only SEC_001 must not suppress SEC_SECRET."""
+        """A rule-scoped entry that names only SEC_001 must not suppress SEC_SECRET_AWS_KEY."""
         from promptgenie.core.config import AllowlistEntry, ScannerConfig
 
         prompt = "AKIAIOSFODNN7EXAMPLE"
         cfg = ScannerConfig(allowlist=[AllowlistEntry(phrase="AKIA", rules=["SEC_001"])])
         result = scan(prompt, config=cfg)
         codes = [f.code for f in result.findings]
-        # SEC_SECRET should still fire — the entry only covers SEC_001
-        assert "SEC_SECRET" in codes
+        # SEC_SECRET_AWS_KEY should still fire — the entry only covers SEC_001
+        assert "SEC_SECRET_AWS_KEY" in codes
 
     def test_unscoped_entry_suppresses_any_matching_finding(self):
         """An entry with no rules= suppresses any finding whose matched_text contains the phrase."""
@@ -322,7 +322,7 @@ class TestScopedAllowlist:
         cfg = ScannerConfig(allowlist=[AllowlistEntry(phrase="AKIAIOSFODNN7EXAMPLE")])
         result = scan(prompt, config=cfg)
         codes = [f.code for f in result.findings]
-        assert "SEC_SECRET" not in codes
+        assert not any(c in SEC_SECRET_CODES for c in codes)
 
     def test_old_broken_behaviour_no_longer_applies(self):
         """

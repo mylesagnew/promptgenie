@@ -46,6 +46,7 @@ RISK_TO_SARIF = {
     "HIGH": "error",
     "MEDIUM": "warning",
     "LOW": "note",
+    "NONE": "none",
 }
 
 
@@ -85,6 +86,8 @@ def scan_to_json(result: ScanResult, prompt_path: str = "") -> str:
         "findings": [
             {
                 "code": f.code,
+                "category": f.category,
+                "source": f.source,
                 "risk": f.risk,
                 "confidence": f.confidence,
                 "line": f.line,

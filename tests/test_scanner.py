@@ -1,6 +1,6 @@
 """Tests for promptgenie.core.scanner."""
 
-from promptgenie.core.scanner import ScanResult, scan
+from promptgenie.core.scanner import SEC_SECRET_CODES, ScanResult, scan
 
 CLEAN = "Refactor the auth module to use JWT. Work only in src/auth/."
 
@@ -32,7 +32,7 @@ class TestScanReturnsResult:
 
     def test_risk_level_low_when_clean(self):
         result = scan(CLEAN)
-        assert result.risk_level == "LOW"
+        assert result.risk_level == "NONE"
 
 
 class TestSecretDetection:
@@ -40,21 +40,21 @@ class TestSecretDetection:
         # Pattern: sk-[A-Za-z0-9]{20,} — no hyphens in the key body
         result = scan("Use key sk-" + "a" * 30)
         codes = [f.code for f in result.findings]
-        assert "SEC_SECRET" in codes
+        assert any(c in SEC_SECRET_CODES for c in codes)
 
     def test_detects_aws_key(self):
         result = scan("key=AKIAIOSFODNN7EXAMPLE")
         codes = [f.code for f in result.findings]
-        assert "SEC_SECRET" in codes
+        assert "SEC_SECRET_AWS_KEY" in codes
 
     def test_detects_github_pat(self):
         result = scan("token: ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         codes = [f.code for f in result.findings]
-        assert "SEC_SECRET" in codes
+        assert "SEC_SECRET_GITHUB" in codes
 
     def test_secret_finding_is_critical(self):
         result = scan(SECRETS)
-        secret_findings = [f for f in result.findings if f.code == "SEC_SECRET"]
+        secret_findings = [f for f in result.findings if f.code in SEC_SECRET_CODES]
         assert all(f.risk == "CRITICAL" for f in secret_findings)
 
     def test_does_not_print_secret_value(self):
