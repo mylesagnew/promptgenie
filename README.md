@@ -206,7 +206,7 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 | `generate` | Build an optimised prompt from a rough task description |
 | `lint` | Check a prompt file for quality and structural issues |
 | `scan` | Scan a prompt file for security risks |
-| `policy` | CI policy gate — fail the build if findings breach configurable thresholds |
+| `policy` | CI policy gate — fail the build if findings breach configurable thresholds; outputs text, JSON, or SARIF |
 | `diff` | Compare two prompt versions — token, score, section, and risk delta |
 | `adapt` | Translate a prompt from one target profile to another |
 | `test` | Run a declarative prompt test suite |
@@ -350,7 +350,23 @@ The scanner reports the **class** of secret found, never the secret value itself
 | `--format` | Output format: `rich` (default) / `json` / `sarif` |
 | `--out`, `-o` | Write output to file instead of stdout |
 
-**Scan JSON output** includes `category` (rule category: `secret`, `injection`, `permission`, `rag`, `obfuscation`) and `source` (`builtin` / `registry` / `custom`) on every finding. Secret rules use unique codes (`SEC_SECRET_AWS_KEY`, `SEC_SECRET_GITHUB`, `SEC_SECRET_OPENAI`, etc.) — use the `SEC_SECRET` alias in `enabled_rules` / `disabled_rules` config to target all secret rules at once.
+**Scan JSON output** includes `category` (rule category: `secret`, `injection`, `permission`, `rag`, `obfuscation`) and `source` (`builtin` / `registry` / `custom`) on every finding.
+
+**Secret rule IDs** — each secret pattern has a unique code for precise suppression:
+
+| Code | Pattern |
+|---|---|
+| `SEC_SECRET_APIKEY` | Generic `sk-` / `api_key` patterns |
+| `SEC_SECRET_TOKEN` | Generic bearer tokens |
+| `SEC_SECRET_OPENAI` | OpenAI `sk-` keys |
+| `SEC_SECRET_GOOGLE` | Google API keys (`AIza…`) |
+| `SEC_SECRET_SLACK` | Slack tokens (`xox[bpoas]-…`) |
+| `SEC_SECRET_PRIVKEY` | PEM private key headers |
+| `SEC_SECRET_GITHUB` | GitHub PATs (`ghp_…`, `github_pat_…`) |
+| `SEC_SECRET_AWS_KEY` | AWS access key IDs (`AKIA…`) |
+| `SEC_SECRET_AWS_SECRET` | AWS secret access key patterns |
+
+Use `SEC_SECRET` as an alias in `enabled_rules` / `disabled_rules` config to target all secret rules at once.
 
 ---
 
@@ -387,15 +403,31 @@ promptgenie policy my-prompt.md --format json
 | `--max-risk` | `HIGH` | Fail if any security finding is at or above this level (`CRITICAL` / `HIGH` / `MEDIUM` / `LOW`) |
 | `--max-findings` | `0` | Fail if total qualifying findings exceed this count; `0` = any qualifying finding fails |
 | `--min-score` | `0` | Fail if lint quality score is below this value; `0` = lint score not checked |
-| `--format` | `text` | Output format: `text` (Rich table) or `json` (machine-readable) |
+| `--format` | `text` | Output format: `text` (Rich table), `json` (machine-readable), or `sarif` (SARIF v2.1.0) |
 | `--config PATH` | — | Path to `.promptgenie.yaml` |
 | `--no-config` | — | Ignore any `.promptgenie.yaml` |
 
-**Example GitHub Actions step:**
+**Expired allowlist warnings** — when the loaded config contains allowlist entries that have expired (or have a malformed `expires` date), the policy command surfaces them:
+- `--format json`: `allowlist_warnings` array in the output document
+- `--format text`: `⚠ Allowlist: …` line per expired entry in the Rich output
+
+This keeps stale suppressions visible in CI rather than silently inactive.
+
+**Example GitHub Actions steps:**
 
 ```yaml
+# Text output with Rich table — good for human-readable CI logs
 - name: PromptGenie policy gate
-  run: promptgenie policy my-prompt.md --max-risk HIGH --min-score 75 --format json
+  run: promptgenie policy my-prompt.md --max-risk HIGH --min-score 75
+
+# SARIF output — upload to GitHub Code Scanning
+- name: PromptGenie policy (SARIF)
+  run: promptgenie policy my-prompt.md --format sarif --max-risk MEDIUM > policy.sarif
+
+- name: Upload SARIF results
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: policy.sarif
 ```
 
 ---
@@ -753,6 +785,14 @@ promptgenie pack search owasp
 promptgenie pack install owasp-llm-top10
 ```
 
+Both `pack install` and `pack update` verify the SHA-256 checksum of every downloaded file against the registry index. Install is refused if no checksum is present. Pass `--allow-unverified` only when using a private registry that does not yet publish checksums (a visible warning is shown):
+
+```bash
+# Private registry without checksums — bypass with explicit opt-in
+promptgenie pack install my-private-pack --allow-unverified
+promptgenie pack update --url https://my-registry.example.com/index.yaml --allow-unverified
+```
+
 **Update all packs from the remote registry:**
 
 ```bash
@@ -927,6 +967,8 @@ Creates three files if they don't already exist:
 | `.github/workflows/prompt-check.yml` | GitHub Actions — 3 parallel jobs: lint, scan, test |
 | `.pre-commit-config.yaml` | Pre-commit hooks for staged `.prompt.md` and test files |
 | `.promptignore` | Glob patterns to exclude from lint/scan checks |
+
+The main `ci.yml` runs 5 parallel jobs: `test` (Python 3.10–3.12, coverage ≥85%), `lint` (ruff, mypy), `security` (bandit, pip-audit), `vscode-extension` (npm ci, audit, compile, lint), and `build` (wheel smoke test).
 
 **Check what's active:**
 
@@ -1171,6 +1213,7 @@ promptgenie/
 ├── CHANGELOG.md                            # Version history
 ├── vscode-extension/                       # VS Code / Cursor extension
 │   ├── package.json                        # Extension manifest (commands, settings, activation events)
+│   ├── package-lock.json                   # Locked npm dependencies (required for npm ci in CI)
 │   ├── tsconfig.json
 │   ├── src/
 │   │   ├── extension.ts                    # Activate / deactivate, event wiring
@@ -1259,7 +1302,11 @@ promptgenie/
 - [x] **Registry hardening** — URL scheme allowlist (HTTPS-only, all `file://`/`http://`/`ftp://` schemes blocked); 1 MiB download cap on all remote fetches; `require_checksum=True` mode for strict CI; fail-closed rule-pack loader (malformed `scanner_rules`/`lint_rules` raises `ValueError`, not silently skipped); fail-closed allowlist expiry (malformed date string treated as expired); `# nosec: B310` annotations with rationale on `urlopen` calls
 - [x] **Production-shaped scanner findings** — 9 secret rules now carry unique codes (`SEC_SECRET_APIKEY`, `SEC_SECRET_TOKEN`, `SEC_SECRET_OPENAI`, `SEC_SECRET_GOOGLE`, `SEC_SECRET_SLACK`, `SEC_SECRET_PRIVKEY`, `SEC_SECRET_GITHUB`, `SEC_SECRET_AWS_KEY`, `SEC_SECRET_AWS_SECRET`); `SEC_SECRET_CODES` frozenset for backwards-compatible filtering; `SecurityFinding` gains `category` and `source` fields; `ScanResult.risk_level` returns `"NONE"` (not `"LOW"`) when no findings; scanner uses `re.finditer` + `enumerate()` with `MAX_FINDINGS_PER_RULE = 5` cap per rule
 - [x] **`policy` command** — CI gate: `promptgenie policy <file> [--max-risk HIGH] [--max-findings 0] [--min-score 0] [--format text|json]`; exits 0 (pass), 1 (violations), 2 (usage error); text output is a Rich findings table; JSON is machine-readable for dashboards and GitHub step summaries
-- [x] **Quality gates green** — `ruff format`: 0 files need reformatting; `mypy`: no issues in 36 source files; `bandit`: no issues identified; all 528 tests pass
+- [x] **Quality gates green** — `ruff format`: 0 files need reformatting; `mypy`: no issues in 36 source files; `bandit`: no issues identified; 565 tests pass; coverage 85.03%
+- [x] **Registry strict mode** — `update_registry()` defaults to `require_checksum=True`; all 14 built-in registry packs carry verified SHA-256 checksums; `pack install/update` CLI exposes `--allow-unverified` escape hatch with visible warning
+- [x] **VS Code extension CI** — `vscode-extension` job in `ci.yml`: `npm ci` + `npm audit --audit-level=high` + `npm run compile` + `npm run lint` + artifact upload; `@typescript-eslint/*` upgraded to fix 6 high-severity vulnerabilities; `package-lock.json` committed
+- [x] **Policy SARIF output** — `--format sarif` emits combined SARIF v2.1.0 (lint + scan runs) for GitHub Code Scanning upload
+- [x] **Expired allowlist reporting** — `policy` surfaces expired/malformed allowlist entries as `allowlist_warnings` in JSON and `⚠ Allowlist:` in text output
 
 ---
 

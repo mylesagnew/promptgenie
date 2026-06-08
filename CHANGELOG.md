@@ -10,6 +10,36 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.0.19] — 2026-06-08
+
+### Security
+
+- **Registry strict mode — checksums required by default:** `update_registry()` now defaults to `require_checksum=True`. Packs without a `sha256` field in the registry index are refused unless `require_checksum=False` is passed explicitly. `pack install` and `pack update` CLI commands expose `--allow-unverified` as the only escape hatch (prints a visible yellow warning when used).
+- **Built-in registry checksums populated:** all 14 entries in `promptgenie/registry/index.yaml` now carry verified SHA-256 digests — the registry can self-verify without network trust on first install.
+- **VS Code extension dependencies patched:** upgraded `@typescript-eslint/eslint-plugin` and `@typescript-eslint/parser` to latest, resolving 6 high-severity vulnerabilities in the `minimatch` transitive chain (`npm audit` now reports 0 vulnerabilities).
+
+### Added
+
+- **`policy --format sarif`** — emits a combined SARIF v2.1.0 document with separate lint and scan runs, suitable for direct upload to GitHub Code Scanning with `github/codeql-action/upload-sarif`.
+- **Expired allowlist reporting in `policy`** — expired or malformed `AllowlistEntry` dates are surfaced as `allowlist_warnings` in JSON output and as `⚠ Allowlist:` lines in text output, making stale suppressions visible in CI rather than silently inactive.
+- **VS Code extension CI job** — new `vscode-extension` job in `.github/workflows/ci.yml`: `npm ci` (locked install), `npm audit --audit-level=high`, `npm run compile`, `npm run lint`, upload compiled artifact. Extension now has parity with the Python CI quality posture.
+- **`vscode-extension/package-lock.json` committed** — enables reproducible `npm ci` installs in CI and local development.
+
+### Fixed
+
+- **Coverage gate restored to 85%** — `tests/test_policy.py` (29 tests) brings `promptgenie/commands/policy.py` to 100% coverage; overall project coverage is 85.03%.
+- **`ruff format` applied to 3 test files** — `test_benchmarker.py`, `test_coverage_gaps.py`, `test_registry.py` were not reformatted in v1.0.18; format check now passes cleanly.
+- **`uv.lock` updated** — lockfile was pinned at v1.0.17; updated to reflect v1.0.18/v1.0.19 package metadata.
+- **`TestUpdateRegistryMocked` test fixed** — `test_successful_update_installs_packs` now passes `require_checksum=False` since mock entries carry no SHA-256; test was broken by the new strict-mode default.
+
+### Changed
+
+- `update_registry()` signature gains `require_checksum: bool = True` parameter.
+- `install_pack()` `require_checksum` default remains `False` for direct API calls; CLI commands default to strict mode via `not allow_unverified`.
+- `.gitignore` updated: `vscode-extension/node_modules/` and `vscode-extension/out/` excluded from version control.
+
+---
+
 ## [1.0.18] — 2026-06-08
 
 ### Security
