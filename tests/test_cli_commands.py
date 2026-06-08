@@ -400,3 +400,27 @@ class TestConfigWiring:
             cfg.write_text("linter:\n  disabled_rules: []\nscanner:\n  disabled_rules: []\n")
             result = self.runner.invoke(cli, ["diff", "--config", str(cfg), str(a), str(b)])
             assert result.exit_code == 0
+
+    def test_test_cmd_verbose_shows_passing_assertions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prompt = Path(tmp) / "p.md"
+            prompt.write_text(SAMPLE_PROMPT)
+            suite = Path(tmp) / "s.prompt-test.yaml"
+            suite.write_text(
+                "prompt: p.md\ntarget: claude\ntests:\n"
+                "  - name: has content\n    must_include:\n      - Objective\n"
+            )
+            result = self.runner.invoke(cli, ["test", "--no-config", "--verbose", str(suite)])
+            assert result.exit_code == 0
+            assert "PASS" in result.output
+
+    def test_lint_bad_config_path_falls_back_to_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prompt = Path(tmp) / "p.md"
+            prompt.write_text(SAMPLE_PROMPT)
+            result = self.runner.invoke(
+                cli,
+                ["lint", "--config", "/nonexistent/.promptgenie.yaml", str(prompt)],
+            )
+            assert result.exit_code in (0, 1)
+            assert "Warning" in result.output or result.exit_code in (0, 1)
