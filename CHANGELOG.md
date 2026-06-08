@@ -10,6 +10,43 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.0.16] — 2026-06-08
+
+### Added
+
+- **Community profile and template packs** — 11 new built-in registry packs covering model families, domain templates, and governance context. Registry grows from 3 to 14 packs.
+
+  **Profile packs** (usable as `--target` after `promptgenie pack install <id>`):
+  - `gpt-4o` — OpenAI GPT-4o: multimodal, function-calling, structured-output guidance; required sections, forbidden patterns, security controls for tool-calling deployments.
+  - `mistral` — Mistral AI (7B / Mixtral 8x7B / Mistral Large): multilingual strengths, concise enumeration style, function-calling variant notes.
+  - `llama3` — Meta Llama 3 (8B / 70B / 405B): open-weights deployment guidance, Llama Guard recommendation, fine-tuning considerations.
+  - `github-copilot` — GitHub Copilot Chat and inline completion: IDE context requirements, CodeQL / Autofix security guidance, code-only output format.
+
+  **Template packs** (usable as `--template` after install):
+  - `devops-templates` — 6 templates: Incident Runbook, Postmortem / Blameless RCA, CI/CD Pipeline Review, On-Call Handoff, Capacity Planning Analysis, Infrastructure-as-Code Review.
+  - `data-science-templates` — 6 templates: Exploratory Data Analysis, Model Evaluation Report, Feature Engineering Plan, ML Experiment Design, Model Card, Data Pipeline Review.
+  - `legal-compliance-templates` — 5 templates: Contract Analysis, GDPR DPIA, Policy Review, Regulatory Gap Analysis, Third-Party Risk Assessment.
+  - `product-management-templates` — 6 templates: PRD, User Story, OKR Alignment Review, Sprint Retrospective Summary, Competitive Analysis, Feature Prioritisation.
+  - `customer-support-templates` — 6 templates: Support Ticket Triage, Escalation Summary, Knowledge Base Article, CSAT / NPS Analysis, Customer Onboarding Email, Renewal Risk Assessment.
+
+  **Context packs** (injectable via `promptgenie pack inject`):
+  - `responsible-ai-context` — 5 context items covering fairness principles, explainability guidelines, harm prevention checklist, transparency disclosure standards, and ethical review process.
+  - `regulated-industries-context` — 5 context items covering HIPAA PHI constraints, SOX financial controls, PCI-DSS cardholder data rules, FCA / SEC AI guidance, and a regulated-industry deployment checklist.
+
+- **Registry index `tags` field** — all 14 packs now carry a `tags` list in `index.yaml` (e.g. `[security, owasp, scanner]`, `[profile, community]`, `[context, hipaa, compliance]`) enabling future tag-based `pack search` filtering.
+
+### Fixed
+
+- **`registry.py` TOCTOU race** — replaced deprecated `tempfile.mktemp()` (bandit B306) with `tempfile.mkstemp()` + `os.write()` / `os.close()`. No TOCTOU window between file creation and write; `# noqa: S306` suppression removed.
+- **`context_packs.py` operator precedence** — `not data.get("scanner_rules") and not data.get("lint_rules")` evaluated incorrectly: `and` binds tighter than `not`, so a rule pack with `scanner_rules` but no `lint_rules` was misclassified as a valid context pack. Fixed to `not (data.get("scanner_rules") or data.get("lint_rules"))`.
+- **`scanner.py` redundant `enabled_rules` pre-loop filter** — the pre-loop filter on `active_rules` was redundant with the post-loop filter and, critically, did not guard the special-case `SEC_B64` and `SEC_CHAIN` detection blocks, allowing those findings to bypass the `enabled_rules` whitelist. Pre-loop filter removed; the post-loop filter now handles all findings uniformly.
+
+### Tests
+
+- 528 passed, 85%+ coverage, ruff clean.
+
+---
+
 ## [1.0.15] — 2026-06-08
 
 ### Security / Changed (BREAKING for typo scenarios)

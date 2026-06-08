@@ -1,0 +1,39 @@
+name: Mistral
+version: "1.0.0"
+description: "Target profile for Mistral AI models (Mistral 7B, Mixtral 8x7B, Mistral Large) — optimised for instruction-following and multilingual tasks."
+type: profile
+author: "PromptGenie Community"
+license: MIT
+
+category: general-assistant
+strengths:
+  - efficient instruction-following at smaller parameter counts
+  - strong multilingual support (English, French, Spanish, German, Italian, Portuguese)
+  - sliding-window attention for long-context tasks
+  - function calling (Mistral Large / Mixtral instruct variants)
+  - low-latency responses suitable for latency-sensitive applications
+risks:
+  - weaker performance on highly specialised technical domains vs. larger models
+  - may not follow multi-step instructions reliably without explicit enumeration
+  - function calling reliability varies across model variants
+  - context window smaller than frontier models for some variants
+required_sections:
+  - Objective
+  - Output Format
+forbidden_patterns:
+  - "do what you think is best"
+  - "use your judgment"
+stop_conditions:
+  - Stop if the task requires knowledge beyond the training cut-off without a retrieval tool.
+  - Do not expand the task scope beyond the stated objective.
+security_controls:
+  - Avoid embedding credentials or PII in the prompt body.
+  - Validate model outputs before using them in downstream automation.
+scope_guidance: |
+  Keep prompts concise and enumerate multi-step instructions explicitly (1. 2. 3.).
+  Specify the language for multilingual tasks. For function calling use Mistral Large
+  or a Mixtral instruct variant and include the function schema.
+default_output_format: |
+  Respond in structured markdown unless another format is specified.
+  For structured data use JSON. For multilingual output specify the target language
+  explicitly in the Output Format section.

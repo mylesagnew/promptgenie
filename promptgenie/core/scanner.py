@@ -406,10 +406,6 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
 
     active_rules = SCAN_RULES + dir_rules + list(cfg.custom_scan_rules)
 
-    # enabled_rules whitelist — if set, only run rules whose id is in the list
-    if cfg.enabled_rules:
-        active_rules = [r for r in active_rules if r.id in cfg.enabled_rules]
-
     for rule in active_rules:
         search_text = prompt if rule.use_original_text else lower
         m = re.search(rule.pattern, search_text, re.IGNORECASE | rule.flags if rule.use_original_text else rule.flags)

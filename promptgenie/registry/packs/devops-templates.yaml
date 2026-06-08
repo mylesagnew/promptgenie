@@ -1,0 +1,90 @@
+name: devops-templates
+version: "1.0.0"
+description: "Template pack for DevOps and SRE teams — incident runbooks, CI/CD pipelines, on-call handoffs, postmortems, and capacity planning."
+type: template
+author: "PromptGenie Community"
+license: MIT
+
+templates:
+  - id: incident-runbook
+    name: Incident Runbook
+    category: sre
+    description: Structured runbook for diagnosing and resolving a live production incident.
+    sections:
+      - Objective
+      - Incident Summary
+      - Severity and Impact
+      - Affected Systems
+      - Diagnostic Steps
+      - Remediation Steps
+      - Rollback Procedure
+      - Escalation Path
+      - Output Format
+
+  - id: postmortem
+    name: Postmortem / Blameless RCA
+    category: sre
+    description: Blameless post-incident review covering timeline, root cause, and action items.
+    sections:
+      - Objective
+      - Incident Timeline
+      - Root Cause Analysis
+      - Contributing Factors
+      - Impact Summary
+      - What Went Well
+      - Action Items
+      - Output Format
+
+  - id: ci-pipeline-review
+    name: CI/CD Pipeline Review
+    category: devops
+    description: Review and improve a CI/CD pipeline configuration for correctness, security, and efficiency.
+    sections:
+      - Objective
+      - Pipeline Overview
+      - Current Configuration
+      - Review Focus
+      - Constraints
+      - Output Format
+      - Acceptance Criteria
+
+  - id: oncall-handoff
+    name: On-Call Handoff
+    category: sre
+    description: Structured handoff document for transitioning on-call responsibility between engineers.
+    sections:
+      - Objective
+      - Active Incidents
+      - Pending Alerts
+      - Known Flaky Systems
+      - Scheduled Maintenance
+      - Action Items for Incoming Engineer
+      - Output Format
+
+  - id: capacity-plan
+    name: Capacity Planning Analysis
+    category: sre
+    description: Analyse current resource utilisation and project capacity needs for a given service or cluster.
+    sections:
+      - Objective
+      - Service Overview
+      - Current Utilisation Metrics
+      - Growth Assumptions
+      - Projected Requirements
+      - Scaling Recommendations
+      - Cost Implications
+      - Output Format
+      - Acceptance Criteria
+
+  - id: infrastructure-as-code-review
+    name: Infrastructure-as-Code Review
+    category: devops
+    description: Security and correctness review of Terraform, Pulumi, or CloudFormation templates.
+    sections:
+      - Objective
+      - IaC Tool and Provider
+      - Scope
+      - Review Focus
+      - Constraints
+      - Output Format
+      - Acceptance Criteria

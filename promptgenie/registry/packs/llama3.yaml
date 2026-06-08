@@ -1,0 +1,42 @@
+name: Llama 3
+version: "1.0.0"
+description: "Target profile for Meta Llama 3 models (8B, 70B, 405B) — optimised for open-source, self-hosted, and fine-tuning use cases."
+type: profile
+author: "PromptGenie Community"
+license: MIT
+
+category: general-assistant
+strengths:
+  - fully open weights — deployable on-premises with no data egress
+  - strong coding and reasoning at the 70B and 405B scales
+  - fine-tuning friendly — community LoRA and QLoRA adapters widely available
+  - good instruction following with the instruct variants
+  - low cost at 8B scale for high-throughput batch workloads
+risks:
+  - smaller models (8B) struggle with complex multi-hop reasoning
+  - safety tuning is less comprehensive than commercial frontier models
+  - performance degrades significantly without the instruct fine-tune
+  - no native function-calling in base variants (requires framework scaffolding)
+required_sections:
+  - Objective
+  - Context
+  - Output Format
+forbidden_patterns:
+  - "just do something"
+  - "be creative"
+  - "surprise me"
+stop_conditions:
+  - Stop and request clarification when the objective is ambiguous.
+  - Do not generate content that would be blocked by Meta's acceptable use policy.
+security_controls:
+  - Apply Llama Guard or an equivalent output classifier for user-facing deployments.
+  - Never serve raw base-model completions to end users without safety filtering.
+  - Audit fine-tuned variants against the original safety benchmarks before production use.
+scope_guidance: |
+  Use the instruct variant for instruction-following tasks. For the 8B model keep
+  the prompt concise and single-task. For 70B+ models multi-step instructions work
+  reliably. Include few-shot examples when output format consistency is critical.
+  Specify any fine-tune adapter name if the deployment uses a customised model.
+default_output_format: |
+  Respond in plain markdown. For structured output include a JSON schema example
+  in the prompt — base Llama 3 does not enforce schemas natively.

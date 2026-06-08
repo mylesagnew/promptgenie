@@ -1,0 +1,78 @@
+name: legal-compliance-templates
+version: "1.0.0"
+description: "Template pack for legal and compliance teams — policy review, contract analysis, GDPR DPIA, risk assessments, and regulatory gap analysis."
+type: template
+author: "PromptGenie Community"
+license: MIT
+
+templates:
+  - id: contract-analysis
+    name: Contract Analysis
+    category: legal
+    description: Structured analysis of a contract for key obligations, risks, and missing clauses.
+    sections:
+      - Objective
+      - Contract Type
+      - Parties
+      - Review Focus
+      - Governing Law
+      - Risk Appetite
+      - Output Format
+      - Acceptance Criteria
+
+  - id: gdpr-dpia
+    name: GDPR Data Protection Impact Assessment
+    category: compliance
+    description: DPIA for a new product feature or data processing activity under GDPR Article 35.
+    sections:
+      - Objective
+      - Processing Activity Description
+      - Necessity and Proportionality
+      - Data Subjects and Categories of Data
+      - Risks to Data Subjects
+      - Mitigating Controls
+      - Residual Risk Assessment
+      - DPO Consultation
+      - Output Format
+
+  - id: policy-review
+    name: Policy Review
+    category: compliance
+    description: Review an internal policy document for completeness, accuracy, and regulatory alignment.
+    sections:
+      - Objective
+      - Policy Name and Version
+      - Applicable Regulations
+      - Review Scope
+      - Gap Analysis
+      - Recommended Changes
+      - Output Format
+      - Acceptance Criteria
+
+  - id: regulatory-gap-analysis
+    name: Regulatory Gap Analysis
+    category: compliance
+    description: Identify gaps between current organisational controls and a specific regulatory framework.
+    sections:
+      - Objective
+      - Regulatory Framework
+      - Scope of Assessment
+      - Current State Summary
+      - Gap Identification
+      - Prioritised Remediation Plan
+      - Output Format
+
+  - id: third-party-risk-assessment
+    name: Third-Party Risk Assessment
+    category: compliance
+    description: Assess the risk profile of a third-party vendor or supplier.
+    sections:
+      - Objective
+      - Vendor Overview
+      - Services Provided
+      - Data Access and Sensitivity
+      - Contractual Protections
+      - Security and Compliance Certifications
+      - Risk Rating
+      - Mitigating Actions
+      - Output Format

@@ -124,7 +124,7 @@ def load_pack(pack_id: str) -> dict:
             data = safe_read_yaml(path) or {}
             # Only return if this is a context-type pack (or has context-like keys)
             pack_type = data.get("type", "context")
-            if pack_type == "context" or not data.get("scanner_rules") and not data.get("lint_rules"):
+            if pack_type == "context" or not (data.get("scanner_rules") or data.get("lint_rules")):
                 return data
     raise FileNotFoundError(
         f"Context pack not found: {pack_id}  (searched {', '.join(str(d) for d in search_dirs)})"

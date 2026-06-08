@@ -1,0 +1,89 @@
+name: customer-support-templates
+version: "1.0.0"
+description: "Template pack for customer support and success teams — ticket triage, escalation, knowledge-base articles, and CSAT analysis."
+type: template
+author: "PromptGenie Community"
+license: MIT
+
+templates:
+  - id: ticket-triage
+    name: Support Ticket Triage
+    category: support
+    description: Triage an incoming support ticket — classify severity, route to the right team, and draft an initial response.
+    sections:
+      - Objective
+      - Ticket Content
+      - Customer Tier
+      - Product Area
+      - Severity Classification
+      - Routing Decision
+      - Initial Response Draft
+      - Output Format
+
+  - id: escalation-summary
+    name: Escalation Summary
+    category: support
+    description: Concise escalation document for handing off a complex or high-priority case to a senior team.
+    sections:
+      - Objective
+      - Case Summary
+      - Customer Impact
+      - Steps Already Taken
+      - Blockers
+      - Requested Action
+      - Output Format
+
+  - id: knowledge-base-article
+    name: Knowledge Base Article
+    category: support
+    description: Draft a clear, structured knowledge-base article from a resolved support case or FAQ.
+    sections:
+      - Objective
+      - Problem Description
+      - Affected Products or Versions
+      - Root Cause
+      - Resolution Steps
+      - Prevention
+      - Related Articles
+      - Output Format
+
+  - id: csat-analysis
+    name: CSAT / NPS Analysis
+    category: support
+    description: Analyse customer satisfaction survey responses to identify themes, root causes, and improvement areas.
+    sections:
+      - Objective
+      - Survey Data Summary
+      - Scoring Distribution
+      - Positive Themes
+      - Negative Themes
+      - Root Cause Analysis
+      - Recommended Improvements
+      - Output Format
+
+  - id: onboarding-email
+    name: Customer Onboarding Email
+    category: success
+    description: Draft a personalised onboarding email sequence for a new customer.
+    sections:
+      - Objective
+      - Customer Context
+      - Product or Plan
+      - Key Goals
+      - Tone and Voice
+      - Email Sequence Steps
+      - Output Format
+
+  - id: renewal-risk-assessment
+    name: Renewal Risk Assessment
+    category: success
+    description: Assess the renewal risk of an account and recommend retention actions.
+    sections:
+      - Objective
+      - Account Overview
+      - Usage and Engagement Metrics
+      - Support History
+      - Risk Indicators
+      - Risk Rating
+      - Recommended Actions
+      - Output Format

@@ -1,0 +1,75 @@
+name: responsible-ai-context
+version: "1.0.0"
+description: "Context pack for responsible AI — bias detection, fairness, explainability, and ethical AI guidelines."
+type: context
+author: "PromptGenie Community"
+license: MIT
+
+context_items:
+  - id: fairness-principles
+    title: "AI Fairness Principles"
+    content: |
+      When designing or evaluating AI-powered prompts and systems, apply these fairness principles:
+
+      1. **Demographic parity** — Outputs should not systematically differ in quality or tone based on
+         protected attributes (gender, race, age, religion, disability, sexual orientation).
+      2. **Equitable error rates** — False positive and false negative rates should be comparable
+         across demographic groups. Monitor disaggregated metrics.
+      3. **Representation** — Training data, examples, and personas used in prompts should reflect
+         the diversity of the target user population.
+      4. **Bias audit** — Before deploying any prompt that classifies, scores, or ranks people,
+         run it against a diverse test set and document the results in a model card or DPIA.
+
+  - id: explainability-guidelines
+    title: "Explainability Guidelines"
+    content: |
+      AI outputs used to make consequential decisions must be explainable:
+
+      1. **Reasoning chain** — Request chain-of-thought or step-by-step reasoning when the output
+         will be acted on without human review.
+      2. **Confidence and uncertainty** — Prompt the model to flag low-confidence answers and
+         quantify uncertainty where possible.
+      3. **Source attribution** — For factual claims, request citations or indicate when no
+         authoritative source is available.
+      4. **Right to explanation** — Under GDPR Article 22 and similar regulations, automated
+         decisions affecting individuals must be explainable on request. Document the prompt
+         logic and any thresholds used.
+
+  - id: harm-prevention
+    title: "Harm Prevention Checklist"
+    content: |
+      Before deploying a prompt in a user-facing application, verify:
+
+      - [ ] The prompt does not solicit or generate content that demeans, stereotypes, or
+            discriminates against any group.
+      - [ ] Outputs are reviewed by a human before consequential actions are taken.
+      - [ ] The system cannot be easily manipulated to produce harmful content via adversarial input.
+      - [ ] Vulnerable users (minors, at-risk individuals) are protected by appropriate guardrails.
+      - [ ] An incident response plan exists for when the model produces harmful or incorrect output.
+      - [ ] Users are informed they are interacting with an AI system.
+
+  - id: transparency-disclosure
+    title: "Transparency and Disclosure Standards"
+    content: |
+      Responsible AI deployments must meet these disclosure standards:
+
+      1. **AI disclosure** — Users must know they are interacting with an AI. Do not design prompts
+         that instruct the model to deny being an AI.
+      2. **Capability boundaries** — Clearly communicate what the system can and cannot do.
+         Do not over-claim accuracy or reliability.
+      3. **Data usage** — Inform users how their inputs are used, stored, and whether they are
+         used for model training.
+      4. **Feedback channels** — Provide a clear mechanism for users to report incorrect,
+         harmful, or biased outputs.
+
+  - id: ethical-review-process
+    title: "Ethical Review Checklist"
+    content: |
+      For any AI feature with significant user impact, complete an ethical review covering:
+
+      1. **Stakeholder mapping** — Who is affected by this system and how?
+      2. **Power dynamics** — Does the system create or reinforce unequal power relationships?
+      3. **Reversibility** — Can decisions made by or with this system be appealed or reversed?
+      4. **Dual-use risk** — Could this system be repurposed for harm?
+      5. **Environmental impact** — Is the inference cost proportionate to the value delivered?
+      6. **Sunset plan** — What happens to user data and model artefacts when the system is retired?

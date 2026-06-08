@@ -1,0 +1,42 @@
+name: gpt-4o
+version: "1.0.0"
+description: "Target profile for OpenAI GPT-4o — optimised for multimodal, function-calling, and structured-output use cases."
+type: profile
+author: "PromptGenie Community"
+license: MIT
+
+category: general-assistant
+strengths:
+  - multimodal reasoning (text + images)
+  - JSON structured output via response_format
+  - parallel function / tool calling
+  - long-context retrieval (128 k token window)
+  - instruction following with detailed system prompts
+risks:
+  - hallucination on obscure or rapidly-changing facts
+  - verbosity when no length constraint is given
+  - inconsistent tool-call behaviour without explicit schema
+  - over-literal interpretation of ambiguous instructions
+required_sections:
+  - Objective
+  - Context
+  - Output Format
+forbidden_patterns:
+  - "use your best judgment"
+  - "figure out the rest"
+  - "do whatever makes sense"
+stop_conditions:
+  - Stop and ask for clarification if the objective cannot be inferred from the context provided.
+  - Do not invoke tools or functions beyond those explicitly listed.
+  - Do not generate images or audio unless the task explicitly requires it.
+security_controls:
+  - Validate all function-call arguments before execution.
+  - Never pass unsanitised user input directly into a tool schema.
+scope_guidance: |
+  State the exact objective, provide relevant background in the Context section,
+  and specify the desired output format (plain text, JSON schema, markdown table, etc.).
+  If using function calling, include the function schema in the prompt or system message.
+default_output_format: |
+  Respond in the format requested by the Output Format section.
+  Default to structured markdown when no format is specified.
+  For machine-readable output use JSON with an explicit schema.

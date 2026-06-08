@@ -1,0 +1,43 @@
+name: GitHub Copilot
+version: "1.0.0"
+description: "Target profile for GitHub Copilot (Chat and inline completion) — optimised for IDE-embedded code generation and review tasks."
+type: profile
+author: "PromptGenie Community"
+license: MIT
+
+category: code-assistant
+strengths:
+  - inline code completion with deep IDE context (open files, symbols, imports)
+  - repository-aware suggestions via Copilot Workspace
+  - multi-language support across all mainstream languages
+  - test generation and refactoring suggestions
+  - PR description and commit message drafting
+risks:
+  - may reproduce copyrighted training data for less common algorithms
+  - suggestions can introduce subtle security vulnerabilities (CWE-89, CWE-79)
+  - assumes the project's existing code style — inconsistent style in the repo propagates
+  - no internet access — cannot fetch documentation for very new libraries
+required_sections:
+  - Objective
+  - Language / Framework
+  - Acceptance Criteria
+forbidden_patterns:
+  - "write the whole thing"
+  - "just make it work"
+  - "add whatever you need"
+stop_conditions:
+  - Do not add new dependencies without listing them explicitly in the Acceptance Criteria.
+  - Do not modify files outside the stated scope.
+  - Stop and flag if the task requires elevated permissions or secret material.
+security_controls:
+  - Run Copilot Autofix or CodeQL on all generated code before merging.
+  - Never accept suggestions that embed hardcoded secrets, tokens, or passwords.
+  - Review SQL and shell-execution suggestions for injection risks before accepting.
+scope_guidance: |
+  Open the relevant files in the IDE before submitting the prompt so Copilot has
+  full context. Reference the exact function, class, or file to change.
+  Specify the language, framework version, and any coding conventions in use.
+  For test generation name the test framework (pytest, Jest, xUnit, etc.).
+default_output_format: |
+  Code only — no markdown fences unless asked. Include inline comments for
+  non-obvious logic. Follow the repository's existing style (indentation, naming).

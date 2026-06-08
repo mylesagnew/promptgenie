@@ -1,13 +1,15 @@
 format_version: "1"
-updated: "2026-06-07"
+updated: "2026-06-08"
 registry_url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/index.yaml
 
 packs:
+  # ── Rule packs ──────────────────────────────────────────────────────────────
   - id: owasp-llm-top10
     name: "OWASP LLM Top 10"
     version: "1.0.0"
     description: "Scanner rules mapping to the OWASP LLM Application Security Top 10 (2025 edition)"
     type: rules
+    tags: [security, owasp, scanner]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/owasp-llm-top10.yaml
     sha256: ""
 
@@ -16,13 +18,117 @@ packs:
     version: "1.0.0"
     description: "Stricter lint rules for enterprise prompt governance — placeholders, broad scope, credential references"
     type: rules
+    tags: [enterprise, lint, governance]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/enterprise-lint.yaml
     sha256: ""
 
+  # ── Profile packs ────────────────────────────────────────────────────────────
+  - id: gpt-4o
+    name: "GPT-4o Profile"
+    version: "1.0.0"
+    description: "Target profile for OpenAI GPT-4o — multimodal, function-calling, and structured-output use cases"
+    type: profile
+    tags: [profile, openai, gpt4o, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/gpt-4o.yaml
+    sha256: ""
+
+  - id: mistral
+    name: "Mistral Profile"
+    version: "1.0.0"
+    description: "Target profile for Mistral AI models — instruction-following and multilingual tasks"
+    type: profile
+    tags: [profile, mistral, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/mistral.yaml
+    sha256: ""
+
+  - id: llama3
+    name: "Llama 3 Profile"
+    version: "1.0.0"
+    description: "Target profile for Meta Llama 3 — open-source, self-hosted, and fine-tuning use cases"
+    type: profile
+    tags: [profile, meta, llama, open-source, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/llama3.yaml
+    sha256: ""
+
+  - id: github-copilot
+    name: "GitHub Copilot Profile"
+    version: "1.0.0"
+    description: "Target profile for GitHub Copilot — IDE-embedded code generation and review"
+    type: profile
+    tags: [profile, copilot, code, github, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/github-copilot.yaml
+    sha256: ""
+
+  # ── Template packs ───────────────────────────────────────────────────────────
+  - id: devops-templates
+    name: "DevOps & SRE Templates"
+    version: "1.0.0"
+    description: "Templates for DevOps and SRE teams — incident runbooks, postmortems, CI/CD reviews, on-call handoffs, capacity planning"
+    type: template
+    tags: [templates, devops, sre, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/devops-templates.yaml
+    sha256: ""
+
+  - id: data-science-templates
+    name: "Data Science & ML Templates"
+    version: "1.0.0"
+    description: "Templates for data science and ML teams — EDA, model evaluation, feature engineering, experiment design, model cards"
+    type: template
+    tags: [templates, data-science, ml, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/data-science-templates.yaml
+    sha256: ""
+
+  - id: legal-compliance-templates
+    name: "Legal & Compliance Templates"
+    version: "1.0.0"
+    description: "Templates for legal and compliance teams — contract analysis, GDPR DPIA, policy review, regulatory gap analysis, third-party risk"
+    type: template
+    tags: [templates, legal, compliance, gdpr, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/legal-compliance-templates.yaml
+    sha256: ""
+
+  - id: product-management-templates
+    name: "Product Management Templates"
+    version: "1.0.0"
+    description: "Templates for product managers — PRDs, user stories, OKR alignment, sprint retros, competitive analysis, feature prioritisation"
+    type: template
+    tags: [templates, product, agile, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/product-management-templates.yaml
+    sha256: ""
+
+  - id: customer-support-templates
+    name: "Customer Support & Success Templates"
+    version: "1.0.0"
+    description: "Templates for support and success teams — ticket triage, escalations, knowledge-base articles, CSAT analysis, onboarding, renewal risk"
+    type: template
+    tags: [templates, support, customer-success, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/customer-support-templates.yaml
+    sha256: ""
+
+  # ── Context packs ────────────────────────────────────────────────────────────
   - id: ai-safety-context
     name: "AI Safety Context Pack"
     version: "1.0.0"
     description: "Context pack for AI safety and alignment-aware prompt engineering"
     type: context
+    tags: [context, safety, alignment]
     url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/ai-safety-context.yaml
+    sha256: ""
+
+  - id: responsible-ai-context
+    name: "Responsible AI Context Pack"
+    version: "1.0.0"
+    description: "Context pack for responsible AI — bias detection, fairness, explainability, and ethical AI guidelines"
+    type: context
+    tags: [context, responsible-ai, fairness, ethics, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/responsible-ai-context.yaml
+    sha256: ""
+
+  - id: regulated-industries-context
+    name: "Regulated Industries Context Pack"
+    version: "1.0.0"
+    description: "Context pack for regulated industries — HIPAA, SOX, PCI-DSS, FCA/SEC constraints for AI prompt engineering"
+    type: context
+    tags: [context, hipaa, sox, pci-dss, compliance, community]
+    url: https://raw.githubusercontent.com/mylesagnew/promptgenie/main/promptgenie/registry/packs/regulated-industries-context.yaml
     sha256: ""

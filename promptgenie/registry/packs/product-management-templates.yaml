@@ -1,0 +1,90 @@
+name: product-management-templates
+version: "1.0.0"
+description: "Template pack for product managers — PRDs, user stories, OKR alignment, sprint retros, and competitive analysis."
+type: template
+author: "PromptGenie Community"
+license: MIT
+
+templates:
+  - id: product-requirements-document
+    name: Product Requirements Document (PRD)
+    category: product
+    description: Full PRD for a new feature or product initiative.
+    sections:
+      - Objective
+      - Problem Statement
+      - Target Users
+      - Goals and Non-Goals
+      - User Stories
+      - Functional Requirements
+      - Non-Functional Requirements
+      - Success Metrics
+      - Dependencies
+      - Open Questions
+      - Output Format
+
+  - id: user-story
+    name: User Story
+    category: product
+    description: Well-formed user story with acceptance criteria and definition of done.
+    sections:
+      - Objective
+      - Persona
+      - Job to Be Done
+      - User Story Statement
+      - Acceptance Criteria
+      - Definition of Done
+      - Output Format
+
+  - id: okr-alignment
+    name: OKR Alignment Review
+    category: strategy
+    description: Evaluate whether a proposed initiative aligns with current OKRs and identify coverage gaps.
+    sections:
+      - Objective
+      - Current OKRs
+      - Proposed Initiative
+      - Alignment Analysis
+      - Coverage Gaps
+      - Recommended Adjustments
+      - Output Format
+
+  - id: sprint-retrospective
+    name: Sprint Retrospective Summary
+    category: agile
+    description: Structured retrospective summary from raw notes — what went well, what didn't, action items.
+    sections:
+      - Objective
+      - Sprint Summary
+      - What Went Well
+      - What Could Be Improved
+      - Root Cause Analysis
+      - Action Items
+      - Output Format
+
+  - id: competitive-analysis
+    name: Competitive Analysis
+    category: strategy
+    description: Structured analysis of competitors for a product area or feature set.
+    sections:
+      - Objective
+      - Product Area
+      - Competitors
+      - Comparison Criteria
+      - Strengths and Weaknesses
+      - Differentiation Opportunities
+      - Strategic Recommendations
+      - Output Format
+
+  - id: feature-prioritisation
+    name: Feature Prioritisation Framework
+    category: product
+    description: Prioritise a backlog of features using a structured scoring framework (RICE, MoSCoW, or custom).
+    sections:
+      - Objective
+      - Feature Candidates
+      - Prioritisation Framework
+      - Scoring Criteria
+      - Constraints
+      - Ranked Output
+      - Output Format

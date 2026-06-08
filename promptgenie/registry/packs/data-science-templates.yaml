@@ -1,0 +1,92 @@
+name: data-science-templates
+version: "1.0.0"
+description: "Template pack for data science and ML teams — EDA, model evaluation, feature engineering, experiment design, and model cards."
+type: template
+author: "PromptGenie Community"
+license: MIT
+
+templates:
+  - id: exploratory-data-analysis
+    name: Exploratory Data Analysis
+    category: data-science
+    description: Systematic EDA of a dataset — summary statistics, distributions, correlations, and quality issues.
+    sections:
+      - Objective
+      - Dataset Description
+      - Target Variable
+      - Analysis Scope
+      - Quality Checks
+      - Output Format
+      - Acceptance Criteria
+
+  - id: model-evaluation
+    name: Model Evaluation Report
+    category: ml
+    description: Comprehensive evaluation of a trained ML model — metrics, error analysis, fairness checks, and deployment readiness.
+    sections:
+      - Objective
+      - Model Overview
+      - Evaluation Dataset
+      - Metrics and Thresholds
+      - Error Analysis
+      - Fairness and Bias Checks
+      - Deployment Readiness
+      - Output Format
+
+  - id: feature-engineering
+    name: Feature Engineering Plan
+    category: data-science
+    description: Design and document feature engineering decisions for a modelling task.
+    sections:
+      - Objective
+      - Dataset Overview
+      - Target Variable
+      - Candidate Features
+      - Transformation Strategy
+      - Validation Approach
+      - Output Format
+      - Acceptance Criteria
+
+  - id: experiment-design
+    name: ML Experiment Design
+    category: ml
+    description: Design a reproducible machine learning experiment with clear hypotheses and evaluation criteria.
+    sections:
+      - Objective
+      - Hypothesis
+      - Baseline
+      - Experimental Conditions
+      - Dataset Split Strategy
+      - Evaluation Metrics
+      - Success Criteria
+      - Reproducibility Controls
+      - Output Format
+
+  - id: model-card
+    name: Model Card
+    category: ml
+    description: Structured model card documenting intended use, performance, limitations, and ethical considerations.
+    sections:
+      - Objective
+      - Model Summary
+      - Intended Use
+      - Out-of-Scope Use
+      - Training Data
+      - Evaluation Results
+      - Limitations
+      - Fairness Considerations
+      - Output Format
+
+  - id: data-pipeline-review
+    name: Data Pipeline Review
+    category: data-engineering
+    description: Review a data pipeline for correctness, efficiency, data quality, and observability.
+    sections:
+      - Objective
+      - Pipeline Overview
+      - Data Sources
+      - Transformation Logic
+      - Review Focus
+      - Quality and Observability Gaps
+      - Output Format
+      - Acceptance Criteria

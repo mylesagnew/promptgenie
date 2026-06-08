@@ -716,13 +716,24 @@ promptgenie pack update
 promptgenie pack dirs
 ```
 
-**Built-in starter packs (shipped with PromptGenie, no network required):**
+**Built-in packs (shipped with PromptGenie, no network required — 14 total):**
 
 | Pack ID | Type | Description |
 |---|---|---|
 | `owasp-llm-top10` | rules | OWASP LLM Top 10 scanner rules (2025 edition) |
 | `enterprise-lint` | rules | Enterprise prompt governance lint rules |
+| `gpt-4o` | profile | OpenAI GPT-4o — multimodal, function-calling, structured output |
+| `mistral` | profile | Mistral AI — instruction-following and multilingual tasks |
+| `llama3` | profile | Meta Llama 3 — open-source / self-hosted / fine-tuning |
+| `github-copilot` | profile | GitHub Copilot — IDE-embedded code generation |
+| `devops-templates` | template | DevOps & SRE — runbooks, postmortems, CI/CD, on-call handoffs |
+| `data-science-templates` | template | Data Science & ML — EDA, model eval, experiment design, model cards |
+| `legal-compliance-templates` | template | Legal & Compliance — contracts, GDPR DPIA, regulatory gap analysis |
+| `product-management-templates` | template | Product Management — PRD, user stories, OKRs, retros |
+| `customer-support-templates` | template | Customer Support & Success — triage, escalation, KB articles |
 | `ai-safety-context` | context | AI safety context pack for alignment-aware prompting |
+| `responsible-ai-context` | context | Responsible AI — fairness, explainability, harm prevention |
+| `regulated-industries-context` | context | Regulated industries — HIPAA, SOX, PCI-DSS, FCA/SEC |
 
 **Enable registry packs via config:**
 
@@ -1062,11 +1073,22 @@ promptgenie/
 │   ├── registry.py             # Pack registry — remote index, install, update, rule loading
 │   └── formatters.py           # Structured output — JSON and SARIF v2.1.0
 ├── registry/
-│   ├── index.yaml              # Built-in registry index (3 starter packs)
+│   ├── index.yaml              # Built-in registry index (14 packs)
 │   └── packs/
-│       ├── owasp-llm-top10.yaml        # OWASP LLM Top 10 scanner rules
-│       ├── enterprise-lint.yaml        # Enterprise governance lint rules
-│       └── ai-safety-context.yaml      # AI safety context pack
+│       ├── owasp-llm-top10.yaml            # OWASP LLM Top 10 scanner rules
+│       ├── enterprise-lint.yaml            # Enterprise governance lint rules
+│       ├── gpt-4o.yaml                     # OpenAI GPT-4o profile
+│       ├── mistral.yaml                    # Mistral AI profile
+│       ├── llama3.yaml                     # Meta Llama 3 profile
+│       ├── github-copilot.yaml             # GitHub Copilot profile
+│       ├── devops-templates.yaml           # DevOps & SRE templates
+│       ├── data-science-templates.yaml     # Data Science & ML templates
+│       ├── legal-compliance-templates.yaml # Legal & Compliance templates
+│       ├── product-management-templates.yaml # Product Management templates
+│       ├── customer-support-templates.yaml # Customer Support templates
+│       ├── ai-safety-context.yaml          # AI safety context pack
+│       ├── responsible-ai-context.yaml     # Responsible AI context pack
+│       └── regulated-industries-context.yaml # Regulated industries context
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
@@ -1165,13 +1187,13 @@ promptgenie/
 ### P2 — Scaling and enterprise readiness
 
 - [ ] **VS Code / Cursor extension** — inline lint and scan as you write prompts
-- [ ] **Community profile and template packs** — installable packs for more stacks, models, and domains
+- [x] **Community profile and template packs** — 14 built-in registry packs: 4 model profiles (`gpt-4o`, `mistral`, `llama3`, `github-copilot`), 5 domain template packs (DevOps/SRE, Data Science/ML, Legal/Compliance, Product Management, Customer Support), 3 context packs (AI Safety, Responsible AI, Regulated Industries), 2 rule packs (OWASP LLM Top 10, Enterprise Lint); all tagged for search; installable and updatable via `promptgenie pack install / update`
 - [x] **Secret scanning for the repo** — `detect-secrets` (SHA-pinned, v1.5.0) wired into pre-commit hooks; `.secrets.baseline` committed; runs on every staged commit
 - [x] **SBOM and release provenance** — tag-triggered `release.yml` workflow: version consistency check, full test/lint/security gate, `uv build`, CycloneDX SBOM (`sbom.cyclonedx.json`), PyPI Trusted Publishing via GitHub OIDC (no stored token), GitHub artifact attestations (`actions/attest-build-provenance`), GitHub Release with wheel + sdist + SBOM attached; requires protected `release` environment
 - [x] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR and weekly schedule; uploads SARIF to GitHub Security tab _(SecDevOps review: LOW — improves external trust and OpenSSF Scorecard rating)_
 - [x] **Dependabot** — `.github/dependabot.yml` configured for weekly automated PRs on `uv` Python dependencies (grouped dev deps) and `github-actions` versions; vulnerability alerting enabled
 - [x] **OpenSSF Scorecard** — weekly scheduled Scorecard workflow; SARIF uploaded to GitHub Security tab via `ossf/scorecard-action`; `publish_results: true` for public badge _(SecDevOps review: LOW — baseline for external trust signals)_
-- [x] **Plugin/profile registry** — versioned remote rule and context packs; `promptgenie pack update/install/search/dirs`; `~/.promptgenie/registry/packs/` user install dir; `rules_dirs` config for custom rule directories; `enabled_rules` whitelist mode; `disabled_rules` blacklist; severity overrides; expiring allowlist entries (`expires`, `reason`); 3 built-in starter packs (`owasp-llm-top10`, `enterprise-lint`, `ai-safety-context`); SHA-256 checksum verification on downloads; stdlib `urllib.request` only — no new deps
+- [x] **Plugin/profile registry** — versioned remote rule and context packs; `promptgenie pack update/install/search/dirs`; `~/.promptgenie/registry/packs/` user install dir; `rules_dirs` config for custom rule directories; `enabled_rules` whitelist mode; `disabled_rules` blacklist; severity overrides; expiring allowlist entries (`expires`, `reason`); 14 built-in packs (2 rule, 4 profile, 5 template, 3 context); SHA-256 checksum verification on downloads; stdlib `urllib.request` only — no new deps
 - [x] **Container image** — minimal non-root `python:3.12-slim` Dockerfile; dedicated `promptgenie` user (uid 1001); `.dockerignore` keeps image lean; `benchmark` and `tokenizer` extras included
 - [x] **Benchmark model abstraction** — `ModelProvider` protocol decouples benchmarker from Anthropic SDK; `AnthropicProvider` is the built-in implementation; pass any `provider=` to `run_benchmark()`; `api_key` still works as before; 12 new protocol tests _(SecDevOps review: MEDIUM — hard-coded Anthropic dependency limits adoption and evaluation auditability)_
 

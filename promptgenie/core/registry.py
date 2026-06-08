@@ -39,6 +39,7 @@ Network access
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import tempfile
 import urllib.error
@@ -184,9 +185,12 @@ def _download_to_temp(url: str, timeout: int = 30) -> Path:
     """Download *url* to a temp file and return its path."""
     with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
         data = resp.read()
-    tmp = Path(tempfile.mktemp(suffix=".yaml"))  # noqa: S306
-    tmp.write_bytes(data)
-    return tmp
+    fd, tmp_str = tempfile.mkstemp(suffix=".yaml")
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
+    return Path(tmp_str)
 
 
 def install_pack(
