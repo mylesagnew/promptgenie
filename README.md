@@ -1042,7 +1042,7 @@ promptgenie/
 │   ├── benchmark.py            # benchmark command
 │   ├── workflow.py             # workflow command
 │   ├── ci.py                   # ci group (init, status)
-│   ├── pack.py                 # pack group (list, show, inject, init)
+│   ├── pack.py                 # pack group (list, show, inject, init, search, install, update, dirs)
 │   ├── targets.py              # list-targets, list-templates
 │   └── interactive.py          # guided interactive menu mode
 ├── renderers/
@@ -1059,7 +1059,14 @@ promptgenie/
 │   ├── workflow.py             # Workflow engine — staged prompt chains
 │   ├── ci.py                   # CI scaffolder — GitHub Actions + pre-commit
 │   ├── config.py               # .promptgenie.yaml config loader
+│   ├── registry.py             # Pack registry — remote index, install, update, rule loading
 │   └── formatters.py           # Structured output — JSON and SARIF v2.1.0
+├── registry/
+│   ├── index.yaml              # Built-in registry index (3 starter packs)
+│   └── packs/
+│       ├── owasp-llm-top10.yaml        # OWASP LLM Top 10 scanner rules
+│       ├── enterprise-lint.yaml        # Enterprise governance lint rules
+│       └── ai-safety-context.yaml      # AI safety context pack
 ├── profiles/
 │   ├── claude.yaml
 │   ├── claude-code.yaml
@@ -1113,7 +1120,7 @@ promptgenie/
 - [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
 - [x] `interactive` — guided menu mode: generate, adapt, lint, scan, diff, test, workflow, list in one flow
 - [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists (scoped `AllowlistEntry` format), custom vague verbs; wired into all five CLI commands with `--config` / `--no-config` flags
-- [x] Coverage gate — `fail_under = 85` enforced in CI; 445 tests, 87% coverage, 0 ruff issues across `promptgenie/` and `tests/`
+- [x] Coverage gate — `fail_under = 85` enforced in CI; 528 tests, 85.20% coverage, 0 ruff issues across `promptgenie/` and `tests/`
 - [x] CODEOWNERS — `.github/CODEOWNERS` governs all files; branch protection docs in CONTRIBUTING.md
 - [x] Adversarial scanner tests — `TestDetects` (21 caught patterns incl. Unicode normalization, split-line overrides, base64 blobs, HTML/block-comment smuggling), `TestMisses` (7 documented gaps: within-word splits, non-NFKC homoglyphs, word-spacing, synonyms, indirect reference, role-shift, markdown bold), `TestScopedAllowlist` (regression suite for fixed allowlist logic)
 - [x] Scoped scanner allowlist — `AllowlistEntry` replaces broken whole-prompt suppression; phrase matched against finding's `matched_text` only; rule-scoped entries filter by code first
@@ -1151,7 +1158,7 @@ promptgenie/
 - [x] **Least-privilege GitHub token permissions** — shipped in Wave 1 (1.0.3)
 - [x] **Improve pre-commit hooks** — `.pre-commit-config.yaml` now uses SHA-pinned upstream repos: `astral-sh/ruff-pre-commit` (ruff + ruff-format), `pre-commit/pre-commit-hooks` (check-yaml, check-toml, end-of-file-fixer, trailing-whitespace, check-merge-conflict, check-added-large-files), `Yelp/detect-secrets`; `.secrets.baseline` committed; PromptGenie local hooks retained
 - [x] **Typed result and config models** — `promptgenie/models.py` adds `Profile`, `Template`, `ContextPackMeta`, `GenerateResult`, `ValidationResult` dataclasses with `from_dict()` constructors and `validate()` methods; new `promptgenie validate` command validates profiles, templates, context packs, workflows, and prompt-test suites (exits 1 on errors); 100% model coverage
-- [ ] **Fail-closed configuration loading** — remove silent fallbacks on missing profile/template/context-pack; return explicit error by default; add `--best-effort` flag where fallback is intentional _(SecDevOps review: MEDIUM — typos produce plausible but degraded output with no warning)_
+- [x] **Fail-closed configuration loading** — remove silent fallbacks on missing profile/template/context-pack; explicit `FileNotFoundError` by default on bad `--target`, `--template`, `--config`, or workflow profile/pack; `--best-effort` flag added to `generate`, `scan`, `lint`, `adapt`, and `workflow` for pipelines where partial output is acceptable _(SecDevOps review: MEDIUM — typos produce plausible but degraded output with no warning)_
 
 ---
 
@@ -1159,12 +1166,12 @@ promptgenie/
 
 - [ ] **VS Code / Cursor extension** — inline lint and scan as you write prompts
 - [ ] **Community profile and template packs** — installable packs for more stacks, models, and domains
-- [ ] **Secret scanning for the repo** — `gitleaks` / `detect-secrets` in pre-commit and CI to prevent committing real credentials
+- [x] **Secret scanning for the repo** — `detect-secrets` (SHA-pinned, v1.5.0) wired into pre-commit hooks; `.secrets.baseline` committed; runs on every staged commit
 - [x] **SBOM and release provenance** — tag-triggered `release.yml` workflow: version consistency check, full test/lint/security gate, `uv build`, CycloneDX SBOM (`sbom.cyclonedx.json`), PyPI Trusted Publishing via GitHub OIDC (no stored token), GitHub artifact attestations (`actions/attest-build-provenance`), GitHub Release with wheel + sdist + SBOM attached; requires protected `release` environment
 - [x] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR and weekly schedule; uploads SARIF to GitHub Security tab _(SecDevOps review: LOW — improves external trust and OpenSSF Scorecard rating)_
-- [ ] **Dependabot / Renovate** — automated dependency update PRs with vulnerability alerting
+- [x] **Dependabot** — `.github/dependabot.yml` configured for weekly automated PRs on `uv` Python dependencies (grouped dev deps) and `github-actions` versions; vulnerability alerting enabled
 - [x] **OpenSSF Scorecard** — weekly scheduled Scorecard workflow; SARIF uploaded to GitHub Security tab via `ossf/scorecard-action`; `publish_results: true` for public badge _(SecDevOps review: LOW — baseline for external trust signals)_
-- [ ] **Plugin/profile registry** — versioned remote profile and rule packs with `promptgenie pack update`; custom rules directory; `enabled_rules`/`disabled_rules` config; severity overrides; expiring suppressions
+- [x] **Plugin/profile registry** — versioned remote rule and context packs; `promptgenie pack update/install/search/dirs`; `~/.promptgenie/registry/packs/` user install dir; `rules_dirs` config for custom rule directories; `enabled_rules` whitelist mode; `disabled_rules` blacklist; severity overrides; expiring allowlist entries (`expires`, `reason`); 3 built-in starter packs (`owasp-llm-top10`, `enterprise-lint`, `ai-safety-context`); SHA-256 checksum verification on downloads; stdlib `urllib.request` only — no new deps
 - [x] **Container image** — minimal non-root `python:3.12-slim` Dockerfile; dedicated `promptgenie` user (uid 1001); `.dockerignore` keeps image lean; `benchmark` and `tokenizer` extras included
 - [x] **Benchmark model abstraction** — `ModelProvider` protocol decouples benchmarker from Anthropic SDK; `AnthropicProvider` is the built-in implementation; pass any `provider=` to `run_benchmark()`; `api_key` still works as before; 12 new protocol tests _(SecDevOps review: MEDIUM — hard-coded Anthropic dependency limits adoption and evaluation auditability)_
 
@@ -1172,7 +1179,7 @@ promptgenie/
 
 ## Configuration
 
-Place a `.promptgenie.yaml` file in your project root (or any parent directory). The `scan`, `lint`, `generate`, `test`, and `diff` commands auto-discover and load it on every run.
+Place a `.promptgenie.yaml` file in your project root (or any parent directory). The `scan`, `lint`, `generate`, `adapt`, `workflow`, `test`, and `diff` commands auto-discover and load it on every run.
 
 ```yaml
 scanner:
@@ -1189,18 +1196,46 @@ scanner:
   #     rules:
   #       - PERM_005
 
+  # Expiring suppression — automatically deactivates after the ISO date.
+  # Use for time-limited exceptions (CI placeholders, short-lived tokens).
+  #   - phrase: "sk-ant-ci-placeholder"
+  #     rules:
+  #       - SEC_SECRET
+  #     expires: "2026-12-31"
+  #     reason: "CI placeholder — rotate before expiry, see ticket #456"
+
   # Disable specific rule codes entirely (no phrase check needed)
   disabled_rules:
     - SEC_007
+
+  # Whitelist mode — ONLY run these rule codes (takes precedence over disabled_rules)
+  # enabled_rules:
+  #   - SEC_SECRET
+  #   - OWASP_LLM01_001
 
   # Override the default risk level for a rule
   severity_overrides:
     PERM_005: CRITICAL
 
+  # Extra directories to load rule packs from (supports ~ expansion)
+  # Each *.yaml file is scanned for a scanner_rules key
+  # rules_dirs:
+  #   - ~/.promptgenie/registry/packs
+  #   - ./local-rules
+
 linter:
   # Disable specific lint rules
   disabled_rules:
     - TASK_003
+
+  # Whitelist mode — ONLY run these codes
+  # enabled_rules:
+  #   - TASK_001
+  #   - ENT_001
+
+  # Extra directories to load lint rule packs from
+  # rules_dirs:
+  #   - ~/.promptgenie/registry/packs
 
   # Add project-specific vague verbs beyond the built-in list
   custom_vague_verbs:
@@ -1235,14 +1270,15 @@ scanner:
 
 ### Config CLI flags
 
-All five commands (`scan`, `lint`, `generate`, `test`, `diff`) accept:
+The `scan`, `lint`, `generate`, `adapt`, and `workflow` commands all accept:
 
 | Flag | Effect |
 |---|---|
 | `--config PATH` | Load a specific config file instead of auto-discovering `.promptgenie.yaml` |
 | `--no-config` | Ignore any `.promptgenie.yaml`; run with default settings |
+| `--best-effort` | Fall back to built-in defaults on missing profile, template, or config (fail-open) |
 
-When a config file is loaded in rich output mode, its path is shown as a dim line before results. A missing or malformed `--config` file emits a warning and falls back to defaults.
+When a config file is loaded in rich output mode, its path is shown as a dim line before results. A missing or malformed `--config` file is a **fatal error** by default — pass `--best-effort` to fall back to defaults instead.
 
 Copy `.promptgenie.yaml.example` from the repo root as a starting point.
 
