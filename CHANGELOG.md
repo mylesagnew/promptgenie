@@ -10,6 +10,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.0.15] — 2026-06-08
+
+### Security / Changed (BREAKING for typo scenarios)
+
+- **Fail-closed configuration loading** — `generate`, `scan`, `lint`, `adapt`, and `workflow` commands now abort with an explicit error when a requested profile, template, or config file cannot be found, instead of silently falling back to built-in defaults and producing plausibly correct but degraded output. This was previously a MEDIUM SecDevOps finding: a typo in `--target`, `--template`, or `--config` would produce output without any warning, making mistakes invisible.
+  - `generator.generate_prompt(best_effort=False)` — raises `FileNotFoundError` on bad target/template.
+  - `adapter.adapt(best_effort=False)` — raises `FileNotFoundError` on bad from/to profile.
+  - `workflow.generate_workflow(best_effort=False)` — raises `FileNotFoundError` on bad profile or context pack.
+  - `_resolve_config()` in `scan`, `lint`, `generate` — raises on bad `--config` path instead of printing a yellow warning and continuing.
+
+### Added
+
+- **`--best-effort` flag** on `generate`, `scan`, `lint`, `adapt`, and `workflow` — restores the previous lenient fallback behaviour for pipelines where partial output is acceptable. Explicit opt-in required; not the default.
+
+### Tests
+
+- Updated `test_workflow_full.py::test_unknown_target_falls_back_gracefully` → split into two tests:
+  - `test_unknown_target_raises_by_default` — asserts `FileNotFoundError` without `best_effort`.
+  - `test_unknown_target_falls_back_with_best_effort` — asserts fallback works with `best_effort=True`.
+- 528 tests total, 85.20% coverage (above 85% gate), ruff clean.
+
+---
+
 ## [1.0.14] — 2026-06-07
 
 ### Added

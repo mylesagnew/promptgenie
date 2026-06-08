@@ -20,11 +20,24 @@ from promptgenie.renderers.rich import console
 )
 @click.option("--step", "-s", default=None, type=int, help="Show only a specific step number.")
 @click.option("--summary", is_flag=True, help="Show workflow summary only — no prompt content.")
-def workflow_cmd(workflow_file, out, step, summary):
+@click.option(
+    "--best-effort",
+    is_flag=True,
+    help=(
+        "Fall back to built-in defaults when a profile or context pack referenced in the "
+        "workflow file is not found, instead of aborting with an error. Without this flag, "
+        "unknown profile or pack names are fatal errors."
+    ),
+)
+def workflow_cmd(workflow_file, out, step, summary, best_effort):
     """Generate a staged prompt chain from a .workflow.yaml file."""
     with console.status("[bold blue]Building workflow…"):
         try:
-            result = generate_workflow(workflow_file)
+            result = generate_workflow(workflow_file, best_effort=best_effort)
+        except FileNotFoundError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            console.print("[dim]Use --best-effort to fall back to built-in defaults.[/dim]")
+            sys.exit(1)
         except WorkflowValidationError as e:
             console.print(f"[red]Workflow validation error:[/red] {e}")
             sys.exit(1)

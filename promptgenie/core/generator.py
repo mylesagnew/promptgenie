@@ -113,22 +113,40 @@ def generate_prompt(
     output_format: str | None = None,
     constraints: str | None = None,
     mode: str = "standard",
+    best_effort: bool = False,
 ) -> dict:
+    """Generate an optimised prompt.
+
+    Parameters
+    ----------
+    best_effort:
+        When *False* (default / fail-closed) a ``FileNotFoundError`` is raised if
+        the requested profile or template does not exist — typos produce an explicit
+        error instead of silently degraded output.
+
+        When *True* the old lenient behaviour is preserved: missing profile/template
+        fall back to built-in defaults so generation always succeeds.
+    """
     if not target:
         target = infer_target(task)
     if not template:
         template = infer_template(task)
 
-    try:
-        profile = load_profile(target)
-    except FileNotFoundError:
-        profile = {"name": target, "required_sections": [], "forbidden_patterns": []}
+    if best_effort:
+        try:
+            profile = load_profile(target)
+        except FileNotFoundError:
+            profile = {"name": target, "required_sections": [], "forbidden_patterns": []}
 
-    try:
-        tmpl = load_template(template)
+        try:
+            tmpl = load_template(template)
+            sections = tmpl.get("sections", [])
+        except FileNotFoundError:
+            sections = ["Objective", "Scope", "Constraints", "Acceptance Criteria", "Output Format"]
+    else:
+        profile = load_profile(target)   # raises FileNotFoundError on bad target
+        tmpl = load_template(template)   # raises FileNotFoundError on bad template
         sections = tmpl.get("sections", [])
-    except FileNotFoundError:
-        sections = ["Objective", "Scope", "Constraints", "Acceptance Criteria", "Output Format"]
 
     parts = []
 

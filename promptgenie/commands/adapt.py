@@ -28,12 +28,30 @@ from promptgenie.renderers.rich import console, delta_ab
     help="Remove agentic safety sections (stop conditions, scope, forbidden actions, etc.) "
     "when adapting to a non-agentic target. Off by default — safety sections are preserved.",
 )
-def adapt_cmd(prompt_file, from_target, to_target, out, force, show_original, strip_agentic_safety):
+@click.option(
+    "--best-effort",
+    is_flag=True,
+    help=(
+        "Fall back to empty profile stubs when --from or --to profile is not found, "
+        "instead of aborting with an error. Without this flag, unknown profile names are "
+        "fatal errors."
+    ),
+)
+def adapt_cmd(prompt_file, from_target, to_target, out, force, show_original, strip_agentic_safety, best_effort):
     """Translate a prompt from one target profile to another."""
-    with console.status("[bold blue]Adapting prompt…"):
-        result = adapt(
-            prompt_file, from_target, to_target, strip_agentic_safety=strip_agentic_safety
-        )
+    try:
+        with console.status("[bold blue]Adapting prompt…"):
+            result = adapt(
+                prompt_file,
+                from_target,
+                to_target,
+                strip_agentic_safety=strip_agentic_safety,
+                best_effort=best_effort,
+            )
+    except FileNotFoundError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        console.print("[dim]Use --best-effort to fall back to empty profile stubs.[/dim]")
+        sys.exit(1)
 
     from_name = result.source_target
     to_name = result.dest_target

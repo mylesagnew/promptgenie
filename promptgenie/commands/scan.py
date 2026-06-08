@@ -11,9 +11,15 @@ from promptgenie.renderers.rich import console, format_scan_findings
 
 
 def _resolve_config(
-    config_path: str | None, no_config: bool
+    config_path: str | None,
+    no_config: bool,
+    best_effort: bool = False,
 ) -> tuple[PromptGenieConfig, str | None]:
-    """Load config and return (cfg, config_file_path_or_None)."""
+    """Load config and return (cfg, config_file_path_or_None).
+
+    Raises ``FileNotFoundError`` / ``ValueError`` when *best_effort* is False and
+    the config file cannot be loaded (fail-closed).
+    """
     if no_config:
         return PromptGenieConfig(), None
     try:
@@ -23,8 +29,10 @@ def _resolve_config(
         found = config_path or (str(_find_config()) if _find_config() is not None else None)
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
-        console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
-        return PromptGenieConfig(), None
+        if best_effort:
+            console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+            return PromptGenieConfig(), None
+        raise
 
 
 @click.command(name="scan")
@@ -48,9 +56,22 @@ def _resolve_config(
     help="Path to .promptgenie.yaml config file.",
 )
 @click.option("--no-config", is_flag=True, help="Ignore .promptgenie.yaml; use default settings.")
-def scan_cmd(prompt_file, output_format, out, force, config_path, no_config):
+@click.option(
+    "--best-effort",
+    is_flag=True,
+    help=(
+        "Fall back to default settings when the config file cannot be loaded, "
+        "instead of aborting. Without this flag, a bad --config path is a fatal error."
+    ),
+)
+def scan_cmd(prompt_file, output_format, out, force, config_path, no_config, best_effort):
     """Scan a prompt file for security risks."""
-    cfg, cfg_file = _resolve_config(config_path, no_config)
+    try:
+        cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        console.print("[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]")
+        sys.exit(1)
     try:
         text = safe_read_text(prompt_file)
     except FileTooLargeError as e:

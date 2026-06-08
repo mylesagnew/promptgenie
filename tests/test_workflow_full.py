@@ -131,12 +131,24 @@ class TestGenerateWorkflow:
         result = generate_workflow(str(path))
         assert "Do not touch migrations" in result.steps[0].prompt_text
 
-    def test_unknown_target_falls_back_gracefully(self):
+    def test_unknown_target_raises_by_default(self):
+        """Fail-closed: unknown target is a FileNotFoundError, not silent fallback."""
+        import pytest
+
         wf = dict(SIMPLE_WORKFLOW)
         wf["target"] = "totally-unknown-model-xyz"
         wf["steps"] = [{"id": "s1", "name": "Step", "objective": "Do it", "output": "Done"}]
         path = _write_workflow(wf)
-        result = generate_workflow(str(path))
+        with pytest.raises(FileNotFoundError, match="totally-unknown-model-xyz"):
+            generate_workflow(str(path))
+
+    def test_unknown_target_falls_back_with_best_effort(self):
+        """--best-effort: unknown target produces output using built-in defaults."""
+        wf = dict(SIMPLE_WORKFLOW)
+        wf["target"] = "totally-unknown-model-xyz"
+        wf["steps"] = [{"id": "s1", "name": "Step", "objective": "Do it", "output": "Done"}]
+        path = _write_workflow(wf)
+        result = generate_workflow(str(path), best_effort=True)
         assert result.steps
 
     def test_cycle_raises_validation_error(self):

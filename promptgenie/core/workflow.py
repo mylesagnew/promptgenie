@@ -289,7 +289,18 @@ def load_workflow(workflow_path: str) -> dict:
     return cast(dict, safe_read_yaml(workflow_path))
 
 
-def generate_workflow(workflow_path: str) -> WorkflowResult:
+def generate_workflow(workflow_path: str, best_effort: bool = False) -> WorkflowResult:
+    """Generate a staged prompt chain from a workflow YAML file.
+
+    Parameters
+    ----------
+    best_effort:
+        When *False* (default / fail-closed) a ``FileNotFoundError`` is raised if
+        the target profile or context pack does not exist.
+
+        When *True* the old lenient behaviour is preserved: missing profile/pack
+        fall back to built-in defaults so generation always succeeds.
+    """
     data = load_workflow(workflow_path)
 
     name = data.get("name", "workflow")
@@ -298,22 +309,28 @@ def generate_workflow(workflow_path: str) -> WorkflowResult:
     mode = data.get("mode", "standard")
     pack_id = data.get("context_pack")
 
-    try:
-        profile = load_profile(target)
-    except FileNotFoundError:
-        profile = {
-            "name": target,
-            "required_sections": [],
-            "forbidden_patterns": [],
-            "stop_conditions": [],
-            "scope_guidance": "",
-        }
+    if best_effort:
+        try:
+            profile = load_profile(target)
+        except FileNotFoundError:
+            profile = {
+                "name": target,
+                "required_sections": [],
+                "forbidden_patterns": [],
+                "stop_conditions": [],
+                "scope_guidance": "",
+            }
+    else:
+        profile = load_profile(target)  # raises FileNotFoundError on bad target
 
     # Render context pack once (minimal mode for step injection)
     context_pack_block = ""
     if pack_id:
-        with contextlib.suppress(FileNotFoundError):
-            context_pack_block = render_pack(pack_id, mode="minimal")
+        if best_effort:
+            with contextlib.suppress(FileNotFoundError):
+                context_pack_block = render_pack(pack_id, mode="minimal")
+        else:
+            context_pack_block = render_pack(pack_id, mode="minimal")  # raises on bad pack
 
     raw_steps = data.get("steps", [])
     steps = [

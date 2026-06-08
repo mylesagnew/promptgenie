@@ -159,33 +159,48 @@ def _build_added_section(section_name: str, profile: dict) -> list[str]:
 
 
 def adapt(
-    source_path: str, from_target: str, to_target: str, strip_agentic_safety: bool = False
+    source_path: str,
+    from_target: str,
+    to_target: str,
+    strip_agentic_safety: bool = False,
+    best_effort: bool = False,
 ) -> AdaptResult:
+    """Adapt a prompt from one target profile to another.
+
+    Parameters
+    ----------
+    best_effort:
+        When *False* (default / fail-closed) a ``FileNotFoundError`` is raised if
+        either profile does not exist — typos produce an explicit error instead of
+        silently degraded output.
+
+        When *True* the old lenient behaviour is preserved: missing profiles fall
+        back to empty stubs so adaptation always succeeds.
+    """
     original_text = safe_read_text(source_path)
 
-    try:
-        from_profile = load_profile(from_target)
-    except FileNotFoundError:
-        from_profile = {
-            "name": from_target,
-            "category": "",
-            "required_sections": [],
-            "forbidden_patterns": [],
-            "stop_conditions": [],
-            "security_controls": [],
-        }
+    _empty_profile = lambda name: {  # noqa: E731
+        "name": name,
+        "category": "",
+        "required_sections": [],
+        "forbidden_patterns": [],
+        "stop_conditions": [],
+        "security_controls": [],
+    }
 
-    try:
-        to_profile = load_profile(to_target)
-    except FileNotFoundError:
-        to_profile = {
-            "name": to_target,
-            "category": "",
-            "required_sections": [],
-            "forbidden_patterns": [],
-            "stop_conditions": [],
-            "security_controls": [],
-        }
+    if best_effort:
+        try:
+            from_profile = load_profile(from_target)
+        except FileNotFoundError:
+            from_profile = _empty_profile(from_target)
+
+        try:
+            to_profile = load_profile(to_target)
+        except FileNotFoundError:
+            to_profile = _empty_profile(to_target)
+    else:
+        from_profile = load_profile(from_target)   # raises FileNotFoundError on bad target
+        to_profile = load_profile(to_target)       # raises FileNotFoundError on bad target
 
     to_name = to_profile.get("name", to_target)
     _to_required = {s.lower() for s in to_profile.get("required_sections", [])}

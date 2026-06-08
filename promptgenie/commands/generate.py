@@ -20,7 +20,9 @@ from promptgenie.renderers.rich import (
 
 
 def _resolve_config(
-    config_path: str | None, no_config: bool
+    config_path: str | None,
+    no_config: bool,
+    best_effort: bool = False,
 ) -> tuple[PromptGenieConfig, str | None]:
     if no_config:
         return PromptGenieConfig(), None
@@ -31,8 +33,11 @@ def _resolve_config(
         found = config_path or (str(_find_config()) if _find_config() is not None else None)
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
-        console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
-        return PromptGenieConfig(), None
+        if best_effort:
+            console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+            return PromptGenieConfig(), None
+        # Fail-closed: re-raise so the caller can exit with a clear message
+        raise
 
 
 @click.command()
@@ -73,6 +78,15 @@ def _resolve_config(
     help="Path to .promptgenie.yaml config file.",
 )
 @click.option("--no-config", is_flag=True, help="Ignore .promptgenie.yaml; use default settings.")
+@click.option(
+    "--best-effort",
+    is_flag=True,
+    help=(
+        "Fall back to built-in defaults when a profile, template, or config file is missing "
+        "instead of aborting with an error. Useful for pipelines where partial output is "
+        "acceptable. Without this flag, unknown --target or --template values are fatal errors."
+    ),
+)
 def generate(
     task,
     target,
@@ -88,9 +102,16 @@ def generate(
     force,
     config_path,
     no_config,
+    best_effort,
 ):
     """Generate an optimized prompt from a rough task description."""
-    cfg, cfg_file = _resolve_config(config_path, no_config)
+    try:
+        cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        console.print("[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]")
+        sys.exit(1)
+
     with console.status("[bold blue]Generating prompt…"):
         if pack:
             try:
@@ -100,15 +121,21 @@ def generate(
                 console.print(f"[red]Error:[/red] {e}")
                 sys.exit(1)
 
-        result = generate_prompt(
-            task=task,
-            target=target,
-            template=template,
-            context=context,
-            output_format=output_format,
-            constraints=constraints,
-            mode=mode,
-        )
+        try:
+            result = generate_prompt(
+                task=task,
+                target=target,
+                template=template,
+                context=context,
+                output_format=output_format,
+                constraints=constraints,
+                mode=mode,
+                best_effort=best_effort,
+            )
+        except FileNotFoundError as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            console.print("[dim]Use --best-effort to fall back to built-in defaults.[/dim]")
+            sys.exit(1)
 
     prompt_text = result["prompt"]
     score = result["score"]
