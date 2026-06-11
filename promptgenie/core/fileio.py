@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -67,20 +68,20 @@ def safe_read_text(
 ) -> str:
     """Read *path* as UTF-8 text, raising FileTooLargeError if it exceeds *max_bytes*.
 
-    Parameters
-    ----------
-    path:
-        File to read.
-    max_bytes:
-        Maximum number of bytes allowed. Defaults to MAX_PROMPT_BYTES (1 MB).
+    Pass ``"-"`` as *path* to read from stdin instead of a file.
 
     Raises
     ------
     FileTooLargeError
-        If the file size exceeds *max_bytes*.
+        If the input exceeds *max_bytes*.
     FileNotFoundError
         If the file does not exist (propagated from Path.open).
     """
+    if str(path) == "-":
+        raw = sys.stdin.buffer.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise FileTooLargeError(Path("<stdin>"), len(raw), max_bytes)
+        return raw.decode("utf-8")
     p = Path(path)
     size = p.stat().st_size
     if size > max_bytes:

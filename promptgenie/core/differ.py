@@ -1,6 +1,24 @@
+"""differ.py — prompt diff engine for PromptGenie.
+
+Core function: ``diff_prompts(a_path, b_path)`` → ``DiffResult``
+
+Output formatters
+-----------------
+``diff_to_json(result)``      → JSON string (schema_version: "1.0")
+``diff_to_markdown(result)``  → GitHub-flavoured Markdown table summary
+``diff_to_yaml(result)``      → YAML string (mirrors JSON structure)
+``build_side_by_side(result)`` → list of (a_line, b_line, status) triples
+                                 for Rich table rendering in the command layer
+"""
+
+from __future__ import annotations
+
 import difflib
+import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+import yaml
 
 from promptgenie.core.fileio import safe_read_text
 from promptgenie.core.generator import estimate_tokens, score_prompt
@@ -9,6 +27,13 @@ from promptgenie.core.scanner import ScanResult, scan
 
 if TYPE_CHECKING:
     from promptgenie.core.config import PromptGenieConfig
+
+SCHEMA_VERSION = "1.0"
+
+
+# ---------------------------------------------------------------------------
+# Data classes
+# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -82,6 +107,11 @@ class DiffResult:
         return [f for f in self.a_scan.findings if f.code not in b_codes]
 
 
+# ---------------------------------------------------------------------------
+# Section extraction and delta helpers
+# ---------------------------------------------------------------------------
+
+
 def _extract_sections(text: str) -> dict[str, list[str]]:
     """Split a prompt into sections keyed by markdown heading."""
     sections: dict[str, list[str]] = {}
@@ -118,6 +148,232 @@ def _section_deltas(a_text: str, b_text: str) -> list[SectionDelta]:
             status = "changed"
         deltas.append(SectionDelta(name=key, status=status, a_lines=a_lines, b_lines=b_lines))
     return deltas
+
+
+# ---------------------------------------------------------------------------
+# Side-by-side builder
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SideBySideRow:
+    """One row of a side-by-side diff table."""
+
+    a_line: str
+    b_line: str
+    status: str  # "equal" | "replace" | "insert" | "delete" | "header"
+
+
+def build_side_by_side(result: DiffResult) -> list[SideBySideRow]:
+    """Build a list of side-by-side rows from a ``DiffResult``.
+
+    Each ``SectionDelta`` becomes a header row followed by the line-level
+    diff of that section's content.  Unchanged sections are shown collapsed
+    (only the header).  Changed sections show all lines with diff status.
+    """
+    rows: list[SideBySideRow] = []
+
+    for delta in result.section_deltas:
+        if delta.name == "__preamble__" and not delta.a_lines and not delta.b_lines:
+            continue
+
+        display_name = delta.name if delta.name != "__preamble__" else "(preamble)"
+        rows.append(
+            SideBySideRow(
+                a_line=f"## {display_name}" if delta.name != "__preamble__" else "(preamble)",
+                b_line=f"## {display_name}" if delta.name != "__preamble__" else "(preamble)",
+                status=f"header:{delta.status}",
+            )
+        )
+
+        if delta.status == "unchanged":
+            # Show first 3 lines of unchanged content collapsed
+            for line in delta.a_lines[:3]:
+                rows.append(SideBySideRow(a_line=line, b_line=line, status="equal"))
+            if len(delta.a_lines) > 3:
+                rows.append(
+                    SideBySideRow(
+                        a_line=f"  … {len(delta.a_lines) - 3} more lines",
+                        b_line=f"  … {len(delta.b_lines) - 3} more lines",
+                        status="equal",
+                    )
+                )
+        elif delta.status == "added":
+            for line in delta.b_lines:
+                rows.append(SideBySideRow(a_line="", b_line=line, status="insert"))
+        elif delta.status == "removed":
+            for line in delta.a_lines:
+                rows.append(SideBySideRow(a_line=line, b_line="", status="delete"))
+        else:
+            # "changed" — use SequenceMatcher for line-level pairing
+            matcher = difflib.SequenceMatcher(None, delta.a_lines, delta.b_lines)
+            for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+                if tag == "equal":
+                    for a, b in zip(delta.a_lines[i1:i2], delta.b_lines[j1:j2]):
+                        rows.append(SideBySideRow(a_line=a, b_line=b, status="equal"))
+                elif tag == "replace":
+                    a_chunk = delta.a_lines[i1:i2]
+                    b_chunk = delta.b_lines[j1:j2]
+                    for a, b in zip(a_chunk, b_chunk):
+                        rows.append(SideBySideRow(a_line=a, b_line=b, status="replace"))
+                    for extra in a_chunk[len(b_chunk) :]:
+                        rows.append(SideBySideRow(a_line=extra, b_line="", status="delete"))
+                    for extra in b_chunk[len(a_chunk) :]:
+                        rows.append(SideBySideRow(a_line="", b_line=extra, status="insert"))
+                elif tag == "insert":
+                    for b in delta.b_lines[j1:j2]:
+                        rows.append(SideBySideRow(a_line="", b_line=b, status="insert"))
+                elif tag == "delete":
+                    for a in delta.a_lines[i1:i2]:
+                        rows.append(SideBySideRow(a_line=a, b_line="", status="delete"))
+
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Output formatters
+# ---------------------------------------------------------------------------
+
+
+def _diff_to_dict(result: DiffResult) -> dict:
+    """Shared data structure used by JSON and YAML serialisers."""
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "tool": "promptgenie",
+        "command": "diff",
+        "a": result.a_path,
+        "b": result.b_path,
+        "summary": {
+            "tokens": {"a": result.a_tokens, "b": result.b_tokens, "delta": result.token_delta},
+            "score": {
+                "a": result.a_score["total"],
+                "b": result.b_score["total"],
+                "delta": result.score_delta,
+            },
+            "lint_issues": {
+                "a": len(result.a_lint.issues),
+                "b": len(result.b_lint.issues),
+                "delta": result.lint_delta,
+            },
+            "security_findings": {
+                "a": len(result.a_scan.findings),
+                "b": len(result.b_scan.findings),
+                "delta": len(result.b_scan.findings) - len(result.a_scan.findings),
+            },
+        },
+        "score_breakdown": {
+            dim: {
+                "a": result.a_score["breakdown"].get(dim, 0),
+                "b": result.b_score["breakdown"].get(dim, 0),
+                "delta": result.b_score["breakdown"].get(dim, 0)
+                - result.a_score["breakdown"].get(dim, 0),
+            }
+            for dim in result.a_score.get("breakdown", {})
+        },
+        "sections": [
+            {
+                "name": d.name,
+                "status": d.status,
+            }
+            for d in result.section_deltas
+            if d.name != "__preamble__"
+        ],
+        "new_lint_issues": [
+            {"code": i.code, "severity": i.severity, "message": i.message}
+            for i in result.new_lint_issues
+        ],
+        "resolved_lint_issues": [
+            {"code": i.code, "severity": i.severity, "message": i.message}
+            for i in result.resolved_lint_issues
+        ],
+        "new_security_findings": [
+            {"code": f.code, "risk": f.risk, "message": f.message}
+            for f in result.new_security_findings
+        ],
+        "resolved_security_findings": [
+            {"code": f.code, "risk": f.risk, "message": f.message}
+            for f in result.resolved_security_findings
+        ],
+    }
+
+
+def diff_to_json(result: DiffResult) -> str:
+    """Serialise *result* as a JSON string."""
+    return json.dumps(_diff_to_dict(result), indent=2)
+
+
+def diff_to_yaml(result: DiffResult) -> str:
+    """Serialise *result* as a YAML string."""
+    return yaml.dump(_diff_to_dict(result), sort_keys=False, allow_unicode=True)
+
+
+def diff_to_markdown(result: DiffResult) -> str:
+    """Serialise *result* as a GitHub-flavoured Markdown summary."""
+    a, b = result.a_path, result.b_path
+
+    def _sign(n: int, invert: bool = False) -> str:
+        if n == 0:
+            return "—"
+        if (n > 0 and not invert) or (n < 0 and invert):
+            return f"🟢 +{n}" if n > 0 else f"🟢 {n}"
+        return f"🔴 +{n}" if n > 0 else f"🔴 {n}"
+
+    lines = [
+        f"## Diff: `{a}` → `{b}`",
+        "",
+        "### Summary",
+        "",
+        "| Metric | A | B | Delta |",
+        "|--------|---|---|-------|",
+        f"| Tokens | {result.a_tokens} | {result.b_tokens} | {_sign(result.token_delta, invert=True)} |",
+        f"| Quality score | {result.a_score['total']}/100 | {result.b_score['total']}/100 | {_sign(result.score_delta)} |",
+        f"| Lint issues | {len(result.a_lint.issues)} | {len(result.b_lint.issues)} | {_sign(result.lint_delta, invert=True)} |",
+        f"| Security findings | {len(result.a_scan.findings)} | {len(result.b_scan.findings)} | {_sign(len(result.b_scan.findings) - len(result.a_scan.findings), invert=True)} |",
+        "",
+    ]
+
+    # Section changes
+    changed_sections = [d for d in result.section_deltas if d.status != "unchanged" and d.name != "__preamble__"]
+    if changed_sections:
+        lines += ["### Section Changes", ""]
+        status_emoji = {"added": "🟢 ADDED", "removed": "🔴 REMOVED", "changed": "🟡 CHANGED"}
+        for d in changed_sections:
+            lines.append(f"- **{d.name}** — {status_emoji.get(d.status, d.status)}")
+        lines.append("")
+
+    # New lint issues
+    if result.new_lint_issues:
+        lines += ["### New Lint Issues", ""]
+        for i in result.new_lint_issues:
+            lines.append(f"- `{i.code}` **{i.severity}** — {i.message}")
+        lines.append("")
+
+    # Resolved lint issues
+    if result.resolved_lint_issues:
+        lines += ["### Resolved Lint Issues", ""]
+        for i in result.resolved_lint_issues:
+            lines.append(f"- ~~`{i.code}`~~ {i.message}")
+        lines.append("")
+
+    # Security changes
+    if result.new_security_findings:
+        lines += ["### New Security Findings", ""]
+        for f in result.new_security_findings:
+            lines.append(f"- `{f.code}` **{f.risk}** — {f.message}")
+        lines.append("")
+
+    if result.resolved_security_findings:
+        lines += ["### Resolved Security Findings", ""]
+        for f in result.resolved_security_findings:
+            lines.append(f"- ~~`{f.code}`~~ {f.message}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
 
 
 def diff_prompts(

@@ -18,13 +18,14 @@ import json
 import sys
 
 import click
-from rich.console import Console
 from rich.table import Table
 
+from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import safe_read_text
 from promptgenie.core.formatters import lint_to_sarif, scan_to_sarif
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
+from promptgenie.renderers.rich import console as _shared_console
 
 _RISK_ORDER: dict[str, int] = {
     "CRITICAL": 0,
@@ -122,7 +123,7 @@ def policy(
         except (FileNotFoundError, ValueError) as exc:
             if config_path:
                 click.echo(f"error: cannot load config {config_path!r}: {exc}", err=True)
-                sys.exit(2)
+                sys.exit(EXIT_USAGE)
             cfg = PromptGenieConfig()
 
     # ── Read prompt ────────────────────────────────────────────────────────────
@@ -130,7 +131,7 @@ def policy(
         prompt_text = safe_read_text(file)
     except (OSError, ValueError) as exc:
         click.echo(f"error: cannot read {file!r}: {exc}", err=True)
-        sys.exit(2)
+        sys.exit(EXIT_USAGE)
 
     # ── Run lint + scan ────────────────────────────────────────────────────────
     lint_result = lint(prompt_text, config=cfg.linter if cfg else None)
@@ -207,7 +208,7 @@ def policy(
         }
         click.echo(json.dumps(out, indent=2))
     else:
-        console = Console()
+        console = _shared_console
         status_icon = "✅" if passed else "❌"
         console.print(
             f"\n{status_icon}  PromptGenie Policy — [bold]{'PASSED' if passed else 'FAILED'}[/bold]"
@@ -243,4 +244,4 @@ def policy(
 
         console.print()
 
-    sys.exit(0 if passed else 1)
+    sys.exit(EXIT_OK if passed else EXIT_FAILURE)

@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, multi-file security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, and token estimation.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — and executes them end-to-end. It ships a built-in linter, multi-file security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, token estimation, full UNIX-composable pipeline, and a declarative run engine that sends prompts to any provider (Anthropic, OpenAI, Ollama, LM Studio, vLLM) with streaming, variable resolution, context assembly, policy gates, and run history.
 
 ---
 
@@ -26,8 +26,11 @@ PromptGenie makes prompts:
 - **Workflow-driven** — break complex tasks into staged prompt chains with approval gates, handoffs, and per-step scope locks
 - **CI-integrated** — GitHub Actions workflow and pre-commit hooks keep bad prompts out of your repo
 - **Machine-readable** — `--format json` and `--format sarif` on every lint and scan for CI pipelines and GitHub code scanning
+- **UNIX-composable** — every command accepts `-` to read from stdin; pipe directly into `jq`, `sarif-fmt`, or your own tools without temp files
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles, templates, and context packs versioned alongside your code
+- **Executable** — `promptgenie run spec.yaml` executes a PromptSpec end-to-end: resolves variables, assembles context, enforces policy, streams the response, and persists the run
+- **Provider-agnostic** — built-in adapters for Anthropic, OpenAI, Ollama, LM Studio, LocalAI, and vLLM; add any OpenAI-compatible endpoint with one command; no API key needed for local providers
 
 ---
 
@@ -48,8 +51,73 @@ promptgenie scan examples/auth-refactor.md
 # Lint a prompt for quality issues
 promptgenie lint examples/auth-refactor.md
 
+# Check your installation health
+promptgenie doctor
+
+# Install shell tab-completion
+promptgenie completion install zsh
+
 # Launch the guided interactive menu
 promptgenie interactive
+```
+
+**Pipe-friendly (v1.1.0+):**
+
+```bash
+# Lint from stdin, extract issues with jq
+cat prompt.md | promptgenie lint - --format json | jq '.issues[]'
+
+# Scan and feed results directly to GitHub SARIF upload
+cat prompt.md | promptgenie scan - --format sarif > findings.sarif
+
+# Side-by-side diff with markdown output
+promptgenie diff v1.md v2.md --side-by-side
+promptgenie diff v1.md v2.md --format markdown > DIFF.md
+
+# Generate with template variables
+promptgenie generate "deploy {{service}} to {{env:string:staging}}" \
+  --target claude-code --var service=api --no-input
+```
+
+**PromptSpec and run engine (v1.2.0+):**
+
+```bash
+# Install provider support (httpx + Anthropic SDK)
+pip install "promptgenie[providers]"
+
+# Scaffold a declarative PromptSpec
+promptgenie spec init code-review --target claude-code
+# → creates code-review.prompt.yaml
+
+# Validate the spec
+promptgenie spec validate code-review.prompt.yaml
+
+# Preview the assembled prompt without calling any provider
+promptgenie spec render code-review.prompt.yaml --var env=prod
+
+# Add a local Ollama provider (no API key needed)
+promptgenie provider add ollama \
+  --base-url http://localhost:11434/v1 --model llama3 --local
+promptgenie provider doctor ollama
+
+# Execute the spec end-to-end
+promptgenie run code-review.prompt.yaml --provider ollama --stream
+
+# Dry run — resolve vars, build context, no provider call
+promptgenie run code-review.prompt.yaml --dry-run --show-context
+
+# Stream to stdout and write final response to file
+promptgenie run code-review.prompt.yaml --tee response.md
+
+# NDJSON event stream (pipeline-friendly)
+promptgenie run code-review.prompt.yaml --format ndjson \
+  | jq 'select(.event=="done")'
+
+# Assemble context from git diff + all Python files
+promptgenie context build --git-diff --glob "src/**/*.py" --max-tokens 8000
+
+# Inspect how spec variables would resolve
+promptgenie vars inspect code-review.prompt.yaml --var env=prod
 ```
 
 Expected output: a structured, linted, scored prompt ready to paste into your AI tool.
@@ -204,15 +272,33 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 
 | Command | Description |
 |---|---|
-| `generate` | Build an optimised prompt from a rough task description |
+| `generate` | Build an optimised prompt from a rough task description; resolves `{{variable}}` placeholders |
 | `lint` | Check a prompt file for quality and structural issues |
 | `scan` | Scan files, directories, and zip archives for security risks; opt-in LLM semantic analysis |
 | `policy` | CI policy gate — fail the build if findings breach configurable thresholds; outputs text, JSON, or SARIF |
-| `diff` | Compare two prompt versions — token, score, section, and risk delta |
+| `diff` | Compare two prompt versions — token, score, section, and risk delta; `--side-by-side`, `--format json\|yaml\|markdown` |
 | `adapt` | Translate a prompt from one target profile to another |
-| `test` | Run a declarative prompt test suite |
+| `test` | Run a declarative prompt test suite (exits 5 on assertion failures) |
 | `benchmark` | Run a prompt against a Claude model and score the output |
 | `workflow` | Generate a staged prompt chain from a `.workflow.yaml` file |
+| `doctor` | Self-check — Python version, config, provider keys, extras, Ollama, shell completion |
+| `completion install` | Install tab-completion for zsh, bash, or fish |
+| `completion show` | Print the completion script to stdout |
+| `completion status` | Show per-shell installation state and cache freshness |
+| `completion refresh-cache` | Rebuild the dynamic completion cache |
+| **Phase 2** | |
+| `spec init` | Scaffold a new PromptSpec YAML file |
+| `spec validate` | Validate a PromptSpec against the JSON Schema |
+| `spec render` | Resolve variables and preview the assembled prompt |
+| `spec schema` | Print the PromptSpec JSON Schema |
+| `run` | Execute a PromptSpec end-to-end (vars → context → gate → send → stream) |
+| `context build` | Assemble context from files, globs, git diff, stdin, URLs |
+| `provider list` | List all configured AI providers |
+| `provider add` | Add or update a provider (Ollama, OpenAI, vLLM, LM Studio, …) |
+| `provider doctor` | Test provider reachability and configuration |
+| `provider show` | Show capabilities and config for a provider |
+| `vars list` | List `{{variable}}` placeholders declared in a spec |
+| `vars inspect` | Show resolved value + source for each variable |
 | `pack list` | List available context packs |
 | `pack show` | Preview a context pack's rendered content |
 | `pack inject` | Inject a context pack into an existing prompt file |
@@ -287,6 +373,10 @@ promptgenie lint my-prompt.md --format json
 
 # SARIF for GitHub code scanning
 promptgenie lint my-prompt.md --format sarif --out lint-results.sarif
+
+# Read from stdin — pipe-friendly
+cat my-prompt.md | promptgenie lint - --format json
+echo "Do the thing." | promptgenie lint - --format json | jq '.issues[]'
 ```
 
 **What it checks:**
@@ -320,6 +410,10 @@ Scan one or more prompt files, directories, or zip archives for security risks, 
 ```bash
 # Single file — original behaviour preserved
 promptgenie scan my-prompt.md
+
+# Read from stdin
+cat my-prompt.md | promptgenie scan -
+cat my-prompt.md | promptgenie scan - --format json | jq '.findings[]'
 
 # Entire directory (recursive)
 promptgenie scan ./prompts/
@@ -494,6 +588,9 @@ Compare two prompt versions side-by-side — tokens, quality scores, section cha
 ```bash
 promptgenie diff v1.md v2.md --target claude-code
 promptgenie diff v1.md v2.md --target claude-code --unified
+
+# Diff stdin against a saved version
+cat new-draft.md | promptgenie diff - v1.md
 ```
 
 **What it shows:**
@@ -531,6 +628,9 @@ promptgenie adapt my-prompt.md --from claude-code --to chatgpt --strip-agentic-s
 
 # Show original alongside adapted version
 promptgenie adapt my-prompt.md --from claude-code --to gemini --show-original
+
+# Adapt from stdin
+cat my-prompt.md | promptgenie adapt - --from claude-code --to cursor
 ```
 
 **What it does:**
@@ -1134,6 +1234,351 @@ promptgenie validate-profiles --no-warnings
 
 ---
 
+### `doctor`
+
+Run a self-check to verify your PromptGenie installation, environment, and provider credentials. Each check prints a pass (✓), warning (⚠), or failure (✗) with a one-line remediation hint.
+
+```bash
+# Rich terminal output (default)
+promptgenie doctor
+
+# JSON output — machine-readable, includes schema_version: "1.0"
+promptgenie doctor --format json
+
+# Pipe to jq to check a specific group
+promptgenie doctor --format json | jq '.groups[] | select(.title=="Providers")'
+```
+
+**What it checks:**
+
+| Group | Checks |
+|---|---|
+| Runtime | Python ≥ 3.10, `promptgenie` package version |
+| Configuration | `.promptgenie.yaml` config, policy files, `NO_COLOR`/`FORCE_COLOR` env vars |
+| Optional extras | `anthropic` (benchmark), `tiktoken` (tokenizer) |
+| Providers | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, local Ollama reachability |
+| Shell completion | Per-shell installation state |
+
+Hard failures exit 1; optional warnings exit 0.
+
+---
+
+### `completion`
+
+Install, inspect, or manage tab-completion for your shell.
+
+```bash
+# Install for your shell (writes script + updates RC file)
+promptgenie completion install zsh
+promptgenie completion install bash
+promptgenie completion install fish
+
+# Print the script without installing
+promptgenie completion show zsh
+
+# Check what's installed and where
+promptgenie completion status
+
+# Rebuild the dynamic completion cache (targets, templates, packs)
+promptgenie completion refresh-cache
+```
+
+After installing, restart your shell or source the RC file:
+
+```bash
+source ~/.zshrc     # zsh
+source ~/.bashrc    # bash
+exec fish           # fish
+```
+
+The dynamic completion cache is stored at `~/.cache/promptgenie/completions.json` and includes all available `--target`, `--template`, and context pack names for instant tab-completion.
+
+---
+
+### Variable resolver
+
+`generate` detects `{{variable}}` placeholders in generated prompts and resolves them from multiple sources.
+
+**Placeholder syntax:**
+
+| Syntax | Meaning |
+|---|---|
+| `{{name}}` | Required string variable, no default |
+| `{{name:type}}` | Typed variable (`string`, `int`, `float`, `bool`, `secret`) |
+| `{{name:type:default}}` | Optional variable with inline default |
+
+**Resolution order** (highest priority first):
+
+1. `--var key=value` CLI flag
+2. `--vars file.yaml` values file
+3. `PG_<UPPER_NAME>` environment variable
+4. Interactive `click.prompt` (unless `--no-input`)
+5. Inline default from the placeholder
+6. `VarResolutionError` → exits 2
+
+```bash
+# Resolve from CLI flags
+promptgenie generate "deploy {{service}} to {{env:string:staging}}" \
+  --target claude-code --var service=api --var env=prod
+
+# Resolve from a YAML file
+promptgenie generate "review {{component}}" --vars vars.yaml
+
+# Schema with types, required, allowed_values
+promptgenie generate "scan {{target_env}}" \
+  --vars-schema schema.yaml --no-input
+
+# Pipe-friendly — never prompt, exit 2 if unresolved
+cat prompt-template.md | \
+  promptgenie generate "{{task}}" --var task="auth refactor" --no-input
+```
+
+**Schema YAML** (`--vars-schema schema.yaml`):
+
+```yaml
+variables:
+  env:
+    type: string
+    required: true
+    allowed_values: [prod, staging, dev]
+    description: "Target deployment environment"
+  token:
+    type: secret
+    required: true
+  count:
+    type: int
+    default: 5
+    required: false
+```
+
+---
+
+## Phase 2 — PromptSpec and Run Engine
+
+### `spec`
+
+Manage declarative PromptSpec YAML files — the portable unit of a prompt execution.
+
+```bash
+# Scaffold a new spec
+promptgenie spec init code-review --target claude-code
+promptgenie spec init deploy-check --target ollama --out specs/deploy.yaml
+
+# Validate structure
+promptgenie spec validate my-prompt.yaml
+promptgenie spec validate my-prompt.yaml --format json | jq '.errors'
+
+# Preview the assembled prompt without calling any provider
+promptgenie spec render my-prompt.yaml --var env=prod
+promptgenie spec render my-prompt.yaml --format json | jq .prompt
+
+# Print the JSON Schema (pipe to tools, import into editors)
+promptgenie spec schema
+promptgenie spec schema --format yaml
+```
+
+**PromptSpec fields:**
+
+```yaml
+version: 1                     # must be 1
+name: code-review              # human-readable name
+target: claude-code            # target profile
+template: agentic-task         # optional named template
+mode: chat                     # chat | completion | agentic
+prompt: |                      # inline prompt (or use template:)
+  Review {{component}} in {{env}}.
+vars:                          # inline variable defaults
+  env: staging
+context:                       # context sources (assembled before sending)
+  - type: git_diff
+  - type: glob
+    pattern: "src/**/*.py"
+    max_bytes: 32768
+policy:                        # policy gate
+  - no-secrets
+provider: anthropic            # optional provider override
+model: claude-opus-4-5         # optional model override
+system_prompt: |               # injected system prompt
+  You are a senior code reviewer.
+output_contract:
+  format: markdown             # text | json | yaml | markdown | code
+  max_tokens: 2048
+run:
+  stream: true
+  timeout: 120
+  require_clean: true          # abort if git tree is dirty
+  no_history: false
+```
+
+---
+
+### `run`
+
+Execute a PromptSpec end-to-end: resolve vars → build context → security gate → render → send to provider → stream response → persist run.
+
+```bash
+# Basic run
+promptgenie run my-prompt.yaml
+
+# Dry run — resolve vars and build context without calling provider
+promptgenie run my-prompt.yaml --dry-run --show-context
+
+# Override provider and model
+promptgenie run my-prompt.yaml --provider ollama --model llama3 --stream
+
+# Pass variables
+promptgenie run my-prompt.yaml --var env=prod --var component=auth
+promptgenie run my-prompt.yaml --vars prod.yaml
+
+# Write response to file while streaming to stdout
+promptgenie run my-prompt.yaml --tee response.md
+
+# Machine-readable NDJSON event stream
+promptgenie run my-prompt.yaml --format ndjson
+promptgenie run my-prompt.yaml --format ndjson | jq 'select(.event=="done")'
+
+# Abort if working tree is dirty
+promptgenie run my-prompt.yaml --require-clean
+
+# Never prompt for variables — fail if any are unresolved
+promptgenie run my-prompt.yaml --no-input --var env=prod
+```
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Resolve vars + build context; no provider call |
+| `--stream / --no-stream` | Streaming or non-streaming |
+| `--require-clean` | Abort if git working tree is dirty |
+| `--provider NAME` | Override configured provider |
+| `--model NAME` | Override model (e.g. `gpt-4o`, `llama3`) |
+| `--timeout N` | Abort provider call after N seconds |
+| `--no-history` | Skip run persistence |
+| `--var KEY=VAL` | Inline variable (repeatable) |
+| `--vars FILE` | YAML/JSON variable file |
+| `--max-context-tokens N` | Context token budget |
+| `--context-strategy` | `manual` \| `newest` \| `smallest` \| `git-relevant` |
+| `--allow-url` | Permit URL-type context sources |
+| `--tee FILE` | Write response to file while streaming |
+| `--format text\|ndjson` | NDJSON emits `start/token/warning/error/done` events |
+| `--show-context` | Print context manifest before sending |
+
+Run history is persisted to `~/.local/share/promptgenie/runs/`.
+
+---
+
+### `context build`
+
+Assemble context from multiple sources into a single text block (for inspection or piping into other tools).
+
+```bash
+# Assemble all Python files under src/
+promptgenie context build --glob "src/**/*.py" --max-tokens 8000
+
+# Include git diff + staged changes
+promptgenie context build --git-diff --git-staged
+
+# Write to file
+promptgenie context build --file README.md --out context.md
+
+# JSON output with source manifest
+promptgenie context build --git-diff --format json | jq '.manifest'
+
+# Pipe stdin
+git diff | promptgenie context build --stdin
+
+# Manifest only (no text body)
+promptgenie context build --glob "**/*.py" --manifest-only
+```
+
+**Source types:**
+
+| Type | Flag | Description |
+|---|---|---|
+| `file` | `--file PATH` | Single file |
+| `glob` | `--glob PATTERN` | File glob (e.g. `src/**/*.py`) |
+| `stdin` | `--stdin` | Read from stdin |
+| `env` | *(via spec only)* | Environment variable value |
+| `cmd` | `--cmd "COMMAND"` | Shell command stdout |
+| `git_diff` | `--git-diff` | `git diff` output |
+| `git_staged` | `--git-staged` | `git diff --staged` output |
+| `url` | `--url URL` | HTTP GET (requires `--allow-url`) |
+
+Add `.promptignore` to your repo to exclude files from glob/file sources (same syntax as `.gitignore`).
+
+---
+
+### `provider`
+
+Manage AI provider configurations stored at `~/.config/promptgenie/providers.yaml`.
+
+```bash
+# List all configured providers
+promptgenie provider list
+promptgenie provider list --format json
+
+# Add Ollama (local — no API key)
+promptgenie provider add ollama \
+  --base-url http://localhost:11434/v1 \
+  --model llama3 --local
+
+# Add LM Studio
+promptgenie provider add lm-studio \
+  --base-url http://localhost:1234/v1 \
+  --model local-model --local
+
+# Add a custom OpenAI-compatible endpoint (vLLM, LocalAI, etc.)
+promptgenie provider add my-vllm \
+  --type openai_compat \
+  --base-url http://gpu-server:8000/v1 \
+  --model mistral-7b --local
+
+# Show provider details + capabilities
+promptgenie provider show anthropic
+promptgenie provider show ollama --format json
+
+# Test reachability
+promptgenie provider doctor ollama
+promptgenie provider doctor anthropic
+promptgenie provider doctor my-openai --format json
+
+# Remove a provider
+promptgenie provider remove old-provider --yes
+```
+
+Built-in defaults (active before `providers.yaml` exists):
+
+| Name | Type | Endpoint |
+|---|---|---|
+| `anthropic` | Anthropic Messages API | `ANTHROPIC_API_KEY` |
+| `openai` | OpenAI-compatible | `OPENAI_API_KEY` + `api.openai.com` |
+| `ollama` | OpenAI-compatible (local) | `http://localhost:11434/v1` |
+
+Install optional extras for full provider support:
+
+```bash
+pip install "promptgenie[providers]"   # httpx + anthropic SDK
+```
+
+---
+
+### `vars`
+
+Inspect variable resolution for a PromptSpec.
+
+```bash
+# List all {{variable}} placeholders in a spec
+promptgenie vars list my-prompt.yaml
+
+# Inspect how each variable would resolve (shows source: cli/file/env/default)
+promptgenie vars inspect my-prompt.yaml
+promptgenie vars inspect my-prompt.yaml --var env=prod --redacted
+promptgenie vars inspect my-prompt.yaml --vars prod.yaml --format json
+```
+
+---
+
 ## Target Profiles
 
 | ID | Name | Category |
@@ -1306,32 +1751,32 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 - [x] Registry hardening: SHA-256 checksums required, HTTPS-only, 1 MiB download cap, fail-closed YAML parsing
 - [x] VS Code / Cursor extension: inline diagnostics, status bar score, command palette
 - [x] SBOM, release provenance, CodeQL, OpenSSF Scorecard, Dependabot
-- [x] 637 tests · 85.54% coverage · 0 ruff issues · 0 mypy errors
+- [x] 858 tests · 85%+ coverage · 0 ruff issues · 0 mypy errors
 
 ---
 
 ### Phase 1 — Terminal and Pipeline Foundations
 
-- [ ] Universal stdin/stdout (`-` sentinel everywhere; no Rich panels when stdout is not a TTY)
-- [ ] Stable versioned output contracts (`schema_version: "1.0"`) on all commands
-- [ ] Strict exit code contract (`0`–`7`, `130`); centralized `PromptGenieError` handler
-- [ ] Shell completion: `promptgenie completion install zsh/bash/fish`; dynamic `--template`, `--target`, `--provider` completions
-- [ ] `promptgenie doctor` — self-check: config, providers, extras, shell completion, policy files
-- [ ] Enhanced side-by-side diff with semantic section matching; `--format markdown|json|yaml`
-- [ ] Renderer interface: `rich`, `plain`, `compact`, `json`, `yaml`, `ndjson`, `sarif`; `--color auto|always|never`; respect `NO_COLOR`
-- [ ] Interactive variable resolver: detect `{{variable}}` placeholders; `--ask`, `--no-input`, resolution order
+- [x] Universal stdin/stdout — `-` sentinel on `lint`, `scan`, `diff`, `adapt`; `safe_read_text("-")` reads stdin with same size guard; `<stdin>` label in all output formats
+- [x] Stable structured output — `schema_version: "1.0"` on all JSON outputs; `diag_console` (stderr) for diagnostics; `is_structured_mode()` suppresses banners in JSON/SARIF/YAML/NDJSON modes
+- [x] Strict exit code contract — `0` OK · `1` failure · `2` usage · `3` provider · `4` template · `5` test · `6` secrets · `7` timeout · `130` interrupted; `PromptGenieError(code, hint)`; `handle_error()` writes to stderr; SIGINT → 130
+- [x] Shell completion — `promptgenie completion install zsh|bash|fish`; `show`, `status`, `refresh-cache`; dynamic cache at `~/.cache/promptgenie/completions.json`
+- [x] `promptgenie doctor` — Python version, config, optional extras, provider keys, Ollama, shell completion; remediation hints; `--format json` with `schema_version: "1.0"`
+- [x] Side-by-side diff — `diff --side-by-side` Rich two-column table; semantic section matching; `diff --format json|yaml|markdown`
+- [x] Renderer profiles — `ColorMode` (auto|always|never); `--color` global flag; `NO_COLOR`/`FORCE_COLOR` env vars; `diag_console` separates data from diagnostics; `init_renderer()` wired into CLI group
+- [x] Interactive variable resolver — `{{name}}`, `{{name:type:default}}` placeholders; `--var`, `--vars`, `--vars-schema`, `--no-input` on `generate`; env `PG_<NAME>`; secret masking; type coercion; `VarResolutionError` exits 2
 
 ---
 
 ### Phase 2 — PromptSpec and Run Engine
 
-- [ ] Declarative PromptSpec YAML/JSON — the "Dockerfile for prompts"; `promptgenie init prompt`, `run`, `render`, `validate`, `schema`
-- [ ] `promptgenie run` — load → vars → context → lint/scan/gate → render → send → stream → persist
-- [ ] Streaming response mode: `asyncio`; NDJSON events; `--tee output.md`; `--dry-run`
-- [ ] Variable files and env binding: `--vars prod.yaml`, `--var k=v`, `--env-prefix PG_`, secret vars with redaction
-- [ ] Context builder: `file`, `glob`, `stdin`, `git_diff`, `git_staged`, `cmd`, `url`; token budget; source manifest with hashes
-- [ ] Provider abstraction: `Provider` protocol; built-ins: Anthropic, OpenAI-compatible, Ollama, LocalAI, LM Studio, vLLM
-- [ ] `promptgenie provider add|list|inspect|doctor` — first-class Ollama/local provider management
+- [x] Declarative PromptSpec YAML/JSON — `version: 1` with `name`, `target`, `template`, `mode`, `vars`, `context`, `policy`, `provider`, `model`, `output_contract`, `run`; JSON Schema at `promptgenie/schemas/promptspec.schema.json`; `spec init/render/validate/schema`
+- [x] `promptgenie run` — load spec → resolve vars → build context → secrets gate → render → send to provider → stream response → persist run; `--dry-run`, `--stream`, `--require-clean`, `--provider`, `--model`, `--timeout`, `--no-history`, `--tee`, `--format ndjson`
+- [x] Streaming response mode — `asyncio`-based; NDJSON events (`start/token/warning/error/done`); `--tee output.md` writes assembled response to file; `--format ndjson` for piping
+- [x] Variable files and env binding — `--vars prod.yaml`, `--var k=v`, `--env-prefix PG_`; secret masking; `vars list` + `vars inspect --redacted` shows source per variable
+- [x] Context builder — 8 source types: `file`, `glob`, `stdin`, `env`, `cmd`, `git_diff`, `git_staged`, `url`; `.promptignore`; 4 strategies; SHA-256 + token estimates; `context build` command
+- [x] Provider abstraction — `BaseProvider` with `async complete()` + `stream()`; `ProviderCapabilities`; `AnthropicProvider` + `OpenAICompatProvider`; config at `~/.config/promptgenie/providers.yaml`
+- [x] `promptgenie provider add/list/remove/show/doctor` — first-class Ollama/local provider management; `provider doctor` probes reachability
 
 ---
 

@@ -21,29 +21,29 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 
 | Feature | Description |
 |---|---|
-| **Universal stdin/stdout** | `-` as sentinel everywhere; `read_text_arg`/`write_text_arg` helpers; pipe-safe: errors to stderr, data to stdout; no Rich panels when stdout is not a TTY |
-| **Stable structured output** | Versioned output contracts (`schema_version: "1.0"`) on all commands; JSON, YAML, NDJSON, plain, SARIF; no banners in structured mode |
-| **Strict exit code contract** | `0` clean · `1` policy/lint/scan failure · `2` usage/config error · `3` provider/network failure · `4` template/variable error · `5` test failure · `6` secrets block · `7` timeout · `130` interrupted; centralized `PromptGenieError(code, message)` handler |
-| **Shell completion v2** | `promptgenie completion install zsh/bash/fish`; dynamic completions for `--template`, `--target`, `--provider`, `--model`, context packs, PromptSpec files, test files; cached at `~/.cache/promptgenie/completions.json` |
-| **`promptgenie doctor`** | Self-check command: Python version, config paths, provider auth, local Ollama availability, shell completion, optional extras installed, policy files; emits remediation commands |
-| **Side-by-side diff** | Extend existing `diff`; Rich `Table`/`Columns` for side-by-side; semantic section matching; output: text, markdown, JSON, YAML |
-| **Renderer profiles** | Renderer interface with `render_lint`, `render_scan`, `render_generate`, `render_diff`, `render_run`; `--color auto\|always\|never`; respect `NO_COLOR`/`FORCE_COLOR` |
-| **Interactive variable resolver** | Detect `{{variable}}` placeholders; schema (`type`, `required`, `default`, `allowed_values`, `secret`); resolution order: `--var` > `--vars file` > env > spec > config > interactive; `--no-input` exits 2 on missing required vars |
+| ~~**Universal stdin/stdout**~~ ✅ | `-` sentinel on `lint`, `scan`, `diff`, `adapt`; `safe_read_text("-")` reads stdin with 1 MB guard; `<stdin>` label in all output formats (Rich, JSON, SARIF); `diff - -` rejected; 641 tests |
+| ~~**Stable structured output**~~ ✅ | `schema_version: "1.0"` on all JSON outputs; `diag_console` (stderr) for diagnostics; `is_structured_mode()` suppresses banners; `diff --format json\|yaml\|markdown` |
+| ~~**Strict exit code contract**~~ ✅ | `EXIT_*` constants (0–7, 130); `PromptGenieError(code, hint)`; `handle_error()` → stderr; `test` exits 5; SIGINT → 130; all commands updated |
+| ~~**Shell completion v2**~~ ✅ | `promptgenie completion install zsh\|bash\|fish`; `show`, `status`, `refresh-cache`; dynamic cache at `~/.cache/promptgenie/completions.json` |
+| ~~**`promptgenie doctor`**~~ ✅ | Python version, config, extras, provider keys, Ollama, completion; `--format json` with `schema_version: "1.0"`; remediation hints; exits 1 on hard failures |
+| ~~**Side-by-side diff**~~ ✅ | `diff --side-by-side` Rich two-column table; semantic `SequenceMatcher` section pairing; `diff --format json\|yaml\|markdown` (GH-flavoured Markdown with emoji deltas) |
+| ~~**Renderer profiles**~~ ✅ | `ColorMode` enum; `--color auto\|always\|never` global flag; `NO_COLOR`/`FORCE_COLOR`; `diag_console` (stderr); `init_renderer()` in CLI group callback |
+| ~~**Interactive variable resolver**~~ ✅ | `{{name}}`, `{{name:type:default}}` placeholders; `--var`, `--vars`, `--vars-schema`, `--no-input` on `generate`; env `PG_<NAME>`; type coercion; secret masking; `VarResolutionError` exits 2 |
 
 ---
 
-### Phase 2 — PromptSpec and Run Engine
+### Phase 2 — PromptSpec and Run Engine ✅
 *Turns PromptGenie from a prompt generator into a prompt execution platform.*
 
 | Feature | Description |
 |---|---|
-| **Declarative PromptSpec** | `version: 1` YAML/JSON; fields: `name`, `target`, `template`, `mode`, `vars`, `context`, `policy`, `provider`, `output_contract`; schema at `promptgenie/schemas/promptspec.schema.json`; `promptgenie init prompt`, `render`, `validate`, `schema promptspec` |
-| **`promptgenie run`** | End-to-end execution: load spec → resolve vars → assemble context → lint/scan/policy gate → render prompt → send to provider → stream response → persist run; flags: `--dry-run`, `--stream`, `--require-clean`, `--provider`, `--model`, `--timeout`, `--no-history` |
-| **Streaming response mode** | `asyncio`-based provider stream; NDJSON events: `start`, `token`, `warning`, `tool_call`, `error`, `done`; TTY: live Markdown/plain; non-TTY: raw or NDJSON; `--tee output.md` writes final response to file while streaming to stdout |
-| **Variable files and env binding** | `--vars prod.yaml`, `--var key=val`, `--env-prefix PG_`; secret vars (`from_env: VAR_NAME`, `secret: true`) redacted in logs/history; `promptgenie vars inspect prompt.yaml --redacted` |
-| **Context builder** | Context sources: `file`, `glob`, `stdin`, `env`, `cmd`, `git_diff`, `git_staged`, `url` (policy-gated); `--max-tokens`, `--strategy newest\|smallest\|git-relevant\|manual`; respects `.promptignore`; emits source manifest with hashes and token estimates; `promptgenie context build --glob "src/**/*.py" --out context.md` |
-| **Provider abstraction** | `Provider` protocol: `async complete()`, `async stream()`; built-ins: Anthropic, OpenAI-compatible, Ollama, LocalAI, LM Studio, vLLM; capabilities: `streaming`, `structured_output`, `max_context_tokens`, `local`, `supports_tools`; config at `~/.config/promptgenie/providers.yaml` |
-| **Ollama / OpenAI-compatible support** | First-class local provider adapters; `promptgenie provider add ollama --base-url http://localhost:11434`; `promptgenie provider doctor ollama`; no API key required for local providers |
+| ~~**Declarative PromptSpec**~~ ✅ | `version: 1` YAML/JSON; fields: `name`, `target`, `template`, `mode`, `vars`, `context`, `policy`, `provider`, `output_contract`; JSON Schema at `promptgenie/schemas/promptspec.schema.json`; `spec init`, `spec render`, `spec validate`, `spec schema` |
+| ~~**`promptgenie run`**~~ ✅ | End-to-end execution: load spec → resolve vars → build context → lint/scan/policy gate → render → send to provider → stream response → persist run; `--dry-run`, `--stream`, `--require-clean`, `--provider`, `--model`, `--timeout`, `--no-history`, `--tee`, `--format ndjson` |
+| ~~**Streaming response mode**~~ ✅ | `asyncio`-based provider stream; NDJSON events: `start`, `token`, `warning`, `tool_call`, `error`, `done`; TTY: raw token stream; non-TTY: NDJSON with `--format ndjson`; `--tee output.md` writes assembled response to file |
+| ~~**Variable files and env binding**~~ ✅ | `--vars prod.yaml`, `--var key=val`, `--env-prefix PG_`; `vars list` + `vars inspect --redacted`; secrets masked; resolution source shown per variable |
+| ~~**Context builder**~~ ✅ | 8 source types: `file`, `glob`, `stdin`, `env`, `cmd`, `git_diff`, `git_staged`, `url` (policy-gated); `.promptignore`; 4 strategies: `manual`/`newest`/`smallest`/`git-relevant`; SHA-256 + token estimates; `context build --glob "src/**/*.py" --out context.md` |
+| ~~**Provider abstraction**~~ ✅ | `BaseProvider` with `async complete()` + `async stream()`; `ProviderCapabilities`; `AnthropicProvider` (SDK or httpx fallback); `OpenAICompatProvider`; config at `~/.config/promptgenie/providers.yaml`; `provider list/add/remove/show/doctor` |
+| ~~**Ollama / OpenAI-compatible support**~~ ✅ | `promptgenie provider add ollama --base-url http://localhost:11434/v1 --model llama3 --local`; `provider doctor ollama`; no API key required; LM Studio, LocalAI, vLLM all work via same adapter |
 
 ---
 
@@ -99,7 +99,7 @@ Ordered by development leverage and user adoption impact:
 
 | Rank | Feature | Example |
 |---|---|---|
-| 1 | **Universal stdin/stdout** | `cat prompt.md \| promptgenie lint - --format json` |
+| 1 | ~~**Universal stdin/stdout**~~ ✅ **Done** | `cat prompt.md \| promptgenie lint - --format json \| jq '.issues[]'` |
 | 2 | **PromptSpec declarative YAML** | `promptgenie run prompts/auth-review.promptgenie.yaml` |
 | 3 | **`promptgenie run` execution engine** | `promptgenie run prompt.yaml --provider ollama --model llama3.1` |
 | 4 | **Local-first provider support (Ollama)** | `promptgenie provider add ollama --base-url http://localhost:11434` |

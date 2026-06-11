@@ -219,10 +219,9 @@ def scan_cmd(
 
     # ── Determine single-file vs multi-file mode ──────────────────────────────
     path_list = list(paths)
-    is_single_file = (
-        len(path_list) == 1
-        and Path(path_list[0]).is_file()
-        and Path(path_list[0]).suffix.lower() != ".zip"
+    is_single_file = len(path_list) == 1 and (
+        path_list[0] == "-"
+        or (Path(path_list[0]).is_file() and Path(path_list[0]).suffix.lower() != ".zip")
     )
 
     if is_single_file:
@@ -268,6 +267,7 @@ def _run_single_file(
     llm_config: LLMAnalysisConfig,
     fail_on_severity: str | None,
 ) -> None:
+    display_name = "<stdin>" if prompt_file == "-" else prompt_file
     try:
         text = safe_read_text(prompt_file)
     except FileTooLargeError as e:
@@ -279,18 +279,18 @@ def _run_single_file(
 
     if llm_config.enabled and not llm_config.privacy_mode:
         with console.status("[bold blue]Running LLM semantic analysis…"):
-            llm_result = analyze_with_llm(text, file_path=prompt_file, config=llm_config)
+            llm_result = analyze_with_llm(text, file_path=display_name, config=llm_config)
 
     if output_format == "json":
-        output = scan_to_json(result, prompt_path=prompt_file)
+        output = scan_to_json(result, prompt_path=display_name)
         _output_or_write(output, out, force)
     elif output_format == "sarif":
-        output = scan_to_sarif(result, prompt_path=prompt_file)
+        output = scan_to_sarif(result, prompt_path=display_name)
         _output_or_write(output, out, force)
     else:
-        _render_single_rich(result, llm_result, prompt_file, cfg_file)
+        _render_single_rich(result, llm_result, display_name, cfg_file)
         if out:
-            _write_output(out, scan_to_json(result, prompt_path=prompt_file), force)
+            _write_output(out, scan_to_json(result, prompt_path=display_name), force)
 
     _exit_for_severity(
         [result],

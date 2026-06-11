@@ -11,7 +11,7 @@ from promptgenie.renderers.rich import console, delta_ab
 
 
 @click.command(name="adapt")
-@click.argument("prompt_file", type=click.Path(exists=True))
+@click.argument("prompt_file", type=click.Path())
 @click.option(
     "--from", "from_target", required=True, help="Source target profile (e.g. claude-code)."
 )

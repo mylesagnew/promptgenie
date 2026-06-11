@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://promptgenie.dev/schemas/promptspec.schema.json",
+  "title": "PromptSpec",
+  "description": "Declarative specification for a PromptGenie prompt execution unit.",
+  "type": "object",
+  "required": ["version", "name", "target"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [1],
+      "description": "Schema version — must be 1."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable name for this prompt spec."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional longer description of what this spec does."
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "PromptGenie target profile name (e.g. claude-code, chatgpt)."
+    },
+    "template": {
+      "type": "string",
+      "description": "Template name from the template registry to use as the base prompt."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["chat", "completion", "agentic"],
+      "default": "chat",
+      "description": "Execution mode."
+    },
+    "vars": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {"type": "string"},
+          {"type": "number"},
+          {"type": "boolean"},
+          {"type": "null"}
+        ]
+      },
+      "description": "Inline variable values merged with --var flags and --vars files."
+    },
+    "context": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/ContextSource"},
+      "description": "Ordered list of context sources assembled before sending to provider."
+    },
+    "policy": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Policy file paths or built-in policy names applied as a pre-send gate."
+    },
+    "provider": {
+      "type": "string",
+      "description": "Override the provider name from ~/.config/promptgenie/providers.yaml."
+    },
+    "model": {
+      "type": "string",
+      "description": "Override the model name (e.g. claude-opus-4-5, gpt-4o, llama3)."
+    },
+    "system_prompt": {
+      "type": "string",
+      "description": "System prompt injected before the assembled context+prompt."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Inline prompt text (alternative to template)."
+    },
+    "output_contract": {
+      "$ref": "#/$defs/OutputContract",
+      "description": "Expected output shape — used to validate the provider response."
+    },
+    "run": {
+      "$ref": "#/$defs/RunOptions",
+      "description": "Runtime options (timeout, retries, dry_run, stream, etc.)."
+    }
+  },
+
+  "$defs": {
+    "ContextSource": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["file", "glob", "stdin", "env", "cmd", "git_diff", "git_staged", "url"],
+          "description": "Source type."
+        },
+        "path": {"type": "string", "description": "File path (file/glob types)."},
+        "pattern": {"type": "string", "description": "Glob pattern (glob type)."},
+        "var": {"type": "string", "description": "Environment variable name (env type)."},
+        "command": {"type": "string", "description": "Shell command to run (cmd type)."},
+        "url": {"type": "string", "description": "URL to fetch (url type)."},
+        "label": {"type": "string", "description": "Optional label shown in source manifest."},
+        "max_bytes": {"type": "integer", "description": "Truncate source to this many bytes."},
+        "policy_gated": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this source requires policy approval (url/cmd types)."
+        }
+      }
+    },
+    "OutputContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["text", "json", "yaml", "markdown", "code"],
+          "description": "Expected format of the provider response."
+        },
+        "schema": {
+          "type": "object",
+          "description": "JSON Schema the response must conform to (format: json only)."
+        },
+        "max_tokens": {"type": "integer", "description": "Maximum tokens in response."},
+        "min_tokens": {"type": "integer", "description": "Minimum tokens in response."}
+      }
+    },
+    "RunOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {"type": "boolean", "default": false},
+        "stream": {"type": "boolean", "default": true},
+        "timeout": {"type": "integer", "description": "Seconds before aborting provider call."},
+        "retries": {"type": "integer", "default": 0, "description": "Retry count on provider failure."},
+        "require_clean": {
+          "type": "boolean",
+          "default": false,
+          "description": "Abort run if git working tree is dirty."
+        },
+        "no_history": {
+          "type": "boolean",
+          "default": false,
+          "description": "Do not persist this run to history."
+        }
+      }
+    }
+  }
+}

@@ -4,10 +4,11 @@ import click
 from rich.panel import Panel
 
 from promptgenie.core.config import PromptGenieConfig, load_config
+from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import FileTooLargeError, safe_read_text, safe_write_text
 from promptgenie.core.formatters import lint_to_json, lint_to_sarif
 from promptgenie.core.linter import lint
-from promptgenie.renderers.rich import console, format_lint_issues, score_color
+from promptgenie.renderers.rich import console, diag_console, format_lint_issues, is_structured_mode, score_color
 
 
 def _resolve_config(
@@ -25,13 +26,13 @@ def _resolve_config(
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
         if best_effort:
-            console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+            diag_console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
             return PromptGenieConfig(), None
         raise
 
 
 @click.command(name="lint")
-@click.argument("prompt_file", type=click.Path(exists=True))
+@click.argument("prompt_file", type=click.Path())
 @click.option(
     "--format",
     "output_format",
@@ -64,56 +65,51 @@ def lint_cmd(prompt_file, output_format, out, force, config_path, no_config, bes
     try:
         cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
     except (FileNotFoundError, ValueError) as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        console.print(
+        diag_console.print(f"[red]Error:[/red] {exc}")
+        diag_console.print(
             "[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]"
         )
-        sys.exit(1)
+        sys.exit(EXIT_USAGE)
+
+    display_name = "<stdin>" if prompt_file == "-" else prompt_file
     try:
         text = safe_read_text(prompt_file)
     except FileTooLargeError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        sys.exit(1)
+        diag_console.print(f"[red]Error:[/red] {e}")
+        sys.exit(EXIT_USAGE)
 
     result = lint(text, config=cfg.linter)
 
-    if output_format == "json":
-        output = lint_to_json(result, prompt_path=prompt_file)
+    if is_structured_mode(output_format):
+        if output_format == "json":
+            output = lint_to_json(result, prompt_path=display_name)
+        else:  # sarif
+            output = lint_to_sarif(result, prompt_path=display_name)
         if out:
             try:
                 safe_write_text(out, output, force=force)
             except FileExistsError as e:
-                console.print(f"[red]Error:[/red] {e}")
-                sys.exit(1)
-        else:
-            click.echo(output)
-    elif output_format == "sarif":
-        output = lint_to_sarif(result, prompt_path=prompt_file)
-        if out:
-            try:
-                safe_write_text(out, output, force=force)
-            except FileExistsError as e:
-                console.print(f"[red]Error:[/red] {e}")
-                sys.exit(1)
+                diag_console.print(f"[red]Error:[/red] {e}")
+                sys.exit(EXIT_USAGE)
         else:
             click.echo(output)
     else:
         if cfg_file:
-            console.print(f"[dim]Config: {cfg_file}[/dim]")
+            diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
         color = score_color(result.score)
         console.print(
             Panel(
                 format_lint_issues(result),
-                title=f"Lint Results  [bold {color}]{result.score}/100[/bold {color}]  [dim]{prompt_file}[/dim]",
+                title=f"Lint Results  [bold {color}]{result.score}/100[/bold {color}]  [dim]{display_name}[/dim]",
                 border_style="yellow",
             )
         )
         if out:
             try:
-                safe_write_text(out, lint_to_json(result, prompt_path=prompt_file), force=force)
-                console.print(f"[dim]Results saved to {out}[/dim]")
+                safe_write_text(out, lint_to_json(result, prompt_path=display_name), force=force)
+                diag_console.print(f"[dim]Results saved to {out}[/dim]")
             except FileExistsError as e:
-                console.print(f"[red]Error:[/red] {e}")
-                sys.exit(1)
+                diag_console.print(f"[red]Error:[/red] {e}")
+                sys.exit(EXIT_USAGE)
 
-    sys.exit(0 if not result.by_severity("HIGH") else 1)
+    sys.exit(EXIT_OK if not result.by_severity("HIGH") else EXIT_FAILURE)

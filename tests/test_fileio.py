@@ -1,6 +1,8 @@
 """Tests for promptgenie/core/fileio.py — safe file I/O helpers."""
 
+import io
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -209,3 +211,37 @@ class TestRoundTrip:
         safe_write_text(p, yaml.dump(data))
         result = safe_read_yaml(p)
         assert result == data
+
+
+# ---------------------------------------------------------------------------
+# safe_read_text stdin sentinel
+# ---------------------------------------------------------------------------
+
+
+class TestSafeReadTextStdin:
+    def test_dash_reads_from_stdin(self):
+        fake_stdin = io.BytesIO(b"hello from stdin")
+        with patch("promptgenie.core.fileio.sys") as mock_sys:
+            mock_sys.stdin.buffer.read.return_value = b"hello from stdin"
+            result = safe_read_text("-")
+        assert result == "hello from stdin"
+
+    def test_dash_raises_when_stdin_exceeds_limit(self):
+        oversized = b"x" * (MAX_PROMPT_BYTES + 1)
+        with patch("promptgenie.core.fileio.sys") as mock_sys:
+            mock_sys.stdin.buffer.read.return_value = oversized
+            with pytest.raises(FileTooLargeError) as exc_info:
+                safe_read_text("-")
+        assert "<stdin>" in str(exc_info.value.path)
+
+    def test_dash_respects_custom_max_bytes(self):
+        data = b"short"
+        with patch("promptgenie.core.fileio.sys") as mock_sys:
+            mock_sys.stdin.buffer.read.return_value = data
+            result = safe_read_text("-", max_bytes=10)
+        assert result == "short"
+
+    def test_non_dash_path_not_treated_as_stdin(self, tmp_path):
+        p = tmp_path / "prompt.txt"
+        p.write_text("file content", encoding="utf-8")
+        assert safe_read_text(p) == "file content"

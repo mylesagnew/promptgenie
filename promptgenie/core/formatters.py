@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from promptgenie.core.scanner import ScanResult
 
 TOOL_NAME = "promptgenie"
+SCHEMA_VERSION = "1.0"
 
 try:
     TOOL_VERSION = version("promptgenie")
@@ -60,6 +61,7 @@ RISK_TO_SARIF = {
 
 def lint_to_json(result: LintResult, prompt_path: str = "") -> str:
     data = {
+        "schema_version": SCHEMA_VERSION,
         "tool": TOOL_NAME,
         "command": "lint",
         "file": prompt_path,
@@ -83,6 +85,7 @@ def lint_to_json(result: LintResult, prompt_path: str = "") -> str:
 
 def scan_to_json(result: ScanResult, prompt_path: str = "") -> str:
     data = {
+        "schema_version": SCHEMA_VERSION,
         "tool": TOOL_NAME,
         "command": "scan",
         "file": prompt_path,
@@ -296,6 +299,7 @@ def multi_scan_to_json(
     aggregate_risk = _aggregate_risk(risk_levels)
 
     data = {
+        "schema_version": SCHEMA_VERSION,
         "tool": TOOL_NAME,
         "command": "scan",
         "file_count": len(file_results),

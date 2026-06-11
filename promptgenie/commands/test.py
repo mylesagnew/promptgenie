@@ -4,8 +4,9 @@ import click
 from rich.panel import Panel
 
 from promptgenie.core.config import PromptGenieConfig, load_config
+from promptgenie.core.errors import EXIT_OK, EXIT_TEST, EXIT_USAGE
 from promptgenie.core.tester import run_test_suite
-from promptgenie.renderers.rich import console
+from promptgenie.renderers.rich import console, diag_console
 
 
 def _resolve_config(
@@ -20,7 +21,7 @@ def _resolve_config(
         found = config_path or (str(_find_config()) if _find_config() is not None else None)
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
-        console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+        diag_console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
         return PromptGenieConfig(), None
 
 
@@ -42,12 +43,12 @@ def test_cmd(test_file, verbose, config_path, no_config):
         with console.status("[bold blue]Running tests…"):
             result = run_test_suite(test_file, config=cfg)
     except FileNotFoundError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        sys.exit(1)
+        diag_console.print(f"[red]Error:[/red] {e}")
+        sys.exit(EXIT_USAGE)
 
     console.print()
     if cfg_file:
-        console.print(f"[dim]Config: {cfg_file}[/dim]")
+        diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
 
     status_color = "green" if result.passed else "red"
     status_label = "PASSED" if result.passed else "FAILED"
@@ -72,4 +73,5 @@ def test_cmd(test_file, verbose, config_path, no_config):
                 console.print(f"      [green]PASS[/green]  [dim]{assertion.detail}[/dim]")
 
     console.print()
-    sys.exit(0 if result.passed else 1)
+    # Exit 5 (EXIT_TEST) for test assertion failures, 0 for pass
+    sys.exit(EXIT_OK if result.passed else EXIT_TEST)

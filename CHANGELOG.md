@@ -8,33 +8,237 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+*Nothing yet — next milestone is Phase 3.*
+
+---
+
+## [1.2.0] — 2026-06-11  ·  Phase 2 — PromptSpec and Run Engine
+
+Turns PromptGenie from a prompt generator into a prompt execution platform. Introduces a declarative spec format, end-to-end run pipeline, streaming responses, a multi-source context builder, and a first-class provider abstraction layer with built-in support for Anthropic, OpenAI, Ollama, and any OpenAI-compatible endpoint.
+
 ### Added
 
-- **`ROADMAP.md`** — full product roadmap document: strategic positioning, 5 delivery phases (Terminal Foundations, PromptSpec/Run Engine, SecDevOps Guardrails, Evaluation/Regression Testing, Advanced TUI/Ecosystem), top-10 highest-impact features, architecture principles, and optional extras plan. README roadmap section condensed to a phase summary with reference to ROADMAP.md.
+- **Declarative PromptSpec** (`promptgenie/core/spec.py`, `promptgenie/schemas/promptspec.schema.json`) — YAML/JSON spec format with fields: `version`, `name`, `target`, `template`, `mode`, `vars`, `context`, `policy`, `provider`, `model`, `system_prompt`, `prompt`, `output_contract`, `run`. JSON Schema at `promptgenie/schemas/promptspec.schema.json`. Full validation on load with clear per-field error messages.
 
-- **Multi-file / directory / zip scanning** — `scan` now accepts any combination of individual files, directories, and `.zip` archives in a single invocation. Directories are walked recursively; zip archives are extracted to a temp directory with full zip-slip protection before scanning. Aggregate JSON and SARIF v2.1.0 output cover all scanned files in a single document, suitable for `upload-sarif` in GitHub Actions.
+  ```yaml
+  version: 1
+  name: code-review
+  target: claude-code
+  mode: chat
+  prompt: Review {{component}} changes in {{env}}.
+  vars:
+    env: staging
+  context:
+    - type: git_diff
+    - type: glob
+      pattern: "src/**/*.py"
+  policy:
+    - no-secrets
+  output_contract:
+    format: markdown
+    max_tokens: 2048
+  run:
+    stream: true
+    timeout: 120
+    require_clean: true
+  ```
 
-- **Zip-slip protection** (`promptgenie/core/input_handler.py`) — every zip member path is validated before extraction: absolute paths, `..` traversal sequences, resolved paths that escape the extraction root, and Unix symlinks (detected via `external_attr` Unix mode bits) all trigger a hard `ZipSlipError` and skip the archive. Member count capped at 1 000.
+- **`promptgenie spec` command group** (`promptgenie/commands/spec.py`):
+  - `spec init <name>` — scaffold a new spec file (`--target`, `--out`, `--force`)
+  - `spec validate <file>` — validate structure, exit 0/2, `--format json`
+  - `spec render <file>` — resolve variables and print the assembled prompt without calling a provider (`--var`, `--vars`, `--no-input`, `--format json`, `--show-context`)
+  - `spec schema` — print the JSON Schema (`--format json|yaml`)
 
-- **Resource limits for multi-file collection** — configurable per-file byte cap (default 1 MB), total-collection byte cap (default 10 MB), and total-file count cap (default 500). Files exceeding limits are skipped with a logged reason (`too_large`, `quota_exceeded`, `wrong_suffix`).
+- **`promptgenie run`** (`promptgenie/commands/run.py`, `promptgenie/core/run_engine.py`) — end-to-end execution pipeline:
 
-- **Opt-in LLM semantic analysis** (`promptgenie/core/llm_analyzer.py`) — `scan --llm` enables a second analysis pass using an OpenAI-compatible endpoint. Off by default (no network calls without explicit opt-in). Pre-send secret redaction strips 9 secret pattern classes (OpenAI, Anthropic, Google, AWS, GitHub, Slack, generic API key/token, private key blocks) before content leaves the host. Content capped at 8 000 characters per file. `--no-external-llm` blocks all LLM network calls even when `--llm` is set (air-gap / CI privacy mode).
+  Pipeline stages: load spec → resolve vars → build context → lint/scan/policy gate → render prompt → send to provider → stream response → persist run
 
-- **New `scan` CLI flags**: `--llm`, `--no-external-llm`, `--max-files N`, `--max-bytes N`, `--max-file-bytes N`, `--fail-on-severity LEVEL` (exit 1 when any finding meets or exceeds `LOW`/`MEDIUM`/`HIGH`/`CRITICAL`), `--show-skipped`.
+  Flags:
+  | Flag | Description |
+  |---|---|
+  | `--dry-run` | Resolve vars + build context without calling provider |
+  | `--stream / --no-stream` | Streaming or non-streaming response |
+  | `--require-clean` | Abort if git working tree is dirty |
+  | `--provider NAME` | Override provider from providers.yaml |
+  | `--model NAME` | Override model (e.g. gpt-4o, llama3) |
+  | `--timeout SECONDS` | Abort provider call after N seconds |
+  | `--no-history` | Skip run persistence |
+  | `--var KEY=VAL` | Inline variable override (repeatable) |
+  | `--vars FILE` | YAML/JSON variable file |
+  | `--max-context-tokens N` | Context token budget |
+  | `--context-strategy` | `manual` \| `newest` \| `smallest` \| `git-relevant` |
+  | `--allow-url` | Permit URL-type context sources |
+  | `--tee FILE` | Write response to file while streaming to stdout |
+  | `--format text\|ndjson` | Structured NDJSON event stream |
+  | `--show-context` | Print context manifest before running |
 
-- **Multi-file formatters** (`promptgenie/core/formatters.py`) — `multi_scan_to_json()` aggregates per-file `ScanResult` and optional `LLMAnalysisResult` into a single JSON document with `file_count`, `total_findings`, `aggregate_risk`, and per-file detail. `multi_scan_to_sarif()` emits a single SARIF 2.1.0 run with all files as `artifacts` and deduplicated rules. `_aggregate_risk()` returns the highest risk level across a list.
+  ```bash
+  promptgenie run my-prompt.yaml
+  promptgenie run my-prompt.yaml --dry-run --show-context
+  promptgenie run my-prompt.yaml --provider ollama --model llama3 --stream
+  promptgenie run my-prompt.yaml --var env=prod --tee response.md
+  promptgenie run my-prompt.yaml --format ndjson | jq 'select(.event=="done")'
+  ```
 
-- **70-test suite** (`tests/test_skillspector_features.py`) — 12 test classes covering: single-file collection, directory walking, zip extraction and display-path rewriting, zip-slip rejection (absolute paths, traversal, escape, symlink), per-file/total byte caps, suffix filtering, quota enforcement, `CollectResult` properties, nonexistent path handling, LLM analysis guards (disabled, privacy mode, API error, missing package, truncation, redaction), multi-scan JSON/SARIF formatters, `_aggregate_risk()`, and all new CLI flags.
+- **Streaming response mode** — asyncio-based provider stream. NDJSON event types: `start`, `token`, `warning`, `tool_call`, `error`, `done`. TTY: raw token stream printed in-place. Non-TTY: same raw tokens or full NDJSON with `--format ndjson`. `--tee output.md` writes the final assembled response to a file while streaming to stdout.
 
-### Fixed
+- **Run history** (`promptgenie/core/history.py`) — runs persisted to `~/.local/share/promptgenie/runs/<YYYY-MM-DD>/<run-id>.ndjson` as event streams. Each file starts with a `start` event (metadata) and ends with a `done` event (duration, token counts, status). `list_runs()` and `load_run(run_id)` for programmatic access.
 
-- **2 additional coverage tests** — `test_test_cmd_verbose_shows_passing_assertions` covers the `--verbose` passing-assertion render path in `commands/test.py`; `test_lint_bad_config_path_falls_back_to_defaults` covers the `FileNotFoundError` config fallback in `commands/lint.py`.
+- **Variable files and env binding** (`promptgenie/commands/vars.py`):
+  - `vars list <spec>` — list all `{{variable}}` placeholders in a spec's prompt
+  - `vars inspect <spec>` — show resolved value + source (cli/file/env/default/unresolved) for every variable (`--var`, `--vars`, `--env-prefix`, `--redacted`, `--format json|yaml`)
+  - Secret variables (names containing "secret") masked as `***` with `--redacted`
+
+  ```bash
+  promptgenie vars list my-prompt.yaml
+  promptgenie vars inspect my-prompt.yaml --var env=prod --redacted
+  promptgenie vars inspect my-prompt.yaml --vars prod.yaml --format json
+  ```
+
+- **Context builder** (`promptgenie/core/context_builder.py`, `promptgenie/commands/context.py`) — assembles context from 8 source types: `file`, `glob`, `stdin`, `env`, `cmd`, `git_diff`, `git_staged`, `url` (policy-gated). Respects `.promptignore`. Emits a `ContextManifest` with per-source SHA-256, token estimate, and inclusion status. `--max-tokens` budget with four trimming strategies.
+
+  `promptgenie context build` command:
+  ```bash
+  promptgenie context build --glob "src/**/*.py" --max-tokens 8000
+  promptgenie context build --git-diff --git-staged --format json | jq '.manifest'
+  promptgenie context build --file README.md --out context.md
+  git diff | promptgenie context build --stdin
+  ```
+
+- **Provider abstraction** (`promptgenie/core/providers.py`) — async `BaseProvider` protocol with `complete()` and `stream()` methods. `ProviderCapabilities` dataclass with `streaming`, `structured_output`, `max_context_tokens`, `local`, `supports_tools` flags. Config at `~/.config/promptgenie/providers.yaml`. Three built-in provider types:
+  - `AnthropicProvider` — uses `anthropic` Python SDK when installed, falls back to raw `httpx`
+  - `OpenAICompatProvider` — any OpenAI chat-completions endpoint (OpenAI, Ollama, LocalAI, LM Studio, vLLM)
+
+- **`promptgenie provider` command group** (`promptgenie/commands/provider.py`):
+  - `provider list` — table of all configured providers (`--format json|yaml`)
+  - `provider add <name>` — add/update provider (`--type`, `--base-url`, `--api-key-env`, `--model`, `--local`)
+  - `provider remove <name>` — remove with confirmation
+  - `provider show <name>` — show config + capabilities
+  - `provider doctor <name>` — probe reachability (local: `/models` endpoint; cloud: API key presence)
+
+  ```bash
+  # Add Ollama (local)
+  promptgenie provider add ollama \
+    --base-url http://localhost:11434/v1 --model llama3 --local
+
+  # Add LM Studio
+  promptgenie provider add lm-studio \
+    --base-url http://localhost:1234/v1 --model local-model --local
+
+  # Test reachability
+  promptgenie provider doctor ollama
+  promptgenie provider doctor anthropic
+
+  # List all
+  promptgenie provider list
+  ```
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `promptgenie/schemas/promptspec.schema.json` | JSON Schema for PromptSpec v1 |
+| `promptgenie/core/spec.py` | PromptSpec dataclasses, loader, validator, renderer |
+| `promptgenie/core/context_builder.py` | Multi-source context assembler + `.promptignore` |
+| `promptgenie/core/providers.py` | Provider protocol, built-in adapters, config I/O |
+| `promptgenie/core/history.py` | NDJSON run persistence + query functions |
+| `promptgenie/core/run_engine.py` | End-to-end async run pipeline |
+| `promptgenie/commands/spec.py` | `spec init/render/validate/schema` |
+| `promptgenie/commands/run.py` | `run` command |
+| `promptgenie/commands/context.py` | `context build` |
+| `promptgenie/commands/provider.py` | `provider list/add/remove/show/doctor` |
+| `promptgenie/commands/vars.py` | `vars list/inspect` |
+
+### Tests
+
+858 tests, 85%+ coverage. New test files: `test_spec.py` (32), `test_context_builder.py` (26), `test_providers.py` (14), `test_run_engine.py` (21).
+
+### Dependency changes
+
+- New optional extra `[providers]`: `httpx>=0.27` + `anthropic>=0.100`
+- `httpx` enables raw HTTP fallback for Anthropic and all OpenAI-compatible providers when the SDK is not installed
+
+---
+
+## [1.1.0] — 2026-06-11  ·  Phase 1 — Terminal and Pipeline Foundations
+
+All 8 Phase 1 features shipped. PromptGenie is now a full UNIX-composable CLI with stable output contracts, strict exit codes, and self-service tooling for shell setup and health checks.
+
+### Added
+
+- **Universal stdin/stdout — `-` sentinel** (`promptgenie/core/fileio.py`) — `lint`, `scan`, `diff`, and `adapt` all accept `-` in place of a file path, reading from `sys.stdin.buffer` with the same 1 MB size guard. Display label in all output formats (Rich, JSON `"file"` field, SARIF `artifactLocation.uri`) is `<stdin>`. `diff - -` is rejected with a clear `UsageError`. `scan -` enters single-file mode. All downstream callers (`core/adapter.py`, `core/differ.py`) gain stdin support automatically via `safe_read_text`.
+
+  ```bash
+  cat prompt.md | promptgenie lint - --format json | jq '.issues[]'
+  cat prompt.md | promptgenie scan - --format sarif | upload-sarif
+  cat new-draft.md | promptgenie diff - v1.md
+  ```
+
+- **Strict exit code contract** (`promptgenie/core/errors.py`) — centralized `EXIT_*` constants and a single `PromptGenieError(message, code, hint)` exception class. `handle_error()` always writes to stderr so structured stdout output is never polluted. `install_interrupt_handler()` ensures Ctrl-C exits 130 (not 1). All commands updated.
+
+  | Code | Meaning |
+  |---|---|
+  | 0 | OK — clean run |
+  | 1 | Failure — findings / threshold exceeded |
+  | 2 | Usage / config error |
+  | 3 | Provider / network failure |
+  | 4 | Template / profile error |
+  | 5 | Test assertion failures (`promptgenie test`) |
+  | 6 | Secrets gate triggered |
+  | 7 | Timeout |
+  | 130 | Interrupted (Ctrl-C / SIGINT) |
+
+- **Stable structured output — `schema_version: "1.0"`** — added to every JSON formatter (`lint_to_json`, `scan_to_json`, `multi_scan_to_json`, `diff_to_json`, `doctor --format json`). Enables downstream parsers to version-gate on the envelope. `is_structured_mode(format)` predicate (`json|sarif|yaml|ndjson`) gates banner and status-line suppression so Rich panels never pollute piped output.
+
+- **Renderer profiles** (`promptgenie/renderers/rich.py`) — `ColorMode` enum (`auto|always|never`), `make_console(mode, stderr)` factory, `init_renderer(mode)` re-initialises both module-level singletons at startup. `diag_console` (stderr) now handles all diagnostic output (config paths, status lines, warnings) so `console` (stdout) carries only data. `NO_COLOR` / `FORCE_COLOR` env vars respected in `auto` mode. Global `--color auto|always|never` flag added to the CLI group (also reads `PG_COLOR` env var).
+
+  ```bash
+  promptgenie --color never lint prompt.md          # plain text, no ANSI
+  promptgenie --color always lint prompt.md         # force colour even in pipe
+  NO_COLOR=1 promptgenie scan prompt.md             # env-var equivalent
+  ```
+
+- **Side-by-side diff** (`promptgenie/core/differ.py` + `promptgenie/commands/diff.py`) — `--side-by-side` / `-s` renders a Rich two-column table with `SequenceMatcher`-based line pairing and colour-coded `equal|insert|delete|replace` rows. New `--format` choices for machine-readable output: `json` (`schema_version: "1.0"`), `yaml`, and `markdown` (GitHub-flavoured summary table with emoji deltas, section change list, new/resolved lint and security findings).
+
+  ```bash
+  promptgenie diff v1.md v2.md --side-by-side
+  promptgenie diff v1.md v2.md --format markdown > DIFF.md
+  promptgenie diff v1.md v2.md --format json | jq '.summary.score'
+  ```
+
+- **Interactive variable resolver** (`promptgenie/core/variables.py`) — `{{name}}`, `{{name:type}}`, `{{name:type:default}}` placeholder syntax detected in generated prompts. Resolution order: `--var key=val` CLI flag → `--vars file.yaml` → `PG_<UPPER_NAME>` env var → interactive `click.prompt` → inline default → `VarResolutionError` (exits 2). `--vars-schema schema.yaml` provides types (`string|int|float|bool|secret`), `required`, `allowed_values`, `description`. Secrets masked in display output. `--no-input` mode exits 2 immediately on any unresolved required variable.
+
+  ```bash
+  promptgenie generate "deploy {{service}} to {{env:string:staging}}" \
+    --var service=api --no-input
+  promptgenie generate "review {{component}}" --vars vars.yaml
+  ```
+
+- **`promptgenie doctor`** (`promptgenie/commands/doctor.py`) — self-check command. Checks Python ≥ 3.10, package version, `.promptgenie.yaml`, policy files, optional extras (`anthropic`, `tiktoken`), `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, local Ollama reachability, shell completion status per shell, `NO_COLOR`/`FORCE_COLOR` env vars. Hard failures (red ✗) exit 1; optional warnings (yellow ⚠) exit 0. Each failing check carries a `remediation` hint. `--format json` emits `schema_version: "1.0"` with `passed`, `failure_count`, `warning_count`, and per-group check details.
+
+  ```bash
+  promptgenie doctor
+  promptgenie doctor --format json | jq '.groups[] | select(.title=="Providers")'
+  ```
+
+- **Shell completion** (`promptgenie/commands/completion.py`) — four sub-commands:
+  - `promptgenie completion install zsh|bash|fish` — writes the shell script and appends activation to the RC file
+  - `promptgenie completion show zsh|bash|fish` — prints the script to stdout without installing
+  - `promptgenie completion status` — shows per-shell installation state and cache freshness
+  - `promptgenie completion refresh-cache` — rebuilds `~/.cache/promptgenie/completions.json` (targets, templates, context packs) for dynamic completions
+
+  Installation targets: `~/.zsh/completions/_promptgenie`, `~/.bash_completion.d/promptgenie`, `~/.config/fish/completions/promptgenie.fish`.
+
+- **128 new tests** across 6 new test files: `test_errors.py` (20), `test_variables.py` (35), `test_renderer.py` (21), `test_differ_extended.py` (27), `test_doctor.py` (14), `test_completion.py` (11).
+- **Total: 765 tests · 85%+ coverage.**
 
 ### Changed
 
-- `scan` single-file path fully preserved — when a single non-zip file is given, behaviour is identical to previous versions (no multi-file overhead, same rich output format).
-- `promptgenie/core/formatters.py` extended with `multi_scan_to_json()`, `multi_scan_to_sarif()`, and `_aggregate_risk()` — no changes to existing single-file formatters.
-- Total: **637 tests**, **85.54% coverage**.
+- `promptgenie test` exits **5** (`EXIT_TEST`) on assertion failures instead of 1 — CI pipelines can now distinguish "test failure" (`5`) from "tool error" (`1`).
+- Config/usage errors exit **2** (`EXIT_USAGE`) consistently across all commands (was inconsistently `1`).
+- Diagnostic output (config path, status spinner notices, warnings) now routes through `diag_console` (stderr) — never pollutes piped `--format json|sarif|yaml` output.
+- `diff --format` extended from `rich` only to `rich|json|yaml|markdown`.
+- `generate` gains `--var`, `--vars`, `--vars-schema`, `--no-input` flags.
 
 ---
 
@@ -511,7 +715,9 @@ Initial public release.
 
 ---
 
-[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.0.11...HEAD
+[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/mylesagnew/promptgenie/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/mylesagnew/promptgenie/compare/v1.0.11...v1.1.0
 [1.0.11]: https://github.com/mylesagnew/promptgenie/compare/v1.0.10...v1.0.11
 [1.0.10]: https://github.com/mylesagnew/promptgenie/compare/v1.0.9...v1.0.10
 [1.0.9]: https://github.com/mylesagnew/promptgenie/compare/v1.0.8...v1.0.9

@@ -7,12 +7,15 @@ from rich.table import Table
 
 from promptgenie.core.config import PromptGenieConfig, load_config
 from promptgenie.core.context_packs import render_pack
+from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_TEMPLATE, EXIT_USAGE
 from promptgenie.core.fileio import safe_write_text
 from promptgenie.core.generator import generate_prompt
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
+from promptgenie.core.variables import VarResolutionError, find_variables, parse_cli_vars, load_vars_file, resolve_variables
 from promptgenie.renderers.rich import (
     console,
+    diag_console,
     format_lint_issues,
     format_scan_findings,
     score_color,
@@ -87,6 +90,32 @@ def _resolve_config(
         "acceptable. Without this flag, unknown --target or --template values are fatal errors."
     ),
 )
+@click.option(
+    "--var",
+    "cli_vars",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Set a template variable (e.g. --var env=prod). Repeatable.",
+)
+@click.option(
+    "--vars",
+    "vars_file",
+    default=None,
+    type=click.Path(),
+    help="YAML file of variable values.",
+)
+@click.option(
+    "--vars-schema",
+    "vars_schema_file",
+    default=None,
+    type=click.Path(),
+    help="YAML schema file defining variable types, defaults, and required flags.",
+)
+@click.option(
+    "--no-input",
+    is_flag=True,
+    help="Never prompt interactively for variables; exit 2 if a required variable is unresolved.",
+)
 def generate(
     task,
     target,
@@ -103,16 +132,44 @@ def generate(
     config_path,
     no_config,
     best_effort,
+    cli_vars,
+    vars_file,
+    vars_schema_file,
+    no_input,
 ):
     """Generate an optimized prompt from a rough task description."""
     try:
         cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
     except (FileNotFoundError, ValueError) as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        console.print(
+        diag_console.print(f"[red]Error:[/red] {exc}")
+        diag_console.print(
             "[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]"
         )
-        sys.exit(1)
+        sys.exit(EXIT_USAGE)
+
+    # Resolve --var / --vars before generation
+    parsed_cli_vars = {}
+    vars_file_values = {}
+    vars_schema = {}
+    if cli_vars:
+        try:
+            parsed_cli_vars = parse_cli_vars(cli_vars)
+        except Exception as exc:
+            diag_console.print(f"[red]Error:[/red] {exc}")
+            sys.exit(EXIT_USAGE)
+    if vars_file:
+        try:
+            vars_file_values = load_vars_file(vars_file)
+        except Exception as exc:
+            diag_console.print(f"[red]Error:[/red] {exc}")
+            sys.exit(EXIT_USAGE)
+    if vars_schema_file:
+        from promptgenie.core.variables import load_schema_file
+        try:
+            vars_schema = load_schema_file(vars_schema_file)
+        except Exception as exc:
+            diag_console.print(f"[red]Error:[/red] {exc}")
+            sys.exit(EXIT_USAGE)
 
     with console.status("[bold blue]Generating prompt…"):
         if pack:
@@ -120,8 +177,8 @@ def generate(
                 pack_block = render_pack(pack, mode=mode)
                 context = (context + "\n\n" + pack_block) if context else pack_block
             except FileNotFoundError as e:
-                console.print(f"[red]Error:[/red] {e}")
-                sys.exit(1)
+                diag_console.print(f"[red]Error:[/red] {e}")
+                sys.exit(EXIT_USAGE)
 
         try:
             result = generate_prompt(
@@ -135,11 +192,29 @@ def generate(
                 best_effort=best_effort,
             )
         except FileNotFoundError as exc:
-            console.print(f"[red]Error:[/red] {exc}")
-            console.print("[dim]Use --best-effort to fall back to built-in defaults.[/dim]")
-            sys.exit(1)
+            diag_console.print(f"[red]Error:[/red] {exc}")
+            diag_console.print("[dim]Use --best-effort to fall back to built-in defaults.[/dim]")
+            sys.exit(EXIT_TEMPLATE)
 
+    # Resolve {{variable}} placeholders in the generated prompt
     prompt_text = result["prompt"]
+    if find_variables(prompt_text) or parsed_cli_vars or vars_file_values:
+        try:
+            prompt_text, resolved = resolve_variables(
+                prompt_text,
+                cli_vars=parsed_cli_vars,
+                vars_file_values=vars_file_values,
+                schema=vars_schema,
+                no_input=no_input,
+            )
+            if resolved:
+                diag_console.print(
+                    f"[dim]Variables resolved: {', '.join(f'{k}={v}' for k, v in resolved.items())}[/dim]"
+                )
+        except VarResolutionError as exc:
+            diag_console.print(f"[red]Error:[/red] {exc}")
+            diag_console.print(f"[dim]{exc.hint}[/dim]")
+            sys.exit(EXIT_USAGE)
     score = result["score"]
     tokens = result["token_estimate"]
 
@@ -168,7 +243,7 @@ def generate(
     console.print(Panel(score_table, title="Prompt Quality Score", border_style="dim"))
 
     if cfg_file:
-        console.print(f"[dim]Config: {cfg_file}[/dim]")
+        diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
 
     if not no_lint:
         lint_result = lint(prompt_text, config=cfg.linter)
@@ -197,5 +272,5 @@ def generate(
             safe_write_text(out, prompt_text, force=force)
             console.print(f"\n[green]Prompt saved to {out}[/green]")
         except FileExistsError as e:
-            console.print(f"[red]Error:[/red] {e}")
-            sys.exit(1)
+            diag_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(EXIT_USAGE)

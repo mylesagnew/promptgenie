@@ -191,7 +191,7 @@ class TestTestCommand:
                 "  - name: must fail\n    must_include:\n      - DEFINITELY_NOT_THERE\n"
             )
             result = self.runner.invoke(cli, ["test", str(suite)])
-            assert result.exit_code == 1
+            assert result.exit_code == 5  # EXIT_TEST — test assertion failures
 
 
 class TestCiCommands:
@@ -422,5 +422,5 @@ class TestConfigWiring:
                 cli,
                 ["lint", "--config", "/nonexistent/.promptgenie.yaml", str(prompt)],
             )
-            assert result.exit_code in (0, 1)
-            assert "Warning" in result.output or result.exit_code in (0, 1)
+            # EXIT_USAGE (2) when config path is invalid and no --best-effort
+            assert result.exit_code == 2
