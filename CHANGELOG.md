@@ -10,6 +10,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Added
 
+- **`ROADMAP.md`** — full product roadmap document: strategic positioning, 5 delivery phases (Terminal Foundations, PromptSpec/Run Engine, SecDevOps Guardrails, Evaluation/Regression Testing, Advanced TUI/Ecosystem), top-10 highest-impact features, architecture principles, and optional extras plan. README roadmap section condensed to a phase summary with reference to ROADMAP.md.
+
 - **Multi-file / directory / zip scanning** — `scan` now accepts any combination of individual files, directories, and `.zip` archives in a single invocation. Directories are walked recursively; zip archives are extracted to a temp directory with full zip-slip protection before scanning. Aggregate JSON and SARIF v2.1.0 output cover all scanned files in a single document, suitable for `upload-sarif` in GitHub Actions.
 
 - **Zip-slip protection** (`promptgenie/core/input_handler.py`) — every zip member path is validated before extraction: absolute paths, `..` traversal sequences, resolved paths that escape the extraction root, and Unix symlinks (detected via `external_attr` Unix mode bits) all trigger a hard `ZipSlipError` and skip the archive. Member count capped at 1 000.

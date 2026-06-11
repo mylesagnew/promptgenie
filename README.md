@@ -1268,6 +1268,7 @@ promptgenie/
 ├── SECURITY.md                             # Vulnerability reporting and scanner limitations
 ├── CONTRIBUTING.md                         # Contributor guide, rule authoring, profile/template schema
 ├── CHANGELOG.md                            # Version history
+├── ROADMAP.md                              # Product roadmap — 5 phases, top-10 features, architecture principles
 ├── vscode-extension/                       # VS Code / Cursor extension
 │   ├── package.json                        # Extension manifest (commands, settings, activation events)
 │   ├── package-lock.json                   # Locked npm dependencies (required for npm ci in CI)
@@ -1286,85 +1287,87 @@ promptgenie/
 
 ## Roadmap
 
-### Shipped
+> Full roadmap with technical implementation details: **[ROADMAP.md](ROADMAP.md)**
 
-- [x] `generate` — build structured prompts from rough task descriptions
-- [x] `lint` — 15+ rules for quality, scope, and agentic safety
-- [x] `scan` — security scanner for secrets, injection, and agent risks
-- [x] `diff` — compare two prompt versions with token, score, section, and risk delta
-- [x] `adapt` — translate a prompt from one target profile to another
-- [x] `test` — declarative prompt unit tests with 8 assertion types, CI-safe
-- [x] `benchmark` — run prompt against Claude, score with judge model, compare versions
-- [x] Context packs — reusable project context blocks with stack, architecture, style, pitfalls
-- [x] Workflow mode — staged prompt chains with approval gates, handoffs, and per-step scope locks
-- [x] GitHub Actions + pre-commit CI integration — lint, scan, and test in every PR
-- [x] CONTRIBUTING.md — contributor guide, rule authoring docs, profile/template schema reference
-- [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
-- [x] `interactive` — guided menu mode: generate, adapt, lint, scan, diff, test, workflow, list in one flow
-- [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists (scoped `AllowlistEntry` format), custom vague verbs; wired into all five CLI commands with `--config` / `--no-config` flags
-- [x] Coverage gate — `fail_under = 85` enforced in CI; 637 tests, 0 ruff issues, 0 mypy errors, 0 high-severity bandit issues across `promptgenie/` and `tests/`
-- [x] CODEOWNERS — `.github/CODEOWNERS` governs all files; branch protection docs in CONTRIBUTING.md
-- [x] Adversarial scanner tests — `TestDetects` (21 caught patterns incl. Unicode normalization, split-line overrides, base64 blobs, HTML/block-comment smuggling), `TestMisses` (7 documented gaps: within-word splits, non-NFKC homoglyphs, word-spacing, synonyms, indirect reference, role-shift, markdown bold), `TestScopedAllowlist` (regression suite for fixed allowlist logic)
-- [x] Scoped scanner allowlist — `AllowlistEntry` replaces broken whole-prompt suppression; phrase matched against finding's `matched_text` only; rule-scoped entries filter by code first
-- [x] Scanner hardening — NFKC Unicode normalization, split/multiline override patterns (`SEC_SPLIT_001–004`), base64 payload detection (`SEC_B64`), scanner limitations footer in rich output
+**Strategic position:** PromptGenie is the secure, terminal-native prompt engineering workbench for developers and DevOps teams — not just a prompt generator.
+
+Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Evaluate → Diff → Gate → Audit**
 
 ---
 
-### P0 — Must do before serious adoption
+### Shipped (v1.0.x)
 
-- [x] **Automated test suite** — 306 tests: scanner, linter, generator, differ, adapter, tester, CLI smoke tests, formatter output — 0 warnings
-- [x] **Developer CI pipeline** — `ci.yml`: pytest (3.10–3.12) with coverage gate, ruff, mypy, bandit, pip-audit, build + wheel smoke test
-- [x] **Modern packaging** — `pyproject.toml` with dev dependency groups, classifiers, project URLs; setuptools license field modernised; `anthropic` and `tiktoken` moved to optional extras (`[benchmark]`, `[tokenizer]`) — default install no longer requires an HTTP API client
-- [x] **Generated CI supply-chain hygiene** — `ci init` scaffolds SHA-pinned `actions/checkout` + `astral-sh/setup-uv` (matching the repo's own CI); installs pinned `promptgenie==<version>` via `uv pip install --system`; adds `permissions: contents: read`; replaces `for file in $(find …)` with safe `while IFS= read -r` loop
-- [x] **SECURITY.md** — vulnerability reporting, scanner limitations, safe secret handling policy
-- [x] **Structured output** — `--format json` and `--format sarif` on lint and scan; SARIF uploaded to GitHub code scanning
-- [x] **Adapter safety fix** — preserve agentic safety sections by default; add `--strip-agentic-safety` as explicit opt-in
-- [x] **Fix CI green** — replaced invalid `pip-audit -q` flag; resolved 61 ruff issues; fixed 13 mypy errors; added mypy to lint job; SHA-pinned all GitHub Actions in all workflows; added least-privilege `permissions: contents: read`
-- [x] **Versioning single source of truth** — `__init__.py` and `cli.py` now read version from `importlib.metadata`; `pyproject.toml` aligned to `1.0.2`; version test no longer hard-codes a string
-
----
-
-### P1 — High-value reliability
-
-- [x] **Schema validation** — thorough field-level validation for profiles (required fields, category allowlist, slug format, type checks, unknown key detection), templates (id slug, sections non-empty), and context packs; `validate-profiles` command with `--dir` and `--no-warnings` flags; errors fail CI, warnings advisory; 39 new tests
-- [x] **File IO safety** — `promptgenie/core/fileio.py`: `safe_read_text` (1 MB limit), `safe_read_yaml` (512 KB limit), `safe_write_text` (atomic via tempfile+rename, `--force` required to overwrite); all 38 read/write call sites migrated; explicit UTF-8 everywhere
-- [x] **Data-driven rule packs** — scanner and linter rules migrated to typed `ScanRule`/`LintRule` registry with `id`, `category`, `pattern`, `risk/severity`, `confidence`, `message`, `recommendation`, and `false_positive_note`; custom rules loadable from `.promptgenie.yaml` under `scanner.custom_rules` and `linter.custom_rules`
-- [x] **Rule suppression and config** — `.promptgenie.yaml` supports `disabled_rules`, `severity_overrides`, `custom_vague_verbs`, and a scoped `allowlist` (`AllowlistEntry` with optional `rules` filter); suppression is matched against the finding's `matched_text`, not the whole prompt; config is now loaded and applied by all five CLI commands (`scan`, `lint`, `generate`, `test`, `diff`) with `--config PATH` and `--no-config` flags
-- [x] **CLI refactor** — split `cli.py` into `commands/` modules and `renderers/rich.py`; keep core business logic testable without terminal output
-- [x] **Context pack path validation** — strict slug regex `^[A-Za-z0-9_-]+$` on `pack_id`; path containment enforced in `load_pack` and `init_pack`; 10 traversal rejection tests added
-- [x] **Workflow schema validation and cycle detection** — `validate_workflow()` checks duplicate IDs, required fields, unknown dependencies, and cycles (DFS with visiting/visited sets); `WorkflowValidationError` surfaced cleanly in CLI; 13 tests covering valid DAGs, cycles, self-references, and bad fields
-- [x] **ReDoS protection for prompt-test regex** — `_safe_search()` helper with 500-char length guard and `SIGALRM`-based 5s timeout on POSIX; invalid regex returns error assertion instead of exception; 7 tests including known ReDoS pattern and max-length boundary
-- [x] **Benchmark cost controls and judge hardening** — `--runs` bounded via `click.IntRange(max=10)`; API call count printed before execution; judge parse failure sets `judge_parse_failed=True` and emits CLI warning instead of silent score-50; judge system prompt hardened with explicit untrusted-data instruction; `BenchmarkEvaluationError` raised on bad JSON; 12 tests added
-- [x] **Dependency lockfile strategy** — `uv.lock` committed (108 packages with hashes); CI now installs via `uv sync --frozen`; Dependabot configured for weekly `uv` and `github-actions` updates; `cyclonedx-bom` added to dev deps
-- [x] **Line-level SARIF locations** — `SecurityFinding` and `LintIssue` now carry `line`, `col`, and `confidence` fields; `_offset_to_line_col()` converts regex match offsets to 1-based line/col; SARIF output emits `region.startLine`/`startColumn`; `confidence` surfaced in both SARIF `properties` and JSON output; `TOOL_VERSION` reads from `importlib.metadata`; 17 new tests
-- [x] **Least-privilege GitHub token permissions** — shipped in Wave 1 (1.0.3)
-- [x] **Improve pre-commit hooks** — `.pre-commit-config.yaml` now uses SHA-pinned upstream repos: `astral-sh/ruff-pre-commit` (ruff + ruff-format), `pre-commit/pre-commit-hooks` (check-yaml, check-toml, end-of-file-fixer, trailing-whitespace, check-merge-conflict, check-added-large-files), `Yelp/detect-secrets`; `.secrets.baseline` committed; PromptGenie local hooks retained
-- [x] **Typed result and config models** — `promptgenie/models.py` adds `Profile`, `Template`, `ContextPackMeta`, `GenerateResult`, `ValidationResult` dataclasses with `from_dict()` constructors and `validate()` methods; new `promptgenie validate` command validates profiles, templates, context packs, workflows, and prompt-test suites (exits 1 on errors); 100% model coverage
-- [x] **Fail-closed configuration loading** — remove silent fallbacks on missing profile/template/context-pack; explicit `FileNotFoundError` by default on bad `--target`, `--template`, `--config`, or workflow profile/pack; `--best-effort` flag added to `generate`, `scan`, `lint`, `adapt`, and `workflow` for pipelines where partial output is acceptable _(SecDevOps review: MEDIUM — typos produce plausible but degraded output with no warning)_
+- [x] `generate`, `lint`, `scan`, `diff`, `adapt`, `test`, `benchmark`, `workflow`, `interactive`, `policy`, `validate`, `pack`, `ci` — full command surface
+- [x] Multi-file / directory / zip scanning with zip-slip protection; opt-in LLM semantic analysis (`--llm`) with pre-send secret redaction
+- [x] Context packs, workflow mode, plugin registry (14 packs), OWASP LLM Top 10 rules, enterprise lint rules
+- [x] GitHub Actions CI (`ci.yml`): pytest 3.10–3.12, coverage ≥85%, ruff, mypy, bandit, pip-audit, VS Code extension CI, build + wheel smoke test
+- [x] SARIF output on lint, scan, and policy for GitHub Code Scanning upload
+- [x] Policy-as-code: `policy` command with `--max-risk`, `--min-score`, `--format sarif`, expired allowlist reporting
+- [x] Registry hardening: SHA-256 checksums required, HTTPS-only, 1 MiB download cap, fail-closed YAML parsing
+- [x] VS Code / Cursor extension: inline diagnostics, status bar score, command palette
+- [x] SBOM, release provenance, CodeQL, OpenSSF Scorecard, Dependabot
+- [x] 637 tests · 85.54% coverage · 0 ruff issues · 0 mypy errors
 
 ---
 
-### P2 — Scaling and enterprise readiness
+### Phase 1 — Terminal and Pipeline Foundations
 
-- [x] **VS Code / Cursor extension** — `vscode-extension/` TypeScript extension; inline lint diagnostics while typing (debounced), full lint + scan on save, status bar quality score, high-risk security alerts, command palette integration (`PromptGenie: Lint File`, `Scan File`, `Lint & Scan`); configurable CLI path, target profile, debounce delay, severity mapping; activates on `.md`, `.txt`, `.prompt`, `.promptgenie` files
-- [x] **Community profile and template packs** — 14 built-in registry packs: 4 model profiles (`gpt-4o`, `mistral`, `llama3`, `github-copilot`), 5 domain template packs (DevOps/SRE, Data Science/ML, Legal/Compliance, Product Management, Customer Support), 3 context packs (AI Safety, Responsible AI, Regulated Industries), 2 rule packs (OWASP LLM Top 10, Enterprise Lint); all tagged for search; installable and updatable via `promptgenie pack install / update`
-- [x] **Secret scanning for the repo** — `detect-secrets` (SHA-pinned, v1.5.0) wired into pre-commit hooks; `.secrets.baseline` committed; runs on every staged commit
-- [x] **SBOM and release provenance** — tag-triggered `release.yml` workflow: version consistency check, full test/lint/security gate, `uv build`, CycloneDX SBOM (`sbom.cyclonedx.json`), PyPI Trusted Publishing via GitHub OIDC (no stored token), GitHub artifact attestations (`actions/attest-build-provenance`), GitHub Release with wheel + sdist + SBOM attached; requires protected `release` environment
-- [x] **CodeQL analysis** — GitHub Advanced Security CodeQL for Python on every PR and weekly schedule; uploads SARIF to GitHub Security tab _(SecDevOps review: LOW — improves external trust and OpenSSF Scorecard rating)_
-- [x] **Dependabot** — `.github/dependabot.yml` configured for weekly automated PRs on `uv` Python dependencies (grouped dev deps) and `github-actions` versions; vulnerability alerting enabled
-- [x] **OpenSSF Scorecard** — weekly scheduled Scorecard workflow; SARIF uploaded to GitHub Security tab via `ossf/scorecard-action`; `publish_results: true` for public badge _(SecDevOps review: LOW — baseline for external trust signals)_
-- [x] **Plugin/profile registry** — versioned remote rule and context packs; `promptgenie pack update/install/search/dirs`; `~/.promptgenie/registry/packs/` user install dir; `rules_dirs` config for custom rule directories; `enabled_rules` whitelist mode; `disabled_rules` blacklist; severity overrides; expiring allowlist entries (`expires`, `reason`); 14 built-in packs (2 rule, 4 profile, 5 template, 3 context); SHA-256 checksum verification on downloads; stdlib `urllib.request` only — no new deps
-- [x] **Container image** — minimal non-root `python:3.12-slim` Dockerfile; dedicated `promptgenie` user (uid 1001); `.dockerignore` keeps image lean; `benchmark` and `tokenizer` extras included
-- [x] **Benchmark model abstraction** — `ModelProvider` protocol decouples benchmarker from Anthropic SDK; `AnthropicProvider` is the built-in implementation; pass any `provider=` to `run_benchmark()`; `api_key` still works as before; 12 new protocol tests _(SecDevOps review: MEDIUM — hard-coded Anthropic dependency limits adoption and evaluation auditability)_
-- [x] **Registry hardening** — URL scheme allowlist (HTTPS-only, all `file://`/`http://`/`ftp://` schemes blocked); 1 MiB download cap on all remote fetches; `require_checksum=True` mode for strict CI; fail-closed rule-pack loader (malformed `scanner_rules`/`lint_rules` raises `ValueError`, not silently skipped); fail-closed allowlist expiry (malformed date string treated as expired); `# nosec: B310` annotations with rationale on `urlopen` calls
-- [x] **Production-shaped scanner findings** — 9 secret rules now carry unique codes (`SEC_SECRET_APIKEY`, `SEC_SECRET_TOKEN`, `SEC_SECRET_OPENAI`, `SEC_SECRET_GOOGLE`, `SEC_SECRET_SLACK`, `SEC_SECRET_PRIVKEY`, `SEC_SECRET_GITHUB`, `SEC_SECRET_AWS_KEY`, `SEC_SECRET_AWS_SECRET`); `SEC_SECRET_CODES` frozenset for backwards-compatible filtering; `SecurityFinding` gains `category` and `source` fields; `ScanResult.risk_level` returns `"NONE"` (not `"LOW"`) when no findings; scanner uses `re.finditer` + `enumerate()` with `MAX_FINDINGS_PER_RULE = 5` cap per rule
-- [x] **`policy` command** — CI gate: `promptgenie policy <file> [--max-risk HIGH] [--max-findings 0] [--min-score 0] [--format text|json]`; exits 0 (pass), 1 (violations), 2 (usage error); text output is a Rich findings table; JSON is machine-readable for dashboards and GitHub step summaries
-- [x] **Quality gates green** — `ruff format`: 0 files need reformatting; `mypy`: no errors; `bandit`: 0 high-severity issues; 637 tests pass; coverage 85.54%
-- [x] **Registry strict mode** — `update_registry()` defaults to `require_checksum=True`; all 14 built-in registry packs carry verified SHA-256 checksums; `pack install/update` CLI exposes `--allow-unverified` escape hatch with visible warning
-- [x] **VS Code extension CI** — `vscode-extension` job in `ci.yml`: `npm ci` + `npm audit --audit-level=high` + `npm run compile` + `npm run lint` + artifact upload; `@typescript-eslint/*` upgraded to fix 6 high-severity vulnerabilities; `package-lock.json` committed
-- [x] **Policy SARIF output** — `--format sarif` emits combined SARIF v2.1.0 (lint + scan runs) for GitHub Code Scanning upload
-- [x] **Expired allowlist reporting** — `policy` surfaces expired/malformed allowlist entries as `allowlist_warnings` in JSON and `⚠ Allowlist:` in text output
-- [x] **Multi-file scanning + opt-in LLM analysis** — `scan` now accepts any mix of files, directories, and zip archives; zip-slip protection validates every member path before extraction; per-file (1 MB) and total (10 MB) byte caps prevent resource exhaustion; opt-in `--llm` flag runs LLM semantic analysis with pre-send secret redaction (9 pattern classes), 8 000-char cap, and `--no-external-llm` air-gap mode; `--fail-on-severity`, `--show-skipped`, `--max-files`, `--max-bytes`, `--max-file-bytes` flags added; SARIF and JSON output aggregate all files into a single document; 637 tests, 85.54% coverage
+- [ ] Universal stdin/stdout (`-` sentinel everywhere; no Rich panels when stdout is not a TTY)
+- [ ] Stable versioned output contracts (`schema_version: "1.0"`) on all commands
+- [ ] Strict exit code contract (`0`–`7`, `130`); centralized `PromptGenieError` handler
+- [ ] Shell completion: `promptgenie completion install zsh/bash/fish`; dynamic `--template`, `--target`, `--provider` completions
+- [ ] `promptgenie doctor` — self-check: config, providers, extras, shell completion, policy files
+- [ ] Enhanced side-by-side diff with semantic section matching; `--format markdown|json|yaml`
+- [ ] Renderer interface: `rich`, `plain`, `compact`, `json`, `yaml`, `ndjson`, `sarif`; `--color auto|always|never`; respect `NO_COLOR`
+- [ ] Interactive variable resolver: detect `{{variable}}` placeholders; `--ask`, `--no-input`, resolution order
+
+---
+
+### Phase 2 — PromptSpec and Run Engine
+
+- [ ] Declarative PromptSpec YAML/JSON — the "Dockerfile for prompts"; `promptgenie init prompt`, `run`, `render`, `validate`, `schema`
+- [ ] `promptgenie run` — load → vars → context → lint/scan/gate → render → send → stream → persist
+- [ ] Streaming response mode: `asyncio`; NDJSON events; `--tee output.md`; `--dry-run`
+- [ ] Variable files and env binding: `--vars prod.yaml`, `--var k=v`, `--env-prefix PG_`, secret vars with redaction
+- [ ] Context builder: `file`, `glob`, `stdin`, `git_diff`, `git_staged`, `cmd`, `url`; token budget; source manifest with hashes
+- [ ] Provider abstraction: `Provider` protocol; built-ins: Anthropic, OpenAI-compatible, Ollama, LocalAI, LM Studio, vLLM
+- [ ] `promptgenie provider add|list|inspect|doctor` — first-class Ollama/local provider management
+
+---
+
+### Phase 3 — SecDevOps Guardrails
+
+- [ ] `promptgenie analyze` — aggregate `lint + scan + policy + custom rules`; unified finding model; SARIF output
+- [ ] Policy-as-code v2: `--policy promptgenie.policy.yaml`; `--explain` mode; `external_model_send` gate; policy discovery chain
+- [ ] Data leakage detector: JWTs, database URLs, internal hostnames, emails; `promptgenie redact`; `--block-secrets` pre-send gate
+- [ ] `promptgenie redteam` — injection susceptibility testing with attack packs (OWASP LLM); offline heuristic judge
+- [ ] Local-first routing policy: prompt classification; routing rules; external sends require clean scan + `--yes` + audit
+- [ ] Credential management: `promptgenie auth login`; `keyring` optional extra; macOS Keychain, Windows Credential Manager, 1Password CLI
+- [ ] Audit log: `promptgenie audit list|show|export`; SQLite; prompt hash, provider/model, policy decision, `external_send`
+- [ ] Air-gapped mode: `--airgap`; blocks external providers, remote registry, URL context sources; local pack install from tarball
+
+---
+
+### Phase 4 — Evaluation and Regression Testing
+
+- [ ] Multi-model matrix evaluation: `--models claude,gpt-4.1,ollama/llama3.1`; async parallel; comparative table; `--runs N`
+- [ ] Eval suites: `promptgenie eval init|run|compare|approve`; 11 assertion types including `refuses_instruction_override`, `judge_rubric`
+- [ ] Baseline regression gates: `--save-baseline`, `--compare`, `--fail-on-regression`; per-metric thresholds
+- [ ] GitHub Actions native reporter: `::error` annotations; Markdown step summary; SARIF upload
+- [ ] Changed-prompt detection: `--changed`; dependency-aware (template → dependent prompts, policy → all)
+
+---
+
+### Phase 5 — Advanced TUI and Ecosystem
+
+- [ ] Full-screen Textual TUI: `promptgenie tui`; findings panel, score/token bar, keyboard shortcuts
+- [ ] Guided prompt wizard: `promptgenie wizard`; step-by-step questions → PromptSpec + rendered Markdown
+- [ ] Smart command palette: `promptgenie palette`; Textual fuzzy finder across commands, templates, profiles, packs, history
+- [ ] Prompt history: `promptgenie history list|show|diff|replay`; SQLite; content deduplication; `--no-history`
+- [ ] Watch mode: `promptgenie watch`; on-change re-lint/re-scan dashboard; `watchfiles` optional extra
+- [ ] Template command group: `promptgenie template list|edit|new|validate|render`; `$EDITOR` default; layered locations
+- [ ] Prompt lockfiles: `promptgenie lock`; hash template, policy, packs, context, provider model; `--check` in CI
+- [ ] Plugin SDK: entry points for providers, rules, renderers, context sources, evaluators; `promptgenie plugin scaffold`
 
 ---
 
@@ -1528,6 +1531,8 @@ See [SECURITY.md](SECURITY.md) for the vulnerability reporting process and scann
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor guide, rule authoring docs, and profile/template schema reference.
 
 See [CHANGELOG.md](CHANGELOG.md) for a full version history.
+
+See [ROADMAP.md](ROADMAP.md) for the full product roadmap with implementation details, architecture principles, and the optional extras plan.
 
 ---
 
