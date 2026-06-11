@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, and token estimation.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — with a built-in linter, multi-file security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, and token estimation.
 
 ---
 
@@ -18,7 +18,7 @@ PromptGenie makes prompts:
 
 - **Structured** — section-by-section output matched to the target tool's requirements
 - **Linted** — catches vague verbs, missing scope, broad tasks, and agentic risks before you send
-- **Scanned** — flags heuristic patterns consistent with secrets, prompt injection, and unsafe agent permissions
+- **Scanned** — multi-file, directory, and zip scanning; flags heuristic patterns consistent with secrets, prompt injection, and unsafe agent permissions; opt-in LLM semantic analysis layer with pre-send secret redaction
 - **Diffed** — compare two versions with token delta, score delta, section changes, and risk changes
 - **Tested** — declarative unit tests assert quality, safety, structure, and content before you ship
 - **Benchmarked** — run prompts against real Claude models and score responses across 6 rubric dimensions
@@ -180,6 +180,7 @@ Optional extras:
 |---|---|---|
 | `benchmark` | `anthropic` SDK — required for `promptgenie benchmark` | `pip install "promptgenie[benchmark]"` |
 | `tokenizer` | `tiktoken` — accurate token counts (falls back to `len/4` without it) | `pip install "promptgenie[tokenizer]"` |
+| `llm` | `openai` SDK — required for `promptgenie scan --llm` | `pip install "promptgenie[llm]"` |
 
 ### Docker
 
@@ -205,7 +206,7 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 |---|---|
 | `generate` | Build an optimised prompt from a rough task description |
 | `lint` | Check a prompt file for quality and structural issues |
-| `scan` | Scan a prompt file for security risks |
+| `scan` | Scan files, directories, and zip archives for security risks; opt-in LLM semantic analysis |
 | `policy` | CI policy gate — fail the build if findings breach configurable thresholds; outputs text, JSON, or SARIF |
 | `diff` | Compare two prompt versions — token, score, section, and risk delta |
 | `adapt` | Translate a prompt from one target profile to another |
@@ -314,17 +315,38 @@ Exits `1` if any HIGH severity issues are found — safe to use in CI.
 
 ### `scan`
 
-Scan a prompt file for security risks.
+Scan one or more prompt files, directories, or zip archives for security risks, with an optional LLM semantic analysis layer.
 
 ```bash
-# Default rich terminal output
+# Single file — original behaviour preserved
 promptgenie scan my-prompt.md
 
-# Machine-readable JSON
-promptgenie scan my-prompt.md --format json
+# Entire directory (recursive)
+promptgenie scan ./prompts/
 
-# SARIF for GitHub code scanning upload
-promptgenie scan my-prompt.md --format sarif --out scan-results.sarif
+# Zip archive — all contained prompt files scanned, zip-slip protected
+promptgenie scan prompts-bundle.zip
+
+# Mix of files, directories, and zips
+promptgenie scan prompt1.md ./more-prompts/ archive.zip
+
+# Machine-readable JSON (aggregate output for multi-file scans)
+promptgenie scan ./prompts/ --format json
+
+# SARIF for GitHub code scanning upload (all files in one run)
+promptgenie scan ./prompts/ --format sarif --out scan-results.sarif
+
+# Opt-in LLM semantic analysis (requires OPENAI_API_KEY)
+promptgenie scan my-prompt.md --llm
+
+# Air-gap / privacy mode — suppress all LLM network calls
+promptgenie scan my-prompt.md --llm --no-external-llm
+
+# CI gate — fail on any finding at or above MEDIUM
+promptgenie scan ./prompts/ --fail-on-severity MEDIUM
+
+# Show which files were skipped (size cap, wrong suffix, quota)
+promptgenie scan ./prompts/ --show-skipped
 ```
 
 **What it flags (heuristic patterns):**
@@ -345,10 +367,43 @@ The scanner reports the **class** of secret found, never the secret value itself
 
 **Options:**
 
-| Flag | Description |
-|---|---|
-| `--format` | Output format: `rich` (default) / `json` / `sarif` |
-| `--out`, `-o` | Write output to file instead of stdout |
+| Flag | Default | Description |
+|---|---|---|
+| `--format` | `rich` | Output format: `rich` / `json` / `sarif` |
+| `--out`, `-o` | — | Write output to file instead of stdout |
+| `--llm` | off | Enable opt-in LLM semantic analysis (requires `OPENAI_API_KEY`) |
+| `--no-external-llm` | off | Suppress all LLM network calls (privacy / air-gap mode) |
+| `--max-files N` | 500 | Cap total files collected across all paths |
+| `--max-bytes N` | 10485760 | Cap total uncompressed bytes (default 10 MB) |
+| `--max-file-bytes N` | 1048576 | Skip individual files over this size (default 1 MB) |
+| `--fail-on-severity` | — | Exit 1 when any finding meets or exceeds this level (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`) |
+| `--show-skipped` | off | Print files excluded due to size cap, wrong suffix, or quota |
+| `--config PATH` | — | Path to `.promptgenie.yaml` |
+| `--no-config` | — | Ignore any `.promptgenie.yaml` |
+| `--best-effort` | off | Fall back to built-in defaults on missing config |
+
+**Multi-file resource limits:**
+
+Files are collected before scanning. Limits are applied per-collection run:
+- Files with unsupported suffixes are skipped (`wrong_suffix`)
+- Files over `--max-file-bytes` are skipped (`too_large`)
+- Once total collected bytes reach `--max-bytes` or file count reaches `--max-files`, remaining files are skipped (`quota_exceeded`)
+- Use `--show-skipped` to see which files were excluded and why
+
+**Zip archive safety:**
+
+Each zip member path is validated before extraction — absolute paths, `..` traversal sequences, resolved paths escaping the extraction root, and Unix symlinks all raise a hard error and skip the archive. The member count is capped at 1 000.
+
+**LLM semantic analysis (`--llm`):**
+
+Off by default — explicit opt-in required. When enabled:
+- Content is pre-scanned for secrets and redacted before any text leaves the host
+- Content is capped at 8 000 characters per file before the API call
+- API key is read from `OPENAI_API_KEY` (or a custom env var via config)
+- Pass `--no-external-llm` to block all network calls even if `--llm` is set (air-gap / CI privacy mode)
+- LLM findings are included in JSON output under `files[].llm`; they do not affect the heuristic risk level
+
+> **Privacy:** Never pass `--llm` with prompt files that contain real credentials, PII, or internal architecture details not intended for external transmission. Use `--no-external-llm` in air-gapped CI pipelines.
 
 **Scan JSON output** includes `category` (rule category: `secret`, `injection`, `permission`, `rag`, `obfuscation`) and `source` (`builtin` / `registry` / `custom`) on every finding.
 
@@ -1163,7 +1218,9 @@ promptgenie/
 │   ├── ci.py                   # CI scaffolder — GitHub Actions + pre-commit
 │   ├── config.py               # .promptgenie.yaml config loader
 │   ├── registry.py             # Pack registry — remote index, install, update, rule loading
-│   └── formatters.py           # Structured output — JSON and SARIF v2.1.0
+│   ├── input_handler.py        # Multi-file collector — files, dirs, zips; zip-slip protection; byte/file caps
+│   ├── llm_analyzer.py         # Opt-in LLM semantic analysis; pre-send secret redaction; privacy mode
+│   └── formatters.py           # Structured output — JSON and SARIF v2.1.0; multi-file aggregation
 ├── registry/
 │   ├── index.yaml              # Built-in registry index (14 packs)
 │   └── packs/
@@ -1245,7 +1302,7 @@ promptgenie/
 - [x] CHANGELOG.md — full version history in Keep a Changelog / Semver format
 - [x] `interactive` — guided menu mode: generate, adapt, lint, scan, diff, test, workflow, list in one flow
 - [x] `.promptgenie.yaml` config — project-level rule suppressions, severity overrides, allowlists (scoped `AllowlistEntry` format), custom vague verbs; wired into all five CLI commands with `--config` / `--no-config` flags
-- [x] Coverage gate — `fail_under = 85` enforced in CI; 567 tests, 0 ruff issues, 0 mypy errors, 0 high-severity bandit issues across `promptgenie/` and `tests/`
+- [x] Coverage gate — `fail_under = 85` enforced in CI; 637 tests, 0 ruff issues, 0 mypy errors, 0 high-severity bandit issues across `promptgenie/` and `tests/`
 - [x] CODEOWNERS — `.github/CODEOWNERS` governs all files; branch protection docs in CONTRIBUTING.md
 - [x] Adversarial scanner tests — `TestDetects` (21 caught patterns incl. Unicode normalization, split-line overrides, base64 blobs, HTML/block-comment smuggling), `TestMisses` (7 documented gaps: within-word splits, non-NFKC homoglyphs, word-spacing, synonyms, indirect reference, role-shift, markdown bold), `TestScopedAllowlist` (regression suite for fixed allowlist logic)
 - [x] Scoped scanner allowlist — `AllowlistEntry` replaces broken whole-prompt suppression; phrase matched against finding's `matched_text` only; rule-scoped entries filter by code first
@@ -1302,11 +1359,12 @@ promptgenie/
 - [x] **Registry hardening** — URL scheme allowlist (HTTPS-only, all `file://`/`http://`/`ftp://` schemes blocked); 1 MiB download cap on all remote fetches; `require_checksum=True` mode for strict CI; fail-closed rule-pack loader (malformed `scanner_rules`/`lint_rules` raises `ValueError`, not silently skipped); fail-closed allowlist expiry (malformed date string treated as expired); `# nosec: B310` annotations with rationale on `urlopen` calls
 - [x] **Production-shaped scanner findings** — 9 secret rules now carry unique codes (`SEC_SECRET_APIKEY`, `SEC_SECRET_TOKEN`, `SEC_SECRET_OPENAI`, `SEC_SECRET_GOOGLE`, `SEC_SECRET_SLACK`, `SEC_SECRET_PRIVKEY`, `SEC_SECRET_GITHUB`, `SEC_SECRET_AWS_KEY`, `SEC_SECRET_AWS_SECRET`); `SEC_SECRET_CODES` frozenset for backwards-compatible filtering; `SecurityFinding` gains `category` and `source` fields; `ScanResult.risk_level` returns `"NONE"` (not `"LOW"`) when no findings; scanner uses `re.finditer` + `enumerate()` with `MAX_FINDINGS_PER_RULE = 5` cap per rule
 - [x] **`policy` command** — CI gate: `promptgenie policy <file> [--max-risk HIGH] [--max-findings 0] [--min-score 0] [--format text|json]`; exits 0 (pass), 1 (violations), 2 (usage error); text output is a Rich findings table; JSON is machine-readable for dashboards and GitHub step summaries
-- [x] **Quality gates green** — `ruff format`: 0 files need reformatting; `mypy`: no errors; `bandit`: 0 high-severity issues; 567 tests pass; coverage 85.31%
+- [x] **Quality gates green** — `ruff format`: 0 files need reformatting; `mypy`: no errors; `bandit`: 0 high-severity issues; 637 tests pass; coverage 85.54%
 - [x] **Registry strict mode** — `update_registry()` defaults to `require_checksum=True`; all 14 built-in registry packs carry verified SHA-256 checksums; `pack install/update` CLI exposes `--allow-unverified` escape hatch with visible warning
 - [x] **VS Code extension CI** — `vscode-extension` job in `ci.yml`: `npm ci` + `npm audit --audit-level=high` + `npm run compile` + `npm run lint` + artifact upload; `@typescript-eslint/*` upgraded to fix 6 high-severity vulnerabilities; `package-lock.json` committed
 - [x] **Policy SARIF output** — `--format sarif` emits combined SARIF v2.1.0 (lint + scan runs) for GitHub Code Scanning upload
 - [x] **Expired allowlist reporting** — `policy` surfaces expired/malformed allowlist entries as `allowlist_warnings` in JSON and `⚠ Allowlist:` in text output
+- [x] **Multi-file scanning + opt-in LLM analysis** — `scan` now accepts any mix of files, directories, and zip archives; zip-slip protection validates every member path before extraction; per-file (1 MB) and total (10 MB) byte caps prevent resource exhaustion; opt-in `--llm` flag runs LLM semantic analysis with pre-send secret redaction (9 pattern classes), 8 000-char cap, and `--no-external-llm` air-gap mode; `--fail-on-severity`, `--show-skipped`, `--max-files`, `--max-bytes`, `--max-file-bytes` flags added; SARIF and JSON output aggregate all files into a single document; 637 tests, 85.54% coverage
 
 ---
 

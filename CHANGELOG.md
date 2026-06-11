@@ -8,9 +8,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-file / directory / zip scanning** — `scan` now accepts any combination of individual files, directories, and `.zip` archives in a single invocation. Directories are walked recursively; zip archives are extracted to a temp directory with full zip-slip protection before scanning. Aggregate JSON and SARIF v2.1.0 output cover all scanned files in a single document, suitable for `upload-sarif` in GitHub Actions.
+
+- **Zip-slip protection** (`promptgenie/core/input_handler.py`) — every zip member path is validated before extraction: absolute paths, `..` traversal sequences, resolved paths that escape the extraction root, and Unix symlinks (detected via `external_attr` Unix mode bits) all trigger a hard `ZipSlipError` and skip the archive. Member count capped at 1 000.
+
+- **Resource limits for multi-file collection** — configurable per-file byte cap (default 1 MB), total-collection byte cap (default 10 MB), and total-file count cap (default 500). Files exceeding limits are skipped with a logged reason (`too_large`, `quota_exceeded`, `wrong_suffix`).
+
+- **Opt-in LLM semantic analysis** (`promptgenie/core/llm_analyzer.py`) — `scan --llm` enables a second analysis pass using an OpenAI-compatible endpoint. Off by default (no network calls without explicit opt-in). Pre-send secret redaction strips 9 secret pattern classes (OpenAI, Anthropic, Google, AWS, GitHub, Slack, generic API key/token, private key blocks) before content leaves the host. Content capped at 8 000 characters per file. `--no-external-llm` blocks all LLM network calls even when `--llm` is set (air-gap / CI privacy mode).
+
+- **New `scan` CLI flags**: `--llm`, `--no-external-llm`, `--max-files N`, `--max-bytes N`, `--max-file-bytes N`, `--fail-on-severity LEVEL` (exit 1 when any finding meets or exceeds `LOW`/`MEDIUM`/`HIGH`/`CRITICAL`), `--show-skipped`.
+
+- **Multi-file formatters** (`promptgenie/core/formatters.py`) — `multi_scan_to_json()` aggregates per-file `ScanResult` and optional `LLMAnalysisResult` into a single JSON document with `file_count`, `total_findings`, `aggregate_risk`, and per-file detail. `multi_scan_to_sarif()` emits a single SARIF 2.1.0 run with all files as `artifacts` and deduplicated rules. `_aggregate_risk()` returns the highest risk level across a list.
+
+- **70-test suite** (`tests/test_skillspector_features.py`) — 12 test classes covering: single-file collection, directory walking, zip extraction and display-path rewriting, zip-slip rejection (absolute paths, traversal, escape, symlink), per-file/total byte caps, suffix filtering, quota enforcement, `CollectResult` properties, nonexistent path handling, LLM analysis guards (disabled, privacy mode, API error, missing package, truncation, redaction), multi-scan JSON/SARIF formatters, `_aggregate_risk()`, and all new CLI flags.
+
 ### Fixed
 
-- **2 additional coverage tests** — `test_test_cmd_verbose_shows_passing_assertions` covers the `--verbose` passing-assertion render path in `commands/test.py`; `test_lint_bad_config_path_falls_back_to_defaults` covers the `FileNotFoundError` config fallback in `commands/lint.py`. Total: 567 tests, 85.31% coverage.
+- **2 additional coverage tests** — `test_test_cmd_verbose_shows_passing_assertions` covers the `--verbose` passing-assertion render path in `commands/test.py`; `test_lint_bad_config_path_falls_back_to_defaults` covers the `FileNotFoundError` config fallback in `commands/lint.py`.
+
+### Changed
+
+- `scan` single-file path fully preserved — when a single non-zip file is given, behaviour is identical to previous versions (no multi-file overhead, same rich output format).
+- `promptgenie/core/formatters.py` extended with `multi_scan_to_json()`, `multi_scan_to_sarif()`, and `_aggregate_risk()` — no changes to existing single-file formatters.
+- Total: **637 tests**, **85.54% coverage**.
 
 ---
 
