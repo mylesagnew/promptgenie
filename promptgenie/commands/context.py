@@ -15,9 +15,9 @@ import click
 import yaml
 
 from promptgenie.core.context_builder import build_context
-from promptgenie.core.errors import EXIT_OK, EXIT_USAGE, PromptGenieError
+from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
 from promptgenie.core.spec import ContextSource
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers.rich import diag_console
 
 
 @click.group("context", help="Assemble and inspect context sources.")
@@ -26,37 +26,76 @@ def context_group() -> None:
 
 
 @context_group.command("build")
-@click.option("--file", "file_paths", multiple=True, metavar="PATH",
-              help="Include a file as context (repeatable).")
-@click.option("--glob", "glob_patterns", multiple=True, metavar="PATTERN",
-              help="Include files matching glob pattern (repeatable).")
-@click.option("--stdin", "include_stdin", is_flag=True,
-              help="Include stdin as a context source.")
-@click.option("--cmd", "commands", multiple=True, metavar="COMMAND",
-              help="Run a shell command and include its stdout (repeatable).")
-@click.option("--git-diff", "include_git_diff", is_flag=True,
-              help="Include output of 'git diff'.")
-@click.option("--git-staged", "include_git_staged", is_flag=True,
-              help="Include output of 'git diff --staged'.")
-@click.option("--url", "urls", multiple=True, metavar="URL",
-              help="Fetch a URL and include its content (repeatable, requires --allow-url).")
-@click.option("--allow-url", is_flag=True,
-              help="Allow URL sources (policy-gated by default).")
-@click.option("--max-tokens", default=0, type=int,
-              help="Token budget. Excess sources are trimmed. 0 = unlimited.")
-@click.option("--strategy",
-              type=click.Choice(["manual", "newest", "smallest", "git-relevant"],
-                                case_sensitive=False),
-              default="manual", show_default=True,
-              help="Source ordering/trimming strategy.")
-@click.option("--out", "-o", default=None, type=click.Path(),
-              help="Write assembled context to this file instead of stdout.")
-@click.option("--format", "output_format",
-              type=click.Choice(["text", "json", "yaml"], case_sensitive=False),
-              default="text", show_default=True,
-              help="Output format.")
-@click.option("--manifest-only", is_flag=True,
-              help="Print the source manifest (labels, hashes, token estimates) without the text.")
+@click.option(
+    "--file",
+    "file_paths",
+    multiple=True,
+    metavar="PATH",
+    help="Include a file as context (repeatable).",
+)
+@click.option(
+    "--glob",
+    "glob_patterns",
+    multiple=True,
+    metavar="PATTERN",
+    help="Include files matching glob pattern (repeatable).",
+)
+@click.option("--stdin", "include_stdin", is_flag=True, help="Include stdin as a context source.")
+@click.option(
+    "--cmd",
+    "commands",
+    multiple=True,
+    metavar="COMMAND",
+    help="Run a shell command and include its stdout (repeatable).",
+)
+@click.option("--git-diff", "include_git_diff", is_flag=True, help="Include output of 'git diff'.")
+@click.option(
+    "--git-staged",
+    "include_git_staged",
+    is_flag=True,
+    help="Include output of 'git diff --staged'.",
+)
+@click.option(
+    "--url",
+    "urls",
+    multiple=True,
+    metavar="URL",
+    help="Fetch a URL and include its content (repeatable, requires --allow-url).",
+)
+@click.option("--allow-url", is_flag=True, help="Allow URL sources (policy-gated by default).")
+@click.option(
+    "--max-tokens",
+    default=0,
+    type=int,
+    help="Token budget. Excess sources are trimmed. 0 = unlimited.",
+)
+@click.option(
+    "--strategy",
+    type=click.Choice(["manual", "newest", "smallest", "git-relevant"], case_sensitive=False),
+    default="manual",
+    show_default=True,
+    help="Source ordering/trimming strategy.",
+)
+@click.option(
+    "--out",
+    "-o",
+    default=None,
+    type=click.Path(),
+    help="Write assembled context to this file instead of stdout.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json", "yaml"], case_sensitive=False),
+    default="text",
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--manifest-only",
+    is_flag=True,
+    help="Print the source manifest (labels, hashes, token estimates) without the text.",
+)
 def context_build_cmd(
     file_paths: tuple[str, ...],
     glob_patterns: tuple[str, ...],
@@ -116,7 +155,7 @@ def context_build_cmd(
         )
     except PromptGenieError as exc:
         diag_console.print(f"[red]Error:[/red] {exc}")
-        raise SystemExit(exc.code)
+        raise SystemExit(exc.code) from exc
 
     if output_format == "json":
         output_obj = {
@@ -157,8 +196,10 @@ def context_build_cmd(
         text_out = yaml.dump(output_obj, default_flow_style=False, sort_keys=False)
     else:
         if manifest_only:
-            lines = [f"# Context manifest — {len(manifest.entries)} sources, "
-                     f"~{manifest.total_tokens} tokens\n"]
+            lines = [
+                f"# Context manifest — {len(manifest.entries)} sources, "
+                f"~{manifest.total_tokens} tokens\n"
+            ]
             for e in manifest.entries:
                 flag = "✓" if e.included else "✗"
                 lines.append(

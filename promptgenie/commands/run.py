@@ -24,63 +24,122 @@ import click
 
 from promptgenie.core.errors import (
     EXIT_OK,
-    EXIT_FAILURE,
-    EXIT_PROVIDER,
-    EXIT_TIMEOUT,
-    EXIT_USAGE,
     PromptGenieError,
     handle_error,
 )
-from promptgenie.core.run_engine import RunEvent, RunResult, run_spec
+from promptgenie.core.run_engine import RunEvent, run_spec
 from promptgenie.core.spec import load_spec
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers.rich import diag_console
 
 
 @click.command("run")
 @click.argument("spec_file", type=click.Path(exists=True))
 # Variable flags
-@click.option("--var", "var_list", multiple=True, metavar="KEY=VALUE",
-              help="Inline variable override (repeatable). Example: --var env=prod")
-@click.option("--vars", "vars_file", default=None, metavar="FILE",
-              help="YAML/JSON file of variable values. Merged with --var flags.")
-@click.option("--env-prefix", default="PG_", show_default=True,
-              help="Environment variable prefix for auto-binding.")
-@click.option("--no-input", is_flag=True,
-              help="Never prompt interactively — fail if a variable is unresolved.")
+@click.option(
+    "--var",
+    "var_list",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Inline variable override (repeatable). Example: --var env=prod",
+)
+@click.option(
+    "--vars",
+    "vars_file",
+    default=None,
+    metavar="FILE",
+    help="YAML/JSON file of variable values. Merged with --var flags.",
+)
+@click.option(
+    "--env-prefix",
+    default="PG_",
+    show_default=True,
+    help="Environment variable prefix for auto-binding.",
+)
+@click.option(
+    "--no-input",
+    is_flag=True,
+    help="Never prompt interactively — fail if a variable is unresolved.",
+)
 # Execution flags
-@click.option("--dry-run", is_flag=True,
-              help="Resolve variables and build context but do not call the provider.")
-@click.option("--stream/--no-stream", default=None,
-              help="Stream response tokens as they arrive (default: from spec).")
-@click.option("--require-clean", is_flag=True, default=None,
-              help="Abort if the git working tree is dirty.")
-@click.option("--provider", "provider_override", default=None,
-              help="Override provider name from providers.yaml.")
-@click.option("--model", "model_override", default=None,
-              help="Override model name (e.g. gpt-4o, claude-opus-4-5, llama3).")
-@click.option("--timeout", default=None, type=int, metavar="SECONDS",
-              help="Abort provider call after this many seconds.")
-@click.option("--no-history", is_flag=True, default=None,
-              help="Do not persist this run to history.")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Resolve variables and build context but do not call the provider.",
+)
+@click.option(
+    "--stream/--no-stream",
+    default=None,
+    help="Stream response tokens as they arrive (default: from spec).",
+)
+@click.option(
+    "--require-clean", is_flag=True, default=None, help="Abort if the git working tree is dirty."
+)
+@click.option(
+    "--provider",
+    "provider_override",
+    default=None,
+    help="Override provider name from providers.yaml.",
+)
+@click.option(
+    "--model",
+    "model_override",
+    default=None,
+    help="Override model name (e.g. gpt-4o, claude-opus-4-5, llama3).",
+)
+@click.option(
+    "--timeout",
+    default=None,
+    type=int,
+    metavar="SECONDS",
+    help="Abort provider call after this many seconds.",
+)
+@click.option(
+    "--no-history", is_flag=True, default=None, help="Do not persist this run to history."
+)
 # Context flags
-@click.option("--max-context-tokens", default=0, type=int,
-              help="Token budget for context assembly. 0 = unlimited.")
-@click.option("--context-strategy",
-              type=click.Choice(["manual", "newest", "smallest", "git-relevant"],
-                                case_sensitive=False),
-              default="manual", show_default=True,
-              help="Strategy for trimming context to the token budget.")
-@click.option("--allow-url", is_flag=True,
-              help="Allow URL-type context sources (policy-gated by default).")
+@click.option(
+    "--max-context-tokens",
+    default=0,
+    type=int,
+    help="Token budget for context assembly. 0 = unlimited.",
+)
+@click.option(
+    "--context-strategy",
+    type=click.Choice(["manual", "newest", "smallest", "git-relevant"], case_sensitive=False),
+    default="manual",
+    show_default=True,
+    help="Strategy for trimming context to the token budget.",
+)
+@click.option(
+    "--allow-url", is_flag=True, help="Allow URL-type context sources (policy-gated by default)."
+)
+@click.option(
+    "--allow-secrets",
+    is_flag=True,
+    help="Override the secrets gate and send the prompt even if secrets are detected. "
+    "Use with caution — secrets in prompts may be logged by providers.",
+)
 # Output flags
-@click.option("--format", "output_format",
-              type=click.Choice(["text", "ndjson"], case_sensitive=False),
-              default="text", show_default=True,
-              help="Output format: text (default) or ndjson (machine-readable events).")
-@click.option("--tee", "tee_file", default=None, type=click.Path(),
-              help="Write final response to this file while streaming to stdout.")
-@click.option("--show-context", is_flag=True,
-              help="Print the assembled context before sending (dry-run style).")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "ndjson"], case_sensitive=False),
+    default="text",
+    show_default=True,
+    help="Output format: text (default) or ndjson (machine-readable events).",
+)
+@click.option(
+    "--tee",
+    "tee_file",
+    default=None,
+    type=click.Path(),
+    help="Write final response to this file while streaming to stdout.",
+)
+@click.option(
+    "--show-context",
+    is_flag=True,
+    help="Print the assembled context before sending (dry-run style).",
+)
 def run_cmd(
     spec_file: str,
     var_list: tuple[str, ...],
@@ -97,6 +156,7 @@ def run_cmd(
     max_context_tokens: int,
     context_strategy: str,
     allow_url: bool,
+    allow_secrets: bool,
     output_format: str,
     tee_file: str | None,
     show_context: bool,
@@ -115,7 +175,6 @@ def run_cmd(
       promptgenie run my-prompt.yaml --format ndjson | jq 'select(.event=="done")'
     """
     ndjson_mode = output_format == "ndjson"
-    tokens_buffer: list[str] = []
 
     def _on_token(token: str) -> None:
         if ndjson_mode:
@@ -136,6 +195,7 @@ def run_cmd(
 
     if show_context and spec.context:
         from promptgenie.core.context_builder import build_context
+
         base_dir = Path(spec_file).parent
         manifest = build_context(
             spec.context,
@@ -148,14 +208,12 @@ def run_cmd(
         for entry in manifest.entries:
             status = "✓" if entry.included else "✗ (trimmed)"
             diag_console.print(
-                f"  [{entry.source_type}] {entry.label}  "
-                f"~{entry.token_estimate} tokens  {status}"
+                f"  [{entry.source_type}] {entry.label}  ~{entry.token_estimate} tokens  {status}"
             )
         diag_console.print(f"[dim]Total: ~{manifest.total_tokens} tokens[/dim]\n")
 
     if ndjson_mode:
-        print(json.dumps({"event": "start", "spec": spec_file,
-                          "dry_run": dry_run}), flush=True)
+        print(json.dumps({"event": "start", "spec": spec_file, "dry_run": dry_run}), flush=True)
 
     try:
         result = run_spec(
@@ -174,28 +232,34 @@ def run_cmd(
             max_context_tokens=max_context_tokens,
             context_strategy=context_strategy,
             allow_url=allow_url,
+            allow_secrets=allow_secrets,
             on_token=_on_token,
             on_event=_on_event,
             tee_file=Path(tee_file) if tee_file else None,
         )
     except PromptGenieError as exc:
         if ndjson_mode:
-            print(json.dumps({"event": "error", "message": str(exc),
-                               "code": exc.code}), flush=True)
+            print(json.dumps({"event": "error", "message": str(exc), "code": exc.code}), flush=True)
         handle_error(exc)
 
     # ---- post-run output ----
-    if not ndjson_mode:
+    if not ndjson_mode and not dry_run and result.response:
         # Streaming already printed tokens; add newline separator
-        if not dry_run and result.response:
-            sys.stdout.write("\n")
-            sys.stdout.flush()
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
     if result.dry_run:
         if ndjson_mode:
-            print(json.dumps({"event": "done", "status": "dry_run",
-                              "resolved_vars": {k: v for k, v in result.resolved_vars.items()}}),
-                  flush=True)
+            print(
+                json.dumps(
+                    {
+                        "event": "done",
+                        "status": "dry_run",
+                        "resolved_vars": dict(result.resolved_vars.items()),
+                    }
+                ),
+                flush=True,
+            )
         else:
             diag_console.print("\n[yellow]Dry run complete.[/yellow]")
             if result.resolved_vars:
@@ -206,24 +270,26 @@ def run_cmd(
             if result.context_manifest:
                 m = result.context_manifest
                 diag_console.print(
-                    f"[dim]Context: {len(m.entries)} sources, "
-                    f"~{m.total_tokens} tokens[/dim]"
+                    f"[dim]Context: {len(m.entries)} sources, ~{m.total_tokens} tokens[/dim]"
                 )
         raise SystemExit(EXIT_OK)
 
     if ndjson_mode:
-        print(json.dumps({
-            "event": "done",
-            "status": result.status,
-            "run_id": result.run_id,
-            "duration_s": result.duration_s,
-            "response_length": len(result.response),
-        }), flush=True)
+        print(
+            json.dumps(
+                {
+                    "event": "done",
+                    "status": result.status,
+                    "run_id": result.run_id,
+                    "duration_s": result.duration_s,
+                    "response_length": len(result.response),
+                }
+            ),
+            flush=True,
+        )
     else:
         diag_console.print(
-            f"\n[dim]run_id={result.run_id}  "
-            f"status={result.status}  "
-            f"{result.duration_s:.1f}s[/dim]"
+            f"\n[dim]run_id={result.run_id}  status={result.status}  {result.duration_s:.1f}s[/dim]"
         )
         if tee_file:
             diag_console.print(f"[dim]Response written to: {tee_file}[/dim]")

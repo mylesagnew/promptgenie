@@ -38,7 +38,7 @@ from typing import Any
 
 import yaml
 
-from promptgenie.core.errors import EXIT_USAGE, EXIT_TEMPLATE, PromptGenieError
+from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
 
 SPEC_SCHEMA_PATH = Path(__file__).parent.parent / "schemas" / "promptspec.schema.json"
 
@@ -257,6 +257,7 @@ def render_spec(spec: PromptSpec, resolved_vars: dict[str, Any]) -> str:
     text = spec.prompt or (f"[template:{spec.template}]" if spec.template else "")
     if not text:
         text = ""
+
     # Simple {{name}} substitution
     def _sub(m: re.Match) -> str:  # type: ignore[type-arg]
         name = m.group(1)
@@ -281,17 +282,21 @@ def _spec_to_dict(spec: PromptSpec) -> dict[str, Any]:
         "mode": spec.mode,
         "vars": spec.vars,
         "context": [
-            {k: v for k, v in {
-                "type": s.type,
-                "path": s.path or None,
-                "pattern": s.pattern or None,
-                "var": s.var or None,
-                "command": s.command or None,
-                "url": s.url or None,
-                "label": s.label or None,
-                "max_bytes": s.max_bytes or None,
-                "policy_gated": s.policy_gated,
-            }.items() if v is not None}
+            {
+                k: v
+                for k, v in {
+                    "type": s.type,
+                    "path": s.path or None,
+                    "pattern": s.pattern or None,
+                    "var": s.var or None,
+                    "command": s.command or None,
+                    "url": s.url or None,
+                    "label": s.label or None,
+                    "max_bytes": s.max_bytes or None,
+                    "policy_gated": s.policy_gated,
+                }.items()
+                if v is not None
+            }
             for s in spec.context
         ],
         "policy": spec.policy,
@@ -302,8 +307,16 @@ def _spec_to_dict(spec: PromptSpec) -> dict[str, Any]:
         "output_contract": {
             "format": spec.output_contract.format,
             **({"schema": spec.output_contract.schema} if spec.output_contract.schema else {}),
-            **({"max_tokens": spec.output_contract.max_tokens} if spec.output_contract.max_tokens else {}),
-            **({"min_tokens": spec.output_contract.min_tokens} if spec.output_contract.min_tokens else {}),
+            **(
+                {"max_tokens": spec.output_contract.max_tokens}
+                if spec.output_contract.max_tokens
+                else {}
+            ),
+            **(
+                {"min_tokens": spec.output_contract.min_tokens}
+                if spec.output_contract.min_tokens
+                else {}
+            ),
         },
         "run": {
             "dry_run": spec.run.dry_run,

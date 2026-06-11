@@ -18,9 +18,7 @@ MAX_FINDINGS_PER_RULE: int = 5
 # Nested quantifier patterns are the primary source of ReDoS (catastrophic backtracking).
 # Reject any user-supplied pattern that contains a quantified group itself quantified,
 # e.g. (a+)+  (a*)*  (a+)?  (\w+){2,}  — before it can reach the regex engine.
-_NESTED_QUANTIFIER_RE = re.compile(
-    r"\([^)]*[+*?{][^)]*\)\s*[+*?{]"
-)
+_NESTED_QUANTIFIER_RE = re.compile(r"\([^)]*[+*?{][^)]*\)\s*[+*?{]")
 
 
 def validate_pattern(pattern: str, rule_id: str) -> None:

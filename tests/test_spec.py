@@ -3,25 +3,20 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 import yaml
 
+from promptgenie.core.errors import PromptGenieError
 from promptgenie.core.spec import (
-    ContextSource,
-    OutputContract,
+    SPEC_SCHEMA_PATH,
     PromptSpec,
-    RunOptions,
     _validate_raw,
     load_spec,
     render_spec,
     spec_init_template,
     validate_spec,
-    SPEC_SCHEMA_PATH,
 )
-from promptgenie.core.errors import PromptGenieError
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -218,7 +213,9 @@ class TestValidateSpec:
 class TestRenderSpec:
     def _make_spec(self, prompt: str = "") -> PromptSpec:
         return PromptSpec(
-            version=1, name="test", target="claude-code",
+            version=1,
+            name="test",
+            target="claude-code",
             prompt=prompt,
         )
 
@@ -239,7 +236,9 @@ class TestRenderSpec:
 
     def test_template_reference_when_no_prompt(self):
         spec = PromptSpec(
-            version=1, name="test", target="claude-code",
+            version=1,
+            name="test",
+            target="claude-code",
             template="agentic-task",
         )
         result = render_spec(spec, {})

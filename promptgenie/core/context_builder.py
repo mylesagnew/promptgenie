@@ -34,16 +34,146 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import ipaddress
 import os
-import re
+import shlex
 import subprocess
 import sys
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from promptgenie.core.errors import EXIT_PROVIDER, EXIT_USAGE, PromptGenieError
+
+# ---------------------------------------------------------------------------
+# Security helpers
+# ---------------------------------------------------------------------------
+
+
+class SecurityError(PromptGenieError):
+    """Raised when a security policy is violated (SSRF, path-traversal, etc.)."""
+
+
+# Allowed URL schemes for context sources.
+_ALLOWED_CONTEXT_SCHEMES: frozenset[str] = frozenset({"https", "http"})
+
+# Private/loopback IPv4 and IPv6 networks that must never be fetched.
+_PRIVATE_NETS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),  # IPv6 ULA
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
+]
+
+
+def _check_url_allowed(url: str) -> None:
+    """Raise SecurityError if *url* uses a disallowed scheme or targets an internal host.
+
+    Blocks:
+      - Non-HTTP(S) schemes (file://, ftp://, data:, etc.)
+      - Loopback addresses (127.x, ::1)
+      - Private/RFC-1918 ranges (10.x, 172.16-31.x, 192.168.x)
+      - Link-local / APIPA (169.254.x)
+    """
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in _ALLOWED_CONTEXT_SCHEMES:
+        raise SecurityError(
+            f"Blocked URL scheme {scheme!r} in context source {url!r}. "
+            f"Only {sorted(_ALLOWED_CONTEXT_SCHEMES)} are permitted. "
+            "file://, ftp://, and other schemes are disallowed to prevent SSRF.",
+            code=EXIT_USAGE,
+        )
+    hostname = parsed.hostname or ""
+    try:
+        addr = ipaddress.ip_address(hostname)
+        for net in _PRIVATE_NETS:
+            if addr in net:
+                raise SecurityError(
+                    f"Blocked internal/private IP address {hostname!r} in URL {url!r}. "
+                    "Fetching from internal network addresses is disallowed (SSRF prevention).",
+                    code=EXIT_USAGE,
+                )
+    except ValueError:
+        # Not an IP address literal — hostname resolution happens at connect time.
+        # We cannot block DNS-rebinding here without actually resolving, but scheme
+        # and explicit IP checks cover the most common SSRF vectors.
+        pass
+
+
+# Allowlist of commands that context sources may invoke.
+# Empty set = all external commands blocked by default when using the allowlist.
+# Set to None to disable allowlisting (permissive — not recommended in production).
+_CMD_ALLOWLIST: frozenset[str] | None = frozenset(
+    {
+        "git",
+        "cat",
+        "ls",
+        "find",
+        "grep",
+        "echo",
+        "env",
+        "printenv",
+        "pwd",
+        "date",
+        "uname",
+        "wc",
+        "head",
+        "tail",
+        "sort",
+        "uniq",
+        "cut",
+        "tr",
+        "sed",
+        "awk",
+        "jq",
+        "python",
+        "python3",
+        "node",
+        "npm",
+        "make",
+        "cargo",
+        "go",
+        "mvn",
+        "gradle",
+    }
+)
+
+
+def _validate_cmd_allowed(command: str) -> list[str]:
+    """Parse *command* into an argv list and validate the executable is allowed.
+
+    Returns the argv list on success.
+    Raises SecurityError if the command executable is not in the allowlist.
+    Using shlex.split avoids shell=True injection; the allowlist prevents
+    arbitrary executables from being invoked via spec files.
+    """
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:
+        raise SecurityError(
+            f"Invalid command syntax in spec: {command!r}: {exc}",
+            code=EXIT_USAGE,
+        ) from exc
+
+    if not argv:
+        raise SecurityError("Empty command in context source.", code=EXIT_USAGE)
+
+    executable = Path(argv[0]).name  # strip any path component
+    if _CMD_ALLOWLIST is not None and executable not in _CMD_ALLOWLIST:
+        raise SecurityError(
+            f"Command executable {executable!r} is not in the allowed command list. "
+            "Add it to _CMD_ALLOWLIST in context_builder.py if it is safe to run.",
+            code=EXIT_USAGE,
+        )
+    return argv
+
 
 # ---------------------------------------------------------------------------
 # Token estimator (simple whitespace-based; no tiktoken dep required)
@@ -74,10 +204,7 @@ def _is_ignored(path: Path, patterns: list[str], base_dir: Path) -> bool:
         rel = str(path.relative_to(base_dir))
     except ValueError:
         rel = str(path)
-    for pat in patterns:
-        if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(path.name, pat):
-            return True
-    return False
+    return any(fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(path.name, pat) for pat in patterns)
 
 
 # ---------------------------------------------------------------------------
@@ -110,28 +237,50 @@ class ContextManifest:
 # ---------------------------------------------------------------------------
 
 
-def _gather_file(path_str: str, label: str, max_bytes: int, base_dir: Path,
-                 ignore_patterns: list[str]) -> SourceEntry | None:
+def _gather_file(
+    path_str: str, label: str, max_bytes: int, base_dir: Path, ignore_patterns: list[str]
+) -> SourceEntry | None:
     p = Path(path_str)
     if not p.is_absolute():
         p = base_dir / p
-    if not p.exists():
+    # Resolve symlinks and normalise the path before the containment check.
+    try:
+        resolved = p.resolve()
+    except OSError:
         return None
-    if _is_ignored(p, ignore_patterns, base_dir):
+    # Path-traversal protection: context files must reside within base_dir.
+    # This prevents spec files from reading /etc/passwd, ~/.ssh/id_rsa, etc.
+    try:
+        resolved_base = base_dir.resolve()
+        resolved.relative_to(resolved_base)
+    except ValueError as exc:
+        raise SecurityError(
+            f"Context file {path_str!r} resolves to {resolved} which is outside "
+            f"the allowed project directory {resolved_base}. "
+            "Path traversal via context sources is not permitted.",
+            code=EXIT_USAGE,
+        ) from exc
+    if not resolved.exists():
+        return None
+    if _is_ignored(resolved, ignore_patterns, base_dir):
         return None
     try:
-        stat = p.stat()
-        raw = p.read_bytes()
+        stat = resolved.stat()
+        raw = resolved.read_bytes()
         if max_bytes and len(raw) > max_bytes:
             raw = raw[:max_bytes]
         content = raw.decode("utf-8", errors="replace")
         sha = hashlib.sha256(raw).hexdigest()
-        lbl = label or str(p.relative_to(base_dir) if p.is_relative_to(base_dir) else p)
+        lbl = label or str(
+            resolved.relative_to(resolved_base)
+            if resolved.is_relative_to(resolved_base)
+            else resolved
+        )
         return SourceEntry(
             label=lbl,
             source_type="file",
             content=content,
-            path=str(p),
+            path=str(resolved),
             sha256=sha,
             token_estimate=_estimate_tokens(content),
             mtime=stat.st_mtime,
@@ -140,8 +289,9 @@ def _gather_file(path_str: str, label: str, max_bytes: int, base_dir: Path,
         return None
 
 
-def _gather_glob(pattern: str, label: str, max_bytes: int, base_dir: Path,
-                 ignore_patterns: list[str]) -> list[SourceEntry]:
+def _gather_glob(
+    pattern: str, label: str, max_bytes: int, base_dir: Path, ignore_patterns: list[str]
+) -> list[SourceEntry]:
     entries: list[SourceEntry] = []
     for p in sorted(base_dir.glob(pattern)):
         if p.is_file():
@@ -178,9 +328,12 @@ def _gather_env(var_name: str, label: str) -> SourceEntry | None:
 
 
 def _gather_cmd(command: str, label: str, max_bytes: int) -> SourceEntry:
+    # Validate and parse the command before execution — raises SecurityError for
+    # disallowed executables or shell-injection-prone syntax.
+    argv = _validate_cmd_allowed(command)
     try:
-        result = subprocess.run(
-            command, shell=True, capture_output=True, text=True, timeout=30
+        result = subprocess.run(  # nosec B603 — shell=False, argv validated by allowlist above
+            argv, shell=False, capture_output=True, text=True, timeout=30
         )
         content = result.stdout
         if max_bytes and len(content) > max_bytes:
@@ -194,9 +347,7 @@ def _gather_cmd(command: str, label: str, max_bytes: int) -> SourceEntry:
             token_estimate=_estimate_tokens(content),
         )
     except subprocess.TimeoutExpired as exc:
-        raise PromptGenieError(
-            f"Command timed out: {command}", code=EXIT_PROVIDER
-        ) from exc
+        raise PromptGenieError(f"Command timed out: {command}", code=EXIT_PROVIDER) from exc
 
 
 def _gather_git(staged: bool, label: str) -> SourceEntry:
@@ -224,9 +375,12 @@ def _gather_url(url: str, label: str, max_bytes: int, no_url: bool) -> SourceEnt
             "Pass --allow-url to permit network fetches.",
             code=EXIT_USAGE,
         )
+    # SSRF / scheme validation — raises SecurityError for disallowed schemes or
+    # private/loopback IPs before any network connection is opened.
+    _check_url_allowed(url)
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "PromptGenie/2.0"})
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:  # nosec B310 — scheme validated above
             raw = resp.read(max_bytes or 512_000)
         content = raw.decode("utf-8", errors="replace")
         sha = hashlib.sha256(raw).hexdigest()
@@ -237,9 +391,13 @@ def _gather_url(url: str, label: str, max_bytes: int, no_url: bool) -> SourceEnt
             sha256=sha,
             token_estimate=_estimate_tokens(content),
         )
+    except SecurityError:
+        raise
+    except PromptGenieError:
+        raise
     except Exception as exc:
         raise PromptGenieError(
-            f"Failed to fetch URL context '{url}': {exc}",
+            f"Failed to fetch URL context: {exc}",
             code=EXIT_PROVIDER,
         ) from exc
 
@@ -259,6 +417,7 @@ def _apply_strategy(entries: list[SourceEntry], strategy: str) -> list[SourceEnt
         def _git_key(e: SourceEntry) -> tuple[int, float]:
             git_first = 0 if e.source_type in ("git_diff", "git_staged") else 1
             return (git_first, -e.mtime)
+
         return sorted(entries, key=_git_key)
     # manual / unknown: preserve order
     return entries

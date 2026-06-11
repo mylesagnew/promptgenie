@@ -112,9 +112,7 @@ class VarResolutionError(PromptGenieError):
         super().__init__(
             f"Required variable '{name}' is unresolved and --no-input was set.",
             code=EXIT_USAGE,
-            hint="Supply a value with --var {name}=<value> or via a --vars file.".format(
-                name=name
-            ),
+            hint=f"Supply a value with --var {name}=<value> or via a --vars file.",
         )
         self.var_name = name
 
@@ -227,11 +225,10 @@ def _coerce(value: str, var_type: str) -> str:
             raise PromptGenieError(
                 f"Variable value '{value}' is not a valid float.", code=EXIT_USAGE
             ) from e
-    elif var_type in ("bool",):
-        if value.lower() not in ("true", "false", "1", "0", "yes", "no"):
-            raise PromptGenieError(
-                f"Variable value '{value}' is not a valid boolean (true/false).", code=EXIT_USAGE
-            )
+    elif var_type in ("bool",) and value.lower() not in ("true", "false", "1", "0", "yes", "no"):
+        raise PromptGenieError(
+            f"Variable value '{value}' is not a valid boolean (true/false).", code=EXIT_USAGE
+        )
     return value
 
 

@@ -27,23 +27,20 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import subprocess
-import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, TextIO
+from typing import Any, TextIO
 
 from promptgenie.core.context_builder import ContextManifest, build_context
 from promptgenie.core.errors import (
     EXIT_FAILURE,
-    EXIT_OK,
     EXIT_PROVIDER,
     EXIT_SECRETS,
-    EXIT_TIMEOUT,
     PromptGenieError,
 )
-from promptgenie.core.history import RunRecord, RunWriter, open_run_writer
+from promptgenie.core.history import RunWriter
 from promptgenie.core.providers import get_provider, load_providers_config
 from promptgenie.core.spec import PromptSpec, render_spec
 from promptgenie.core.variables import (
@@ -94,8 +91,7 @@ def _git_is_clean() -> tuple[bool, str]:
     """Return (is_clean, detail_message)."""
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True, text=True, timeout=10
+            ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=10
         )
         if result.stdout.strip():
             return False, result.stdout.strip()
@@ -133,12 +129,17 @@ def _assemble_prompt(
 
 
 def _check_secrets_gate(text: str) -> list[str]:
-    """Return a list of warnings for potential secrets in *text*."""
+    """Return a list of secret-finding messages for potential secrets in *text*.
+
+    Callers should treat a non-empty list as a hard block unless the user has
+    explicitly passed ``allow_secrets=True``.
+    """
     from promptgenie.core.scanner import scan
 
     result = scan(text)
     secret_findings = [
-        f for f in result.findings
+        f
+        for f in result.findings
         if f.risk in ("HIGH", "CRITICAL") and "secret" in f.category.lower()
     ]
     return [f.message for f in secret_findings]
@@ -186,6 +187,8 @@ def run_spec(
     max_context_tokens: int = 0,
     context_strategy: str = "manual",
     allow_url: bool = False,
+    # Security
+    allow_secrets: bool = False,
     # Output callbacks
     on_token: Callable[[str], None] | None = None,
     on_event: Callable[[RunEvent], None] | None = None,
@@ -194,6 +197,15 @@ def run_spec(
     """Execute *spec* end-to-end and return a RunResult.
 
     This is the synchronous entry point — wraps ``_run_spec_async``.
+
+    Parameters
+    ----------
+    allow_secrets:
+        If False (default), the secrets gate is a **hard block** — any
+        HIGH/CRITICAL secret finding in the assembled prompt raises a
+        PromptGenieError with EXIT_SECRETS and aborts before the provider
+        call.  Set True (via ``--allow-secrets`` on the CLI) to override
+        with explicit acknowledgment.
     """
     return asyncio.run(
         _run_spec_async(
@@ -212,6 +224,7 @@ def run_spec(
             max_context_tokens=max_context_tokens,
             context_strategy=context_strategy,
             allow_url=allow_url,
+            allow_secrets=allow_secrets,
             on_token=on_token,
             on_event=on_event,
             tee_file=tee_file,
@@ -241,17 +254,17 @@ async def _run_spec_async(
     max_context_tokens: int,
     context_strategy: str,
     allow_url: bool,
+    allow_secrets: bool,
     on_token: Callable[[str], None] | None,
     on_event: Callable[[RunEvent], None] | None,
     tee_file: Path | None,
 ) -> RunResult:
     # ---- resolve flags from spec + overrides ----
     effective_dry_run = dry_run or spec.run.dry_run
-    effective_stream = (stream if stream is not None else spec.run.stream)
-    effective_require_clean = (require_clean if require_clean is not None
-                               else spec.run.require_clean)
-    effective_timeout = (timeout if timeout is not None else spec.run.timeout)
-    effective_no_history = (no_history if no_history is not None else spec.run.no_history)
+    effective_stream = stream if stream is not None else spec.run.stream
+    effective_require_clean = require_clean if require_clean is not None else spec.run.require_clean
+    effective_timeout = timeout if timeout is not None else spec.run.timeout
+    effective_no_history = no_history if no_history is not None else spec.run.no_history
     effective_provider = provider_override or spec.provider or _infer_provider(spec.target)
     effective_model = model_override or spec.model
 
@@ -313,9 +326,23 @@ async def _run_spec_async(
     prompt = _assemble_prompt(spec, final_vars, context_manifest)
 
     # ---- 4b. secrets gate (scan assembled prompt) ----
+    # Hard block by default: any HIGH/CRITICAL secret finding aborts the run
+    # before the prompt reaches the provider.  Pass allow_secrets=True (CLI:
+    # --allow-secrets) to override with explicit acknowledgment.
     secret_warnings = _check_secrets_gate(prompt)
-    for warn in secret_warnings:
-        _emit(RunEvent("warning", {"message": f"[secrets-gate] {warn}"}))
+    if secret_warnings:
+        if allow_secrets:
+            for warn in secret_warnings:
+                _emit(RunEvent("warning", {"message": f"[secrets-gate] {warn}"}))
+        else:
+            findings_str = "; ".join(secret_warnings)
+            raise PromptGenieError(
+                f"Secrets gate blocked the run: potential secret(s) detected in "
+                f"assembled prompt — {findings_str}. "
+                "Remove secrets from the prompt or use --allow-secrets to override.",
+                code=EXIT_SECRETS,
+                hint="Use environment variables or secret references instead of inline secrets.",
+            )
 
     # ---- dry-run: return without provider call ----
     if effective_dry_run:
@@ -336,7 +363,8 @@ async def _run_spec_async(
     model_name = provider.model or effective_model or "unknown"
 
     # ---- run history writer ----
-    import uuid, time as _time
+    import uuid
+
     run_id = str(uuid.uuid4())[:8]
 
     writer: RunWriter | None = None
@@ -362,8 +390,17 @@ async def _run_spec_async(
     try:
         if effective_stream:
             # ---- streaming path ----
-            _emit(RunEvent("start", {"run_id": run_id, "spec_name": spec.name,
-                                     "provider": effective_provider, "model": model_name}))
+            _emit(
+                RunEvent(
+                    "start",
+                    {
+                        "run_id": run_id,
+                        "spec_name": spec.name,
+                        "provider": effective_provider,
+                        "model": model_name,
+                    },
+                )
+            )
             async for token in provider.stream(
                 messages,
                 model=effective_model,
@@ -381,8 +418,17 @@ async def _run_spec_async(
                     tee_fp.flush()
         else:
             # ---- non-streaming path ----
-            _emit(RunEvent("start", {"run_id": run_id, "spec_name": spec.name,
-                                     "provider": effective_provider, "model": model_name}))
+            _emit(
+                RunEvent(
+                    "start",
+                    {
+                        "run_id": run_id,
+                        "spec_name": spec.name,
+                        "provider": effective_provider,
+                        "model": model_name,
+                    },
+                )
+            )
             response = await provider.complete(
                 messages,
                 model=effective_model,
@@ -422,9 +468,7 @@ async def _run_spec_async(
     except Exception as exc:
         if writer:
             writer.finish(status="error", error=str(exc))
-        raise PromptGenieError(
-            f"Run failed: {exc}", code=EXIT_PROVIDER
-        ) from exc
+        raise PromptGenieError(f"Run failed: {type(exc).__name__}", code=EXIT_PROVIDER) from exc
     finally:
         if tee_fp:
             tee_fp.close()

@@ -42,7 +42,7 @@ _SHELL_META = {
         "env_var": "_PROMPTGENIE_COMPLETE",
         "env_value": "zsh_source",
         "source_snippet": 'eval "$(_PROMPTGENIE_COMPLETE=zsh_source promptgenie)"',
-        "fpath_snippet": 'fpath=(~/.zsh/completions $fpath)\nautoload -Uz compinit && compinit',
+        "fpath_snippet": "fpath=(~/.zsh/completions $fpath)\nautoload -Uz compinit && compinit",
     },
     "bash": {
         "rc_files": ["~/.bashrc", "~/.bash_profile"],
@@ -135,9 +135,12 @@ def _generate_script(shell: str) -> str | None:
         # Fallback: try running as a module
         try:
             result = subprocess.run(
-                [sys.executable, "-c",
-                 f"import os; os.environ['{meta['env_var']}'] = '{meta['env_value']}'; "
-                 "from promptgenie.cli import cli; cli(standalone_mode=False)"],
+                [
+                    sys.executable,
+                    "-c",
+                    f"import os; os.environ['{meta['env_var']}'] = '{meta['env_value']}'; "
+                    "from promptgenie.cli import cli; cli(standalone_mode=False)",
+                ],
                 env=env,
                 capture_output=True,
                 text=True,
@@ -187,12 +190,12 @@ def install_cmd(shell: str, install_dir: str | None, skip_rc: bool) -> None:
     # Ensure completion cache is up-to-date
     cache = _build_completion_cache()
     _write_cache(cache)
-    diag_console.print(
-        f"[dim]Completion cache written to {_CACHE_FILE}[/dim]"
-    )
+    diag_console.print(f"[dim]Completion cache written to {_CACHE_FILE}[/dim]")
 
     # Determine target directory and file
-    comp_dir = Path(install_dir).expanduser() if install_dir else Path(meta["completion_dir"]).expanduser()
+    comp_dir = (
+        Path(install_dir).expanduser() if install_dir else Path(meta["completion_dir"]).expanduser()
+    )
     comp_file = comp_dir / meta["filename"]
 
     comp_dir.mkdir(parents=True, exist_ok=True)
@@ -204,9 +207,7 @@ def install_cmd(shell: str, install_dir: str | None, skip_rc: bool) -> None:
         console.print(
             "[yellow]Warning:[/yellow] Could not generate completion script automatically."
         )
-        console.print(
-            f"[dim]Add the following to your {meta['rc_files'][0]}:[/dim]"
-        )
+        console.print(f"[dim]Add the following to your {meta['rc_files'][0]}:[/dim]")
         console.print(f"  [cyan]{meta['source_snippet']}[/cyan]")
 
     # RC file modification
@@ -215,8 +216,7 @@ def install_cmd(shell: str, install_dir: str | None, skip_rc: bool) -> None:
         _add_to_rc(rc_path, shell, meta, comp_dir)
     elif shell == "fish":
         console.print(
-            "[dim]Fish completions are auto-loaded from "
-            f"{comp_dir} on next shell start.[/dim]"
+            f"[dim]Fish completions are auto-loaded from {comp_dir} on next shell start.[/dim]"
         )
 
     console.print(
@@ -244,7 +244,7 @@ def show_cmd(shell: str) -> None:
             "[yellow]Warning:[/yellow] Could not generate completion script. "
             "Ensure 'promptgenie' is on your PATH."
         )
-        diag_console.print(f"[dim]Fallback: add to your shell RC:[/dim]")
+        diag_console.print("[dim]Fallback: add to your shell RC:[/dim]")
         diag_console.print(f"  {meta['source_snippet']}")
         sys.exit(EXIT_USAGE)
 
@@ -308,23 +308,25 @@ def _add_to_rc(rc_path: Path, shell: str, meta: dict, comp_dir: Path) -> None:
 
     additions: list[str] = []
 
-    if shell == "zsh" and fpath_snippet and "promptgenie" not in existing:
-        if f"fpath=(~/.zsh/completions" not in existing:
-            additions.append(fpath_snippet)
+    if (
+        shell == "zsh"
+        and fpath_snippet
+        and "promptgenie" not in existing
+        and "fpath=(~/.zsh/completions" not in existing
+    ):
+        additions.append(fpath_snippet)
 
     if snippet not in existing:
         additions.append(snippet)
 
     if additions:
-        block = (
-            "\n# PromptGenie shell completion\n"
-            + "\n".join(additions)
-            + "\n"
-        )
+        block = "\n# PromptGenie shell completion\n" + "\n".join(additions) + "\n"
         try:
             with rc_path.open("a", encoding="utf-8") as f:
                 f.write(block)
-            console.print(f"[green]✓[/green]  Added completion activation to [cyan]{rc_path}[/cyan]")
+            console.print(
+                f"[green]✓[/green]  Added completion activation to [cyan]{rc_path}[/cyan]"
+            )
         except OSError as e:
             console.print(f"[yellow]Warning:[/yellow] Could not write to {rc_path}: {e}")
             console.print(f"[dim]Add manually:[/dim]  {snippet}")

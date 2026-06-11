@@ -89,7 +89,6 @@ def handle_error(exc: PromptGenieError, *, use_stderr: bool = True) -> None:
         If True (default), write to stderr so the error never pollutes
         structured stdout output (JSON / SARIF pipelines).
     """
-    import click
 
     label = _code_label(exc.code)
     msg = f"[red]{label}:[/red] {exc}"

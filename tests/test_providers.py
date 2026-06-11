@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 import yaml
 
@@ -12,14 +9,12 @@ from promptgenie.core.errors import PromptGenieError
 from promptgenie.core.providers import (
     ProviderCapabilities,
     ProviderConfig,
+    _default_providers,
     add_provider,
     get_provider,
     load_providers_config,
     save_providers_config,
-    _default_providers,
-    _PROVIDERS_FILE,
 )
-
 
 # ---------------------------------------------------------------------------
 # ProviderCapabilities
@@ -35,8 +30,11 @@ class TestProviderCapabilities:
 
     def test_custom_values(self):
         cap = ProviderCapabilities(
-            streaming=False, local=True, max_context_tokens=200_000,
-            supports_tools=True, structured_output=True,
+            streaming=False,
+            local=True,
+            max_context_tokens=200_000,
+            supports_tools=True,
+            structured_output=True,
         )
         assert cap.local is True
         assert cap.max_context_tokens == 200_000
@@ -74,23 +72,30 @@ class TestDefaultProviders:
 class TestLoadProvidersConfig:
     def test_returns_defaults_when_no_file(self, tmp_path, monkeypatch):
         import promptgenie.core.providers as prov_mod
+
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", tmp_path / "no_such.yaml")
         result = load_providers_config()
         assert "anthropic" in result
 
     def test_loads_from_yaml(self, tmp_path, monkeypatch):
         import promptgenie.core.providers as prov_mod
+
         config_file = tmp_path / "providers.yaml"
-        config_file.write_text(yaml.dump({
-            "providers": {
-                "my-ollama": {
-                    "type": "openai_compat",
-                    "base_url": "http://localhost:11434/v1",
-                    "default_model": "llama3",
-                    "local": True,
+        config_file.write_text(
+            yaml.dump(
+                {
+                    "providers": {
+                        "my-ollama": {
+                            "type": "openai_compat",
+                            "base_url": "http://localhost:11434/v1",
+                            "default_model": "llama3",
+                            "local": True,
+                        }
+                    }
                 }
-            }
-        }), encoding="utf-8")
+            ),
+            encoding="utf-8",
+        )
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", config_file)
         result = load_providers_config()
         assert "my-ollama" in result
@@ -106,13 +111,15 @@ class TestLoadProvidersConfig:
 class TestSaveProviders:
     def test_save_and_reload(self, tmp_path, monkeypatch):
         import promptgenie.core.providers as prov_mod
+
         config_file = tmp_path / "providers.yaml"
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", config_file)
         monkeypatch.setattr(prov_mod, "_CONFIG_DIR", tmp_path)
 
         providers = {
             "test": ProviderConfig(
-                name="test", type="openai_compat",
+                name="test",
+                type="openai_compat",
                 base_url="http://localhost:8080/v1",
                 default_model="gpt-test",
             )
@@ -126,6 +133,7 @@ class TestSaveProviders:
 
     def test_add_provider(self, tmp_path, monkeypatch):
         import promptgenie.core.providers as prov_mod
+
         config_file = tmp_path / "providers.yaml"
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", config_file)
         monkeypatch.setattr(prov_mod, "_CONFIG_DIR", tmp_path)
@@ -149,6 +157,7 @@ class TestSaveProviders:
 class TestGetProvider:
     def test_unknown_provider_raises(self, tmp_path, monkeypatch):
         import promptgenie.core.providers as prov_mod
+
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", tmp_path / "no_such.yaml")
         with pytest.raises(PromptGenieError) as exc_info:
             get_provider("nonexistent-xyz")
@@ -156,6 +165,7 @@ class TestGetProvider:
 
     def test_returns_anthropic_provider(self, tmp_path, monkeypatch):
         import promptgenie.core.providers as prov_mod
+
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", tmp_path / "no_such.yaml")
         provider = get_provider("anthropic")
         assert hasattr(provider, "complete")
@@ -163,6 +173,7 @@ class TestGetProvider:
 
     def test_model_override(self, tmp_path, monkeypatch):
         import promptgenie.core.providers as prov_mod
+
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", tmp_path / "no_such.yaml")
         provider = get_provider("anthropic", model_override="claude-haiku-3-5")
         assert provider.model == "claude-haiku-3-5"
@@ -170,6 +181,7 @@ class TestGetProvider:
     def test_returns_openai_compat_for_ollama(self, tmp_path, monkeypatch):
         import promptgenie.core.providers as prov_mod
         from promptgenie.core.providers import OpenAICompatProvider
+
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", tmp_path / "no_such.yaml")
         provider = get_provider("ollama")
         assert isinstance(provider, OpenAICompatProvider)

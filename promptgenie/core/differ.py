@@ -209,12 +209,12 @@ def build_side_by_side(result: DiffResult) -> list[SideBySideRow]:
             matcher = difflib.SequenceMatcher(None, delta.a_lines, delta.b_lines)
             for tag, i1, i2, j1, j2 in matcher.get_opcodes():
                 if tag == "equal":
-                    for a, b in zip(delta.a_lines[i1:i2], delta.b_lines[j1:j2]):
+                    for a, b in zip(delta.a_lines[i1:i2], delta.b_lines[j1:j2], strict=False):
                         rows.append(SideBySideRow(a_line=a, b_line=b, status="equal"))
                 elif tag == "replace":
                     a_chunk = delta.a_lines[i1:i2]
                     b_chunk = delta.b_lines[j1:j2]
-                    for a, b in zip(a_chunk, b_chunk):
+                    for a, b in zip(a_chunk, b_chunk, strict=False):
                         rows.append(SideBySideRow(a_line=a, b_line=b, status="replace"))
                     for extra in a_chunk[len(b_chunk) :]:
                         rows.append(SideBySideRow(a_line=extra, b_line="", status="delete"))
@@ -333,7 +333,9 @@ def diff_to_markdown(result: DiffResult) -> str:
     ]
 
     # Section changes
-    changed_sections = [d for d in result.section_deltas if d.status != "unchanged" and d.name != "__preamble__"]
+    changed_sections = [
+        d for d in result.section_deltas if d.status != "unchanged" and d.name != "__preamble__"
+    ]
     if changed_sections:
         lines += ["### Section Changes", ""]
         status_emoji = {"added": "🟢 ADDED", "removed": "🔴 REMOVED", "changed": "🟡 CHANGED"}
@@ -380,7 +382,7 @@ def diff_prompts(
     a_path: str,
     b_path: str,
     target: str = "claude",
-    config: "PromptGenieConfig | None" = None,
+    config: PromptGenieConfig | None = None,
 ) -> DiffResult:
     a_text = safe_read_text(a_path)
     b_text = safe_read_text(b_path)

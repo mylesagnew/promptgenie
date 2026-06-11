@@ -21,11 +21,12 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Generator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 _RUNS_DIR = Path("~/.local/share/promptgenie/runs").expanduser()
 
@@ -64,8 +65,9 @@ class RunRecord:
 class RunWriter:
     """Write events to a run NDJSON file."""
 
-    def __init__(self, run_id: str, spec_name: str, target: str,
-                 provider: str, model: str, dry_run: bool) -> None:
+    def __init__(
+        self, run_id: str, spec_name: str, target: str, provider: str, model: str, dry_run: bool
+    ) -> None:
         self.run_id = run_id
         self.spec_name = spec_name
         self.target = target
@@ -87,16 +89,19 @@ class RunWriter:
         self._path = day_dir / f"{self.run_id}.ndjson"
         self._file = self._path.open("w", encoding="utf-8")
         # Write start event
-        self._write_event("start", {
-            "run_id": self.run_id,
-            "spec_name": self.spec_name,
-            "target": self.target,
-            "provider": self.provider,
-            "model": self.model,
-            "dry_run": self.dry_run,
-            "started_at": self.started_at,
-            "schema_version": SCHEMA_VERSION,
-        })
+        self._write_event(
+            "start",
+            {
+                "run_id": self.run_id,
+                "spec_name": self.spec_name,
+                "target": self.target,
+                "provider": self.provider,
+                "model": self.model,
+                "dry_run": self.dry_run,
+                "started_at": self.started_at,
+                "schema_version": SCHEMA_VERSION,
+            },
+        )
 
     def _write_event(self, event_type: str, data: dict[str, Any]) -> None:
         line = json.dumps({"event": event_type, "ts": time.time(), **data})
@@ -132,15 +137,18 @@ class RunWriter:
         finished_at = datetime.now(timezone.utc).isoformat()
         duration = time.monotonic() - self._start_time
         response = "".join(self._tokens)
-        self._write_event("done", {
-            "status": status,
-            "error": error,
-            "finished_at": finished_at,
-            "duration_s": round(duration, 3),
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "response_length": len(response),
-        })
+        self._write_event(
+            "done",
+            {
+                "status": status,
+                "error": error,
+                "finished_at": finished_at,
+                "duration_s": round(duration, 3),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "response_length": len(response),
+            },
+        )
         if self._file:
             self._file.close()
             self._file = None

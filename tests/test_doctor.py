@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import os
-from unittest.mock import patch
-
-import pytest
 from click.testing import CliRunner
 
 from promptgenie.cli import cli
 from promptgenie.commands.doctor import (
     CheckResult,
-    run_doctor,
-    _check_python_version,
-    _check_package_version,
     _check_extra,
+    _check_package_version,
+    _check_python_version,
+    run_doctor,
 )
 
 
@@ -37,7 +33,6 @@ class TestCheckResult:
 class TestIndividualChecks:
     def test_python_version_passes_on_current(self):
         result = _check_python_version()
-        import sys
         # Current Python is ≥ 3.10 (required by the project)
         assert result.passed is True
 
@@ -87,6 +82,7 @@ class TestDoctorCommand:
 
     def test_doctor_json_format(self):
         import json
+
         result = self.runner.invoke(cli, ["doctor", "--format", "json"])
         assert result.exit_code in (0, 1)
         data = json.loads(result.output)
@@ -97,6 +93,7 @@ class TestDoctorCommand:
 
     def test_doctor_json_has_version(self):
         import json
+
         result = self.runner.invoke(cli, ["doctor", "--format", "json"])
         data = json.loads(result.output)
         assert "version" in data
@@ -104,6 +101,7 @@ class TestDoctorCommand:
 
     def test_doctor_json_failure_count_non_negative(self):
         import json
+
         result = self.runner.invoke(cli, ["doctor", "--format", "json"])
         data = json.loads(result.output)
         assert data["failure_count"] >= 0

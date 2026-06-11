@@ -9,18 +9,16 @@ Commands
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import click
 import yaml
 
-from promptgenie.core.errors import EXIT_OK, EXIT_USAGE, PromptGenieError
+from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
 from promptgenie.core.spec import load_spec
 from promptgenie.core.variables import (
     find_variables,
     load_vars_file,
     parse_cli_vars,
-    resolve_variables,
 )
 from promptgenie.renderers.rich import console, diag_console, is_structured_mode
 
@@ -37,9 +35,13 @@ def vars_group() -> None:
 
 @vars_group.command("list")
 @click.argument("spec_file", type=click.Path(exists=True))
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def vars_list_cmd(spec_file: str, output_format: str) -> None:
     """List all variable placeholders declared in a spec's prompt text.
 
@@ -53,7 +55,7 @@ def vars_list_cmd(spec_file: str, output_format: str) -> None:
         spec = load_spec(spec_file)
     except PromptGenieError as exc:
         diag_console.print(f"[red]Error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from exc
 
     prompt_text = spec.prompt or ""
     variables = find_variables(prompt_text)
@@ -98,17 +100,28 @@ def vars_list_cmd(spec_file: str, output_format: str) -> None:
 
 @vars_group.command("inspect")
 @click.argument("spec_file", type=click.Path(exists=True))
-@click.option("--var", "var_list", multiple=True, metavar="KEY=VALUE",
-              help="Inline variable override (repeatable).")
-@click.option("--vars", "vars_file", default=None,
-              help="YAML/JSON file of variable values.")
-@click.option("--env-prefix", default="PG_", show_default=True,
-              help="Environment variable prefix for auto-binding.")
-@click.option("--redacted", is_flag=True,
-              help="Mask secret variable values in output.")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--var",
+    "var_list",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Inline variable override (repeatable).",
+)
+@click.option("--vars", "vars_file", default=None, help="YAML/JSON file of variable values.")
+@click.option(
+    "--env-prefix",
+    default="PG_",
+    show_default=True,
+    help="Environment variable prefix for auto-binding.",
+)
+@click.option("--redacted", is_flag=True, help="Mask secret variable values in output.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def vars_inspect_cmd(
     spec_file: str,
     var_list: tuple[str, ...],
@@ -132,7 +145,7 @@ def vars_inspect_cmd(
         spec = load_spec(spec_file)
     except PromptGenieError as exc:
         diag_console.print(f"[red]Error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from exc
 
     # Merge vars: spec defaults → vars file → CLI vars
     merged: dict = dict(spec.vars)
@@ -141,7 +154,7 @@ def vars_inspect_cmd(
             merged.update(load_vars_file(vars_file))
         except Exception as exc:
             diag_console.print(f"[red]Failed to load vars file:[/red] {exc}")
-            raise SystemExit(EXIT_USAGE)
+            raise SystemExit(EXIT_USAGE) from exc
     cli_var_dict = parse_cli_vars(list(var_list))
     merged.update(cli_var_dict)
 
@@ -151,6 +164,7 @@ def vars_inspect_cmd(
     # Determine source per variable
     rows = []
     import os
+
     for v in variables:
         value = None
         source = "unresolved"
@@ -173,13 +187,15 @@ def vars_inspect_cmd(
                 source = "spec_default"
 
         display_value = "***" if (is_secret or redacted) and value is not None else value
-        rows.append({
-            "name": v,
-            "value": display_value,
-            "source": source,
-            "secret": is_secret,
-            "resolved": value is not None,
-        })
+        rows.append(
+            {
+                "name": v,
+                "value": display_value,
+                "source": source,
+                "secret": is_secret,
+                "resolved": value is not None,
+            }
+        )
 
     if is_structured_mode(output_format):
         data = {
@@ -198,8 +214,8 @@ def vars_inspect_cmd(
         return
 
     from rich.table import Table
-    table = Table(title=f"Variable resolution: {spec.name}", show_header=True,
-                  header_style="bold")
+
+    table = Table(title=f"Variable resolution: {spec.name}", show_header=True, header_style="bold")
     table.add_column("Name", style="cyan")
     table.add_column("Value")
     table.add_column("Source")

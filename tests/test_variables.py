@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-from unittest.mock import patch
-
 import pytest
-import yaml
 
-from promptgenie.core.errors import EXIT_USAGE
+from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
 from promptgenie.core.variables import (
-    VarResolutionError,
     VariableSpec,
+    VarResolutionError,
     find_variables,
     load_schema_file,
     load_vars_file,
@@ -71,7 +66,9 @@ class TestParseCliVars:
     def test_invalid_no_equals_raises(self):
         with pytest.raises(Exception) as exc_info:
             parse_cli_vars(["noequals"])
-        assert "key=value" in str(exc_info.value).lower() or "invalid" in str(exc_info.value).lower()
+        assert (
+            "key=value" in str(exc_info.value).lower() or "invalid" in str(exc_info.value).lower()
+        )
 
     def test_empty_list(self):
         assert parse_cli_vars([]) == {}
@@ -89,19 +86,19 @@ class TestLoadVarsFile:
         assert load_vars_file(f) == {"env": "prod", "region": "us-east-1"}
 
     def test_missing_file_raises(self, tmp_path):
-        with pytest.raises(Exception):
+        with pytest.raises((FileNotFoundError, PromptGenieError)):
             load_vars_file(tmp_path / "nonexistent.yaml")
 
     def test_non_mapping_raises(self, tmp_path):
         f = tmp_path / "vars.yaml"
         f.write_text("- item1\n- item2\n")
-        with pytest.raises(Exception):
+        with pytest.raises((PromptGenieError, TypeError, ValueError)):
             load_vars_file(f)
 
     def test_invalid_yaml_raises(self, tmp_path):
         f = tmp_path / "vars.yaml"
         f.write_text("key: [\nunclosed")
-        with pytest.raises(Exception):
+        with pytest.raises((PromptGenieError, Exception)):
             load_vars_file(f)
 
 
@@ -135,7 +132,7 @@ variables:
         assert result["env"].allowed_values == ["prod", "staging", "dev"]
 
     def test_missing_schema_file_raises(self, tmp_path):
-        with pytest.raises(Exception):
+        with pytest.raises((FileNotFoundError, PromptGenieError)):
             load_schema_file(tmp_path / "missing.yaml")
 
 
@@ -211,7 +208,6 @@ class TestResolveVariablesNoInput:
         assert rendered == "hello and hello again"
 
     def test_allowed_values_valid(self):
-        from promptgenie.core.variables import VariableSpec
         schema = {"env": VariableSpec(name="env", allowed_values=["prod", "staging"])}
         text = "{{env}}"
         rendered, _ = resolve_variables(
@@ -220,14 +216,12 @@ class TestResolveVariablesNoInput:
         assert rendered == "prod"
 
     def test_allowed_values_invalid_raises(self):
-        from promptgenie.core.variables import VariableSpec
         schema = {"env": VariableSpec(name="env", allowed_values=["prod", "staging"])}
         text = "{{env}}"
-        with pytest.raises(Exception):
+        with pytest.raises((PromptGenieError, ValueError)):
             resolve_variables(text, cli_vars={"env": "dev"}, schema=schema, no_input=True)
 
     def test_secret_masked_in_display(self):
-        from promptgenie.core.variables import VariableSpec
         schema = {"token": VariableSpec(name="token", secret=True)}
         text = "Token: {{token}}"
         rendered, display = resolve_variables(
@@ -243,7 +237,7 @@ class TestResolveVariablesNoInput:
 
     def test_type_coercion_int_invalid_raises(self):
         text = "Count: {{n:int}}"
-        with pytest.raises(Exception):
+        with pytest.raises((PromptGenieError, ValueError)):
             resolve_variables(text, cli_vars={"n": "not-an-int"}, no_input=True)
 
 

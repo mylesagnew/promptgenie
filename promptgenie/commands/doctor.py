@@ -15,11 +15,9 @@ from __future__ import annotations
 import importlib.util
 import os
 import platform
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 import click
 
@@ -124,7 +122,17 @@ def _check_ollama() -> CheckResult:
 
     base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     try:
-        req = urllib.request.urlopen(f"{base}/api/tags", timeout=2)
+        from urllib.parse import urlparse
+
+        _scheme = urlparse(base).scheme.lower()
+        if _scheme not in ("http", "https"):
+            return CheckResult(
+                label="Ollama (local provider)",
+                passed=False,
+                detail=f"OLLAMA_BASE_URL has disallowed scheme {_scheme!r}",
+                remediation="Set OLLAMA_BASE_URL to an http:// or https:// URL",
+            )
+        req = urllib.request.urlopen(f"{base}/api/tags", timeout=2)  # nosec B310 — scheme validated above
         req.close()
         return CheckResult(
             label="Ollama (local provider)",
@@ -315,7 +323,6 @@ def doctor_cmd(verbose: bool, output_format: str) -> None:
 
     if output_format == "json":
         import json as _json
-        from importlib.metadata import version
 
         data = {
             "schema_version": "1.0",

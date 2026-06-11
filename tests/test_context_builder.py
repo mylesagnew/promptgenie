@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 
 from promptgenie.core.context_builder import (
-    ContextManifest,
     SourceEntry,
     _apply_strategy,
     _estimate_tokens,
     _gather_env,
     _gather_file,
-    _gather_git,
     _is_ignored,
     _load_promptignore,
     build_context,
@@ -22,18 +17,21 @@ from promptgenie.core.context_builder import (
 from promptgenie.core.errors import PromptGenieError
 from promptgenie.core.spec import ContextSource
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_entry(label: str, tokens: int = 10, mtime: float = 0.0,
-                source_type: str = "file") -> SourceEntry:
+def _make_entry(
+    label: str, tokens: int = 10, mtime: float = 0.0, source_type: str = "file"
+) -> SourceEntry:
     return SourceEntry(
-        label=label, source_type=source_type,
-        content="x" * (tokens * 4), sha256="abc",
-        token_estimate=tokens, mtime=mtime,
+        label=label,
+        source_type=source_type,
+        content="x" * (tokens * 4),
+        sha256="abc",
+        token_estimate=tokens,
+        mtime=mtime,
     )
 
 
@@ -67,8 +65,9 @@ class TestPromptIgnore:
         assert patterns == []
 
     def test_loads_patterns(self, tmp_path):
-        (tmp_path / ".promptignore").write_text("*.log\n# comment\n__pycache__/\n",
-                                                 encoding="utf-8")
+        (tmp_path / ".promptignore").write_text(
+            "*.log\n# comment\n__pycache__/\n", encoding="utf-8"
+        )
         patterns = _load_promptignore(tmp_path)
         assert "*.log" in patterns
         assert "# comment" not in patterns
@@ -208,8 +207,7 @@ class TestBuildContext:
             ContextSource(type="file", path="big.txt"),
             ContextSource(type="file", path="small.txt"),
         ]
-        manifest = build_context(sources, max_tokens=10, strategy="smallest",
-                                 base_dir=tmp_path)
+        manifest = build_context(sources, max_tokens=10, strategy="smallest", base_dir=tmp_path)
         assert manifest.trimmed_count > 0
 
     def test_empty_sources(self, tmp_path):
