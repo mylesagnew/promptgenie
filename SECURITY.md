@@ -2,11 +2,14 @@
 
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
-| 1.x     | ✓ Active  |
+| Version | Supported          |
+|---------|--------------------|
+| 1.2.x   | ✓ Active (current) |
+| 1.1.x   | ✓ Security patches |
+| 1.0.x   | ✗ End of life      |
+| < 1.0   | ✗ End of life      |
 
-Current release: **1.0.19**. Patch releases are the only supported channel — no LTS or legacy branch exists.
+Current release: **1.2.1**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
 
 ---
 
@@ -23,6 +26,46 @@ Include:
 - Any suggested fix (optional)
 
 You will receive an acknowledgement within **48 hours** and a resolution timeline within **7 days**.
+
+---
+
+## Run Engine Security Model (v1.2.1+)
+
+The `promptgenie run` command executes PromptSpec YAML files that can name context sources,
+provider URLs, and shell commands. The following hardened defaults are in effect from v1.2.1:
+
+### Secrets gate — hard block
+
+If the assembled prompt contains a HIGH or CRITICAL secret finding (API keys, tokens, credentials),
+the run aborts with `exit 6` before any provider call is made. This prevents accidental credential
+exfiltration to external LLM providers.
+
+To bypass this gate in controlled environments (e.g. prompt injection test fixtures), pass
+`--allow-secrets` to `promptgenie run`. A warning is printed to stderr whenever this flag is active.
+Never use `--allow-secrets` in production pipelines that handle real credentials.
+
+### URL context sources — SSRF protection
+
+`context: [{type: url, url: ...}]` entries are validated before any network call:
+- Only `http://` and `https://` schemes are permitted. `file://`, `ftp://`, `data:`, and all other
+  schemes raise `SecurityError`.
+- Requests to loopback addresses (`127.0.0.1`, `::1`), RFC-1918 private ranges (`10.x`,
+  `172.16–31.x`, `192.168.x`), and link-local addresses (`169.254.x`) are blocked.
+- URL context sources are additionally gated behind the `--allow-url` CLI flag.
+
+### File context sources — path containment
+
+`context: [{type: file, path: ...}]` entries are resolved to their real path (symlinks expanded)
+and must fall within the project directory (the directory containing the spec file). Paths that
+escape via `../`, absolute references, or symlink chains raise `SecurityError`.
+
+### Command context sources — allowlist
+
+`context: [{type: cmd, cmd: ...}]` entries are parsed with `shlex.split()` (no shell expansion)
+and the executable basename is checked against a fixed allowlist of safe tools (`git`, `cat`,
+`grep`, `python3`, `make`, and a small set of equivalents). Executables not on the allowlist
+(`rm`, `bash`, `sh`, `curl`, `nc`, and any other tool) raise `SecurityError` before any process
+is spawned.
 
 ---
 
@@ -131,7 +174,7 @@ Use `--yes` only in CI pipelines where the prompt content has already been revie
   pip install pip-audit
   pip-audit
   ```
-- Dependabot is configured for weekly `uv` and `github-actions` dependency update PRs.
+- Dependabot is configured for weekly `uv`, `github-actions`, and `npm` (vscode-extension) dependency update PRs.
 
 ---
 

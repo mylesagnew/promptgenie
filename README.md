@@ -1461,12 +1461,19 @@ promptgenie run my-prompt.yaml --no-input --var env=prod
 | `--vars FILE` | YAML/JSON variable file |
 | `--max-context-tokens N` | Context token budget |
 | `--context-strategy` | `manual` \| `newest` \| `smallest` \| `git-relevant` |
-| `--allow-url` | Permit URL-type context sources |
+| `--allow-url` | Permit URL-type context sources (SSRF-protected; blocks private IPs and non-HTTP(S) schemes) |
+| `--allow-secrets` | Downgrade secrets gate from hard-block to warning (use only in controlled CI environments) |
 | `--tee FILE` | Write response to file while streaming |
 | `--format text\|ndjson` | NDJSON emits `start/token/warning/error/done` events |
 | `--show-context` | Print context manifest before sending |
 
 Run history is persisted to `~/.local/share/promptgenie/runs/`.
+
+> **Security defaults (v1.2.1+):** The run engine enforces three hard constraints by default.
+> (1) **Secrets gate** — if the assembled prompt contains a detected secret (API key, token, credential), the run aborts with exit 6 before calling any provider. Pass `--allow-secrets` to override.
+> (2) **SSRF protection** — `url` context sources are validated against an IP allowlist; `file://` and private IP ranges are blocked unconditionally.
+> (3) **Command allowlist** — `cmd` context sources are restricted to a fixed set of known-safe executables; arbitrary shell commands are rejected.
+> See [SECURITY.md](SECURITY.md) for the full run engine security model.
 
 ---
 
