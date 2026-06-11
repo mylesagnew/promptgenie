@@ -39,14 +39,14 @@ promptgenie = "promptgenie.cli:cli"
 
 [project.optional-dependencies]
 benchmark = [
-    "anthropic>=0.100",
+    "anthropic>=0.109.1",
 ]
 tokenizer = [
     "tiktoken>=0.7",
 ]
 providers = [
     "httpx>=0.27",
-    "anthropic>=0.100",
+    "anthropic>=0.109.1",
 ]
 dev = [
     "pytest>=8.0",
