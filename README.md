@@ -184,6 +184,8 @@ $ promptgenie scan examples/auth-refactor.md
 
 > **Scanner scope:** `scan` is a regex/heuristic tripwire with Unicode normalization (NFKC). It catches obvious prompt-injection vocabulary, hardcoded secrets, unsafe agent permission patterns, split/multiline overrides, HTML and block-comment smuggling, base64-encoded payloads (≥40 chars, >70% printable), and fullwidth Unicode obfuscation. It does **not** catch within-word character splits, non-NFKC Unicode homoglyphs (e.g. Turkish ı), synonym substitution, or indirect reference attacks. See `tests/test_scanner_adversarial.py` for a full list of documented detection gaps.
 
+> **Custom rule safety:** patterns loaded from `.promptgenie.yaml` `custom_rules` or registry-installed rule packs are validated at load time for syntax errors and nested quantifiers (`(a+)+`, `(\w+)*`, etc.) — the primary cause of catastrophic backtracking (ReDoS). Invalid or dangerous patterns are rejected with a clear error before they reach the scanner.
+
 **Lint a prompt for quality issues:**
 
 ```
@@ -1893,7 +1895,7 @@ linter:
       suggestion: "Narrow the refactor to specific modules or files."
 ```
 
-**Custom scanner rules** can also be added under `scanner.custom_rules`. Each rule requires `id`, `pattern`, `risk`, `confidence`, `message`, and `recommendation`:
+**Custom scanner rules** can also be added under `scanner.custom_rules`. Each rule requires `id`, `pattern`, `risk`, `confidence`, `message`, and `recommendation`. All patterns are validated at load time — syntax errors and nested quantifiers (ReDoS risk) raise `ValueError` and abort config loading:
 
 ```yaml
 scanner:

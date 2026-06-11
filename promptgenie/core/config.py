@@ -119,7 +119,7 @@ _VALID_SEVERITY = {"HIGH", "MEDIUM", "LOW", "INFO"}
 
 
 def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
-    from promptgenie.core.scanner import ScanRule
+    from promptgenie.core.scanner import ScanRule, validate_pattern
 
     rules = []
     for entry in raw_rules:
@@ -143,6 +143,10 @@ def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
                 f"Custom scan rule {rule_id!r}: invalid confidence {confidence!r}. "
                 f"Must be one of {sorted(_VALID_CONFIDENCE)}."
             )
+        try:
+            validate_pattern(pattern, rule_id)
+        except ValueError as exc:
+            raise ValueError(f"Custom scan rule {exc}") from exc
         rules.append(
             ScanRule(
                 id=rule_id,
@@ -161,6 +165,7 @@ def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
 
 def _parse_custom_lint_rules(raw_rules: list[Any]) -> list[LintRule]:
     from promptgenie.core.linter import LintRule
+    from promptgenie.core.scanner import validate_pattern
 
     rules = []
     for entry in raw_rules:
@@ -184,6 +189,10 @@ def _parse_custom_lint_rules(raw_rules: list[Any]) -> list[LintRule]:
                 f"Custom lint rule {rule_id!r}: invalid confidence {confidence!r}. "
                 f"Must be one of {sorted(_VALID_CONFIDENCE)}."
             )
+        try:
+            validate_pattern(pattern, rule_id)
+        except ValueError as exc:
+            raise ValueError(f"Custom lint rule {exc}") from exc
         rules.append(
             LintRule(
                 id=rule_id,

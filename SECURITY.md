@@ -6,6 +6,8 @@
 |---------|-----------|
 | 1.x     | ✓ Active  |
 
+Current release: **1.0.19**. Patch releases are the only supported channel — no LTS or legacy branch exists.
+
 ---
 
 ## Reporting a Vulnerability
@@ -57,6 +59,13 @@ Files collected across all paths are subject to a per-file byte cap (default 1 M
 
 **Custom rules:**
 Project-specific scanner rules can be added under `scanner.custom_rules` in `.promptgenie.yaml` (see README Configuration section). Each rule is a `ScanRule` with `id`, `category`, `pattern`, `risk`, `confidence`, `message`, `recommendation`, and optional `false_positive_note`. Custom rules are appended after built-in rules and participate in the same allowlist and severity-override system.
+
+**Pattern safety:** custom rule patterns are validated at load time by `validate_pattern()` in `promptgenie/core/scanner.py`. Two checks are applied:
+
+1. **Syntax** — `re.compile(pattern)` rejects patterns that are not valid Python regex.
+2. **Nested quantifier detection** — patterns containing a quantified group that is itself quantified (e.g. `(a+)+`, `(\w+)*`, `(\d+){2,}`) are rejected. These constructs are the primary cause of catastrophic backtracking (ReDoS) and can cause the scanner to hang indefinitely on adversarial input. Rewrite such patterns using non-capturing groups or simplified alternatives.
+
+Registry-installed rule packs are subject to the same validation at load time. A malformed pack raises `ValueError` and is never silently loaded.
 
 ---
 

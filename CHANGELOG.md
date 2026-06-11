@@ -8,7 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
-*Nothing yet — next milestone is Phase 3.*
+### Security
+
+- **ReDoS protection for custom and registry rule packs** — `validate_pattern()` added to
+  `promptgenie/core/scanner.py`. All custom scan and lint rule patterns (from `.promptgenie.yaml`
+  `custom_rules` or registry pack `scanner_rules`/`lint_rules`) are validated at load time:
+  (1) `re.compile()` rejects syntactically invalid patterns; (2) `_NESTED_QUANTIFIER_RE` rejects
+  patterns containing a quantified group that is itself quantified — e.g. `(a+)+`, `(\w+)*`,
+  `(x+)?` — the primary cause of catastrophic backtracking (ReDoS). A malicious or poorly-written
+  rule pack downloaded from the registry can no longer cause the scanner to hang indefinitely.
+  Built-in rules are pre-vetted and are not affected.
+- **CI supply-chain hardening — all GitHub Actions now SHA-pinned** — three tag-pinned actions in
+  `.github/workflows/ci.yml` and `.github/workflows/release.yml` pinned to full commit SHAs:
+  `actions/setup-node` → `49933ea5…`, `actions/upload-artifact` → `ea165f8d…`,
+  `actions/download-artifact` → `d3f86a10…`. Every action reference across both workflows is now
+  pinned to an immutable commit SHA.
 
 ---
 
@@ -717,7 +731,7 @@ Initial public release.
 
 [Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.2.0...HEAD
 [1.2.0]: https://github.com/mylesagnew/promptgenie/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/mylesagnew/promptgenie/compare/v1.0.11...v1.1.0
+[1.1.0]: https://github.com/mylesagnew/promptgenie/compare/v1.0.19...v1.1.0
 [1.0.11]: https://github.com/mylesagnew/promptgenie/compare/v1.0.10...v1.0.11
 [1.0.10]: https://github.com/mylesagnew/promptgenie/compare/v1.0.9...v1.0.10
 [1.0.9]: https://github.com/mylesagnew/promptgenie/compare/v1.0.8...v1.0.9
