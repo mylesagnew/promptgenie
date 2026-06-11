@@ -248,7 +248,7 @@ def provider_show_cmd(name: str, output_format: str) -> None:
 
     console.print(f"[bold cyan]{p.name}[/bold cyan]")
     for k, v in data.items():
-        if k == "capabilities":
+        if k == "capabilities" and isinstance(v, dict):
             console.print("  capabilities:")
             for ck, cv in v.items():
                 console.print(f"    {ck}: {cv}")

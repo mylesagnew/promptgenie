@@ -226,14 +226,14 @@ def vars_inspect_cmd(
         secret_tag = " [dim](secret)[/dim]" if row["secret"] else ""
         value_display = str(row["value"]) if row["value"] is not None else "[dim]—[/dim]"
         table.add_row(
-            row["name"] + secret_tag,
+            str(row["name"]) + secret_tag,
             value_display,
             str(row["source"]),
             status,
         )
     console.print(table)
 
-    unresolved = [r["name"] for r in rows if not r["resolved"]]
+    unresolved = [str(r["name"]) for r in rows if not r["resolved"]]
     if unresolved:
         diag_console.print(
             f"\n[yellow]⚠[/yellow] {len(unresolved)} unresolved variable(s): "

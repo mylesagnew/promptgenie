@@ -37,9 +37,11 @@ import hashlib
 import ipaddress
 import os
 import shlex
+import socket
 import subprocess
 import sys
 import urllib.request
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -57,7 +59,10 @@ class SecurityError(PromptGenieError):
 
 
 # Allowed URL schemes for context sources.
-_ALLOWED_CONTEXT_SCHEMES: frozenset[str] = frozenset({"https", "http"})
+# HTTP is intentionally excluded by default to prevent cleartext data leakage.
+# Set allow_insecure=True in _check_url_allowed / build_context to permit http://.
+_ALLOWED_CONTEXT_SCHEMES: frozenset[str] = frozenset({"https"})
+_INSECURE_CONTEXT_SCHEMES: frozenset[str] = frozenset({"https", "http"})
 
 # Private/loopback IPv4 and IPv6 networks that must never be fetched.
 _PRIVATE_NETS = [
@@ -72,39 +77,85 @@ _PRIVATE_NETS = [
 ]
 
 
-def _check_url_allowed(url: str) -> None:
+def _is_private_ip(addr_str: str) -> bool:
+    """Return True if *addr_str* is an IP address in any private/loopback/link-local range."""
+    try:
+        addr = ipaddress.ip_address(addr_str)
+        return any(addr in net for net in _PRIVATE_NETS)
+    except ValueError:
+        return False
+
+
+def _check_url_allowed(url: str, *, allow_insecure: bool = False) -> None:
     """Raise SecurityError if *url* uses a disallowed scheme or targets an internal host.
 
     Blocks:
-      - Non-HTTP(S) schemes (file://, ftp://, data:, etc.)
+      - Non-HTTPS schemes unless *allow_insecure* is True (CWE-319)
       - Loopback addresses (127.x, ::1)
       - Private/RFC-1918 ranges (10.x, 172.16-31.x, 192.168.x)
       - Link-local / APIPA (169.254.x)
+      - Hostnames that DNS-resolve to any private/loopback IP (CWE-918 DNS rebinding)
+
+    Parameters
+    ----------
+    url:
+        The URL to validate.
+    allow_insecure:
+        When True, also permit ``http://`` URLs (logs a security warning).
+        Default is False — only ``https://`` is allowed.
     """
     parsed = urlparse(url)
     scheme = parsed.scheme.lower()
-    if scheme not in _ALLOWED_CONTEXT_SCHEMES:
+    allowed = _INSECURE_CONTEXT_SCHEMES if allow_insecure else _ALLOWED_CONTEXT_SCHEMES
+    if scheme not in allowed:
+        if scheme == "http" and not allow_insecure:
+            raise SecurityError(
+                f"Blocked plain HTTP URL {url!r}. "
+                "Only https:// is permitted by default to prevent cleartext data leakage. "
+                "Pass --allow-insecure-url / allow_insecure=True to override.",
+                code=EXIT_USAGE,
+            )
         raise SecurityError(
             f"Blocked URL scheme {scheme!r} in context source {url!r}. "
-            f"Only {sorted(_ALLOWED_CONTEXT_SCHEMES)} are permitted. "
+            f"Only {sorted(allowed)} are permitted. "
             "file://, ftp://, and other schemes are disallowed to prevent SSRF.",
             code=EXIT_USAGE,
         )
+    if allow_insecure and scheme == "http":
+        warnings.warn(
+            f"SECURITY WARNING: fetching plain HTTP URL {url!r}. "
+            "Data is transmitted without encryption. Use https:// in production.",
+            stacklevel=3,
+        )
     hostname = parsed.hostname or ""
-    try:
-        addr = ipaddress.ip_address(hostname)
-        for net in _PRIVATE_NETS:
-            if addr in net:
-                raise SecurityError(
-                    f"Blocked internal/private IP address {hostname!r} in URL {url!r}. "
-                    "Fetching from internal network addresses is disallowed (SSRF prevention).",
-                    code=EXIT_USAGE,
-                )
-    except ValueError:
-        # Not an IP address literal — hostname resolution happens at connect time.
-        # We cannot block DNS-rebinding here without actually resolving, but scheme
-        # and explicit IP checks cover the most common SSRF vectors.
-        pass
+    # Check explicit IP literal first.
+    if _is_private_ip(hostname):
+        raise SecurityError(
+            f"Blocked internal/private IP address {hostname!r} in URL {url!r}. "
+            "Fetching from internal network addresses is disallowed (SSRF prevention).",
+            code=EXIT_USAGE,
+        )
+    # Resolve hostname to IPs and check each resolved address (DNS-rebinding defence).
+    if hostname and not hostname.replace(".", "").replace(":", "").replace("[", "").replace("]", "").isdigit():
+        # hostname is not a bare IP literal — resolve it
+        try:
+            # strip IPv6 brackets if present
+            bare = hostname.strip("[]")
+            addr_infos = socket.getaddrinfo(bare, None)
+            for _family, _type, _proto, _canonname, sockaddr in addr_infos:
+                resolved_ip = str(sockaddr[0])
+                if _is_private_ip(resolved_ip):
+                    raise SecurityError(
+                        f"Blocked URL {url!r}: hostname {hostname!r} resolved to "
+                        f"internal/private IP {resolved_ip!r}. "
+                        "DNS rebinding / SSRF prevention check failed.",
+                        code=EXIT_USAGE,
+                    )
+        except SecurityError:
+            raise
+        except OSError:
+            # DNS resolution failed — let the request fail naturally at connect time.
+            pass
 
 
 # Allowlist of commands that context sources may invoke.
@@ -351,9 +402,13 @@ def _gather_cmd(command: str, label: str, max_bytes: int) -> SourceEntry:
 
 
 def _gather_git(staged: bool, label: str) -> SourceEntry:
+    # git commands are hardcoded — not driven by user spec values, so no allowlist
+    # check needed here. The argv is always a fixed safe invocation.
     cmd = ["git", "diff", "--staged"] if staged else ["git", "diff"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        result = subprocess.run(  # nosec B603 — shell=False, hardcoded argv (not from spec)
+            cmd, shell=False, capture_output=True, text=True, timeout=15
+        )
         content = result.stdout or "(no diff)\n"
     except (subprocess.TimeoutExpired, FileNotFoundError):
         content = "(git not available)\n"
@@ -368,16 +423,19 @@ def _gather_git(staged: bool, label: str) -> SourceEntry:
     )
 
 
-def _gather_url(url: str, label: str, max_bytes: int, no_url: bool) -> SourceEntry:
+def _gather_url(
+    url: str, label: str, max_bytes: int, no_url: bool, allow_insecure: bool = False
+) -> SourceEntry:
     if no_url:
         raise PromptGenieError(
             f"URL context source '{url}' is blocked (policy-gated). "
             "Pass --allow-url to permit network fetches.",
             code=EXIT_USAGE,
         )
-    # SSRF / scheme validation — raises SecurityError for disallowed schemes or
-    # private/loopback IPs before any network connection is opened.
-    _check_url_allowed(url)
+    # SSRF / scheme validation — raises SecurityError for disallowed schemes,
+    # private/loopback IPs, and DNS-resolved private addresses before any
+    # network connection is opened.
+    _check_url_allowed(url, allow_insecure=allow_insecure)
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "PromptGenie/2.0"})
         with urllib.request.urlopen(req, timeout=20) as resp:  # nosec B310 — scheme validated above
@@ -435,6 +493,7 @@ def build_context(
     strategy: str = "manual",
     base_dir: Path | None = None,
     no_url: bool = True,
+    allow_insecure_url: bool = False,
 ) -> ContextManifest:
     """Gather all context sources and assemble them into a ContextManifest.
 
@@ -450,6 +509,10 @@ def build_context(
         Base directory for resolving relative paths. Defaults to cwd.
     no_url:
         If True, block url-type sources unless explicitly allowed.
+    allow_insecure_url:
+        When True, permit plain ``http://`` URLs in context sources (logs a
+        security warning). Only ``https://`` is allowed when False (default).
+        Corresponds to ``--allow-insecure-url`` / ``allow_insecure: true``.
     """
     base_dir = base_dir or Path.cwd()
     ignore_patterns = _load_promptignore(base_dir)
@@ -480,7 +543,15 @@ def build_context(
             raw_entries.append(_gather_git(staged=True, label=lbl))
         elif src_type == "url":
             gate = src.policy_gated if hasattr(src, "policy_gated") else True
-            raw_entries.append(_gather_url(src.url, lbl, mb, no_url=gate and no_url))
+            raw_entries.append(
+                _gather_url(
+                    src.url,
+                    lbl,
+                    mb,
+                    no_url=gate and no_url,
+                    allow_insecure=allow_insecure_url,
+                )
+            )
 
     # Apply ordering strategy
     ordered = _apply_strategy(raw_entries, strategy)

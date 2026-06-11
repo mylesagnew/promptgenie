@@ -346,7 +346,7 @@ class AnthropicProvider(BaseProvider):
             response = await asyncio.wait_for(
                 client.messages.create(**kwargs_build), timeout=timeout
             )
-            return response.content[0].text
+            return str(response.content[0].text)
         except ImportError:
             return await self._complete_httpx(user_msgs, system_text, m, max_tokens, timeout)
         except asyncio.TimeoutError as exc:
@@ -393,7 +393,7 @@ class AnthropicProvider(BaseProvider):
                 json=body,
             )
         resp.raise_for_status()
-        return resp.json()["content"][0]["text"]
+        return str(resp.json()["content"][0]["text"])
 
     async def stream(
         self,
@@ -485,7 +485,7 @@ class OpenAICompatProvider(BaseProvider):
                     json=body,
                 )
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            return str(resp.json()["choices"][0]["message"]["content"])
         except asyncio.TimeoutError as exc:
             raise PromptGenieError(
                 f"Provider '{self.config.name}' timed out.", code=EXIT_TIMEOUT

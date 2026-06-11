@@ -88,10 +88,17 @@
     "configuration": {
       "title": "PromptGenie",
       "properties": {
+        "promptgenie.executablePath": {
+          "type": "string",
+          "default": "promptgenie",
+          "scope": "machine",
+          "markdownDescription": "Absolute path to the `promptgenie` CLI executable. Defaults to `promptgenie` (resolved from `PATH`). If you installed PromptGenie in a virtualenv, set this to the full absolute path, e.g. `/home/user/.venv/bin/promptgenie`.\n\n**Security notice:** This setting executes the specified binary with the privileges of your VS Code process. **Never** point this at an untrusted executable — a malicious workspace `.vscode/settings.json` that overrides this value could execute arbitrary code. Because `scope` is `machine`, workspace-level settings cannot override this value; it must be set in your user or machine settings."
+        },
         "promptgenie.cliPath": {
           "type": "string",
           "default": "promptgenie",
-          "description": "Path to the promptgenie CLI executable. Defaults to 'promptgenie' (must be on PATH). Use an absolute path if installed in a virtualenv, e.g. '/home/user/.venv/bin/promptgenie'."
+          "scope": "machine",
+          "markdownDescription": "**Deprecated** — use `promptgenie.executablePath` instead. Absolute path to the `promptgenie` CLI executable.\n\n**Security notice:** This setting executes the specified binary. Only set this to a path you fully trust. Workspace-level settings cannot override this value (`scope: machine`)."
         },
         "promptgenie.target": {
           "type": "string",

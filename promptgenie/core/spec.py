@@ -259,11 +259,11 @@ def render_spec(spec: PromptSpec, resolved_vars: dict[str, Any]) -> str:
         text = ""
 
     # Simple {{name}} substitution
-    def _sub(m: re.Match) -> str:  # type: ignore[type-arg]
-        name = m.group(1)
+    def _sub(m: re.Match[str]) -> str:
+        name: str = m.group(1)
         if name in resolved_vars:
             return str(resolved_vars[name])
-        return m.group(0)
+        return str(m.group(0))
 
     return re.sub(r"\{\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}\}", _sub, text)
 

@@ -24,6 +24,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 import click
 
@@ -34,7 +35,18 @@ from promptgenie.renderers.rich import console, diag_console
 # Shell profiles
 # ---------------------------------------------------------------------------
 
-_SHELL_META = {
+
+class _ShellMeta(TypedDict):
+    rc_files: list[str]
+    completion_dir: str
+    filename: str
+    env_var: str
+    env_value: str
+    source_snippet: str | None
+    fpath_snippet: str | None
+
+
+_SHELL_META: dict[str, _ShellMeta] = {
     "zsh": {
         "rc_files": ["~/.zshrc"],
         "completion_dir": "~/.zsh/completions",
@@ -100,10 +112,11 @@ def _write_cache(data: dict) -> None:
         pass  # cache failure is non-fatal
 
 
-def _read_cache() -> dict | None:
+def _read_cache() -> dict[str, object] | None:
     try:
         if _CACHE_FILE.exists():
-            return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+            data = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+            return dict(data) if isinstance(data, dict) else None
     except Exception:
         pass
     return None
@@ -294,7 +307,7 @@ def refresh_cache_cmd() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _add_to_rc(rc_path: Path, shell: str, meta: dict, comp_dir: Path) -> None:
+def _add_to_rc(rc_path: Path, shell: str, meta: _ShellMeta, comp_dir: Path) -> None:
     """Append completion activation to the RC file if not already present."""
     snippet = meta.get("source_snippet", "")
     fpath_snippet = meta.get("fpath_snippet", "")

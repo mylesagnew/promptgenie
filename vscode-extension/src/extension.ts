@@ -12,7 +12,7 @@
  */
 
 import * as vscode from "vscode";
-import { runLint, runScan, runBoth } from "./runner";
+import { runLint, runScan, runBoth, setExtensionContext } from "./runner";
 import {
   lintCollection,
   scanCollection,
@@ -122,6 +122,9 @@ async function lintAndScanDocument(doc: vscode.TextDocument): Promise<void> {
 // ── Extension lifecycle ──────────────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext): void {
+  // Provide extension context to runner so it can persist trust decisions.
+  setExtensionContext(context);
+
   // Status bar
   const statusBar = createStatusBarItem();
   context.subscriptions.push(statusBar);

@@ -6,11 +6,14 @@ Covers:
   - VULN-002: Path traversal protection in _gather_file
   - VULN-003: Secrets gate hard-block (run_engine._check_secrets_gate +
               _run_spec_async raising EXIT_SECRETS)
+  - F-002: HTTP blocked by default; DNS rebinding prevention
   - Priority-1: Safe file I/O (already covered by test_fileio.py — duplicates
                 omitted, only new surface tested)
 """
 
 from __future__ import annotations
+
+from unittest.mock import patch
 
 import pytest
 
@@ -22,9 +25,8 @@ from promptgenie.core.context_builder import (
 from promptgenie.core.errors import EXIT_SECRETS, EXIT_USAGE, PromptGenieError
 from promptgenie.core.run_engine import _check_secrets_gate
 
-
 # ---------------------------------------------------------------------------
-# VULN-002: URL scheme / SSRF validation
+# VULN-002 / F-002: URL scheme / SSRF validation
 # ---------------------------------------------------------------------------
 
 
@@ -35,8 +37,21 @@ class TestCheckUrlAllowed:
         # Should not raise
         _check_url_allowed("https://example.com/data.txt")
 
-    def test_http_allowed(self):
-        _check_url_allowed("http://example.com/data.txt")
+    def test_http_blocked_by_default(self):
+        """Plain HTTP must be blocked unless allow_insecure=True (CWE-319)."""
+        with pytest.raises(SecurityError, match="[Hh][Tt][Tt][Pp]"):
+            _check_url_allowed("http://example.com/data.txt")
+
+    def test_http_allowed_with_insecure_flag(self):
+        """HTTP is permitted when the caller explicitly sets allow_insecure=True."""
+        # Should not raise — but does emit a warning
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _check_url_allowed("http://example.com/data.txt", allow_insecure=True)
+        # A security warning must have been issued
+        assert any("WARNING" in str(warning.message).upper() for warning in w)
 
     def test_file_scheme_blocked(self):
         with pytest.raises(SecurityError, match="file"):
@@ -52,7 +67,7 @@ class TestCheckUrlAllowed:
 
     def test_loopback_ipv4_blocked(self):
         with pytest.raises(SecurityError, match="internal"):
-            _check_url_allowed("http://127.0.0.1/admin")
+            _check_url_allowed("https://127.0.0.1/admin")
 
     def test_loopback_ipv4_variant_blocked(self):
         with pytest.raises(SecurityError, match="internal"):
@@ -60,31 +75,56 @@ class TestCheckUrlAllowed:
 
     def test_private_10x_blocked(self):
         with pytest.raises(SecurityError, match="internal"):
-            _check_url_allowed("http://10.0.0.1/internal-api")
+            _check_url_allowed("https://10.0.0.1/internal-api")
 
     def test_private_172_16_blocked(self):
         with pytest.raises(SecurityError, match="internal"):
-            _check_url_allowed("http://172.16.0.1/data")
+            _check_url_allowed("https://172.16.0.1/data")
 
     def test_private_172_31_blocked(self):
         with pytest.raises(SecurityError, match="internal"):
-            _check_url_allowed("http://172.31.255.255/data")
+            _check_url_allowed("https://172.31.255.255/data")
 
     def test_private_192_168_blocked(self):
         with pytest.raises(SecurityError, match="internal"):
-            _check_url_allowed("http://192.168.1.100/config")
+            _check_url_allowed("https://192.168.1.100/config")
 
     def test_link_local_blocked(self):
         with pytest.raises(SecurityError, match="internal"):
-            _check_url_allowed("http://169.254.169.254/latest/meta-data/")
+            _check_url_allowed("https://169.254.169.254/latest/meta-data/")
 
     def test_ipv6_loopback_blocked(self):
         with pytest.raises(SecurityError, match="internal"):
-            _check_url_allowed("http://[::1]/admin")
+            _check_url_allowed("https://[::1]/admin")
 
-    def test_hostname_not_blocked_by_ip_check(self):
-        # Hostname-based URLs pass the static check (DNS resolution not done here)
-        _check_url_allowed("https://api.github.com/repos")
+    def test_https_hostname_passes_static_check(self):
+        # Hostname-based HTTPS URLs pass without network access when the mock
+        # resolves to a public IP.  We mock getaddrinfo to return a public addr.
+        with patch(
+            "promptgenie.core.context_builder.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("93.184.216.34", 0))],
+        ):
+            _check_url_allowed("https://example.com/data.txt")
+
+    def test_dns_rebinding_blocked(self):
+        """A public hostname that resolves to a private IP must be blocked (CWE-918)."""
+        with patch(
+            "promptgenie.core.context_builder.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("192.168.1.1", 0))],
+        ), pytest.raises(SecurityError, match="rebinding|internal"):
+            _check_url_allowed("https://evil.attacker.com/steal")
+
+    def test_dns_resolution_failure_does_not_block(self):
+        """If DNS resolution fails (offline / NXDOMAIN), we let the connection
+        fail naturally rather than blocking — avoids false positives."""
+        import socket
+
+        with patch(
+            "promptgenie.core.context_builder.socket.getaddrinfo",
+            side_effect=socket.gaierror("name not resolved"),
+        ):
+            # Should not raise SecurityError
+            _check_url_allowed("https://nxdomain.invalid/path")
 
     def test_empty_scheme_blocked(self):
         with pytest.raises(SecurityError):
@@ -249,7 +289,7 @@ class TestRunEngineSecretsBlock:
     """run_spec must raise EXIT_SECRETS when secrets found (unless allow_secrets=True)."""
 
     def _make_spec(self, tmp_path):
-        from promptgenie.core.spec import PromptSpec, RunOptions, OutputContract
+        from promptgenie.core.spec import OutputContract, PromptSpec, RunOptions
 
         spec = PromptSpec(
             version=1,
@@ -298,3 +338,145 @@ class TestSecurityErrorSubclass:
         err = SecurityError("blocked", code=EXIT_USAGE)
         assert isinstance(err, PromptGenieError)
         assert err.code == EXIT_USAGE
+
+
+# ---------------------------------------------------------------------------
+# F-002: _gather_url — URL gating, error paths, allow_insecure coverage
+# ---------------------------------------------------------------------------
+
+
+class TestGatherUrlSecurity:
+    """_gather_url gate + error path coverage (no live network requests)."""
+
+    def test_url_blocked_when_no_url_true(self):
+        from promptgenie.core.context_builder import _gather_url
+
+        with pytest.raises(PromptGenieError, match="blocked"):
+            _gather_url("https://example.com/data.txt", "", 0, no_url=True)
+
+    def test_url_blocked_by_ssrf_check(self):
+        """Security check raises before any network call."""
+        from promptgenie.core.context_builder import _gather_url
+
+        with pytest.raises(SecurityError):
+            _gather_url("https://192.168.1.1/secret", "", 0, no_url=False)
+
+    def test_url_fetch_error_wrapped(self):
+        """Network errors are wrapped in PromptGenieError, not leaked raw."""
+        from unittest.mock import patch
+
+        from promptgenie.core.context_builder import _gather_url
+
+        with patch(
+            "promptgenie.core.context_builder._check_url_allowed"
+        ), patch(
+            "promptgenie.core.context_builder.urllib.request.urlopen",
+            side_effect=OSError("connection refused"),
+        ), pytest.raises(PromptGenieError, match="Failed to fetch"):
+            _gather_url("https://example.com/data.txt", "", 0, no_url=False)
+
+    def test_url_allow_insecure_passes_flag(self):
+        """allow_insecure=True is forwarded to _check_url_allowed."""
+        from unittest.mock import MagicMock, patch
+
+        import promptgenie.core.context_builder as cb
+
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.read.return_value = b"hello"
+
+        with patch.object(cb, "_check_url_allowed") as mock_check, patch(
+            "promptgenie.core.context_builder.urllib.request.urlopen",
+            return_value=mock_resp,
+        ):
+            cb._gather_url("http://example.com/data", "lbl", 0, no_url=False, allow_insecure=True)
+            mock_check.assert_called_once_with("http://example.com/data", allow_insecure=True)
+
+
+# ---------------------------------------------------------------------------
+# F-001: _gather_git uses hardcoded argv (shell=False, not driven by spec)
+# ---------------------------------------------------------------------------
+
+
+class TestGatherGitSecure:
+    """_gather_git must use hardcoded argv with shell=False."""
+
+    def test_gather_git_diff_no_shell(self):
+        from unittest.mock import MagicMock, patch
+
+        from promptgenie.core.context_builder import _gather_git
+
+        mock_result = MagicMock()
+        mock_result.stdout = "diff --git a/foo b/foo\n"
+
+        with patch(
+            "promptgenie.core.context_builder.subprocess.run", return_value=mock_result
+        ) as mock_run:
+            entry = _gather_git(staged=False, label="")
+        # Must be called with shell=False
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs.get("shell") is False
+        assert entry.content == "diff --git a/foo b/foo\n"
+        assert entry.source_type == "git_diff"
+
+    def test_gather_git_staged_no_shell(self):
+        from unittest.mock import MagicMock, patch
+
+        from promptgenie.core.context_builder import _gather_git
+
+        mock_result = MagicMock()
+        mock_result.stdout = ""
+
+        with patch(
+            "promptgenie.core.context_builder.subprocess.run", return_value=mock_result
+        ) as mock_run:
+            entry = _gather_git(staged=True, label="my-staged")
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs.get("shell") is False
+        assert entry.source_type == "git_staged"
+        assert entry.label == "my-staged"
+        assert entry.content == "(no diff)\n"
+
+    def test_gather_git_file_not_found_graceful(self):
+        """FileNotFoundError (git not installed) must be handled gracefully."""
+        from unittest.mock import patch
+
+        from promptgenie.core.context_builder import _gather_git
+
+        with patch(
+            "promptgenie.core.context_builder.subprocess.run",
+            side_effect=FileNotFoundError("git not found"),
+        ):
+            entry = _gather_git(staged=False, label="")
+        assert "git not available" in entry.content
+
+
+# ---------------------------------------------------------------------------
+# Q-002: allow_secrets=True branch in run_engine
+# ---------------------------------------------------------------------------
+
+
+class TestSecretsGateAllowBranch:
+    """The allow_secrets=True branch must emit warning events and not block."""
+
+    def test_allow_secrets_emits_warning_event(self, tmp_path):
+        from promptgenie.core.run_engine import run_spec
+        from promptgenie.core.spec import OutputContract, PromptSpec, RunOptions
+
+        spec = PromptSpec(
+            version=1,
+            name="allow-secrets-test",
+            target="claude-code",
+            prompt="My token is ghp_" + "B" * 36,
+            run=RunOptions(dry_run=True, stream=False),
+            output_contract=OutputContract(),
+        )
+        spec._source_path = tmp_path / "test.yaml"
+
+        result = run_spec(spec, no_input=True, dry_run=True, allow_secrets=True)
+        assert result.dry_run is True
+        warning_events = [e for e in result.events if e.event == "warning"]
+        assert len(warning_events) > 0
+        # The warning message should mention the secrets gate
+        assert any("secrets-gate" in (e.data or {}).get("message", "") for e in warning_events)

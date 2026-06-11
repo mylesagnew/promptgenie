@@ -184,9 +184,9 @@ def _check_openai_key() -> CheckResult:
 
 
 def _check_completion(shell: str) -> CheckResult:
-    from promptgenie.commands.completion import _SHELL_META
+    from promptgenie.commands.completion import _SHELL_META, _ShellMeta
 
-    meta = _SHELL_META.get(shell, {})
+    meta: _ShellMeta | None = _SHELL_META.get(shell)
     if not meta:
         return CheckResult(label=f"{shell} completion", passed=False, detail="unknown shell")
 
