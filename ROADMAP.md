@@ -16,14 +16,14 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 
 ## Delivery Phases
 
-### Phase 1 — Terminal and Pipeline Foundations
+### Phase 1 — Terminal and Pipeline Foundations ✅
 *High-leverage, low-risk. Makes PromptGenie feel like a serious daily-use CLI.*
 
 | Feature | Description |
 |---|---|
 | ~~**Universal stdin/stdout**~~ ✅ | `-` sentinel on `lint`, `scan`, `diff`, `adapt`; `safe_read_text("-")` reads stdin with 1 MB guard; `<stdin>` label in all output formats (Rich, JSON, SARIF); `diff - -` rejected; 641 tests |
 | ~~**Stable structured output**~~ ✅ | `schema_version: "1.0"` on all JSON outputs; `diag_console` (stderr) for diagnostics; `is_structured_mode()` suppresses banners; `diff --format json\|yaml\|markdown` |
-| ~~**Strict exit code contract**~~ ✅ | `EXIT_*` constants (0–7, 130); `PromptGenieError(code, hint)`; `handle_error()` → stderr; `test` exits 5; SIGINT → 130; all commands updated |
+| ~~**Strict exit code contract**~~ ✅ | `EXIT_*` constants (0–8, 130); `PromptGenieError(code, hint)`; `handle_error()` → stderr; `test` exits 5; `regression` exits 8; SIGINT → 130; all commands updated |
 | ~~**Shell completion v2**~~ ✅ | `promptgenie completion install zsh\|bash\|fish`; `show`, `status`, `refresh-cache`; dynamic cache at `~/.cache/promptgenie/completions.json` |
 | ~~**`promptgenie doctor`**~~ ✅ | Python version, config, extras, provider keys, Ollama, completion; `--format json` with `schema_version: "1.0"`; remediation hints; exits 1 on hard failures |
 | ~~**Side-by-side diff**~~ ✅ | `diff --side-by-side` Rich two-column table; semantic `SequenceMatcher` section pairing; `diff --format json\|yaml\|markdown` (GH-flavoured Markdown with emoji deltas) |
@@ -47,49 +47,64 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 
 ---
 
-### Phase 3 — SecDevOps Guardrails
+### Phase 3 — SecDevOps Guardrails ✅
 *Differentiates PromptGenie from generic prompt tools through enterprise-grade security posture.*
 
 | Feature | Description |
 |---|---|
-| **`promptgenie analyze`** | Aggregate: `lint + scan + policy + custom rules` in one command; unified finding model with `code`, `title`, `severity`, `category`, `location`, `evidence`, `remediation`, `confidence`, `tags`; categories: `prompt-injection`, `data-leakage`, `secret-exposure`, `unsafe-agent-permission`, `destructive-action`, `compliance`, `quality`; SARIF output |
-| **Policy-as-code v2** | Extend `policy` command; discovery: `.promptgenie.policy.yaml` → `promptgenie.policy.yaml` → `~/.config/promptgenie/policy.yaml`; `--explain` mode; `external_model_send` gate with `allowed_providers`; policy bundles via rule packs |
-| **Data leakage detector** | Expand scanner: JWTs, database URLs, internal hostnames, emails, phone numbers, customer IDs; `promptgenie redact prompt.md --out redacted.md`; pre-send gate in `run`/`evaluate`/`benchmark`: `--block-secrets`, `--redact-secrets` |
-| **Prompt injection susceptibility tests** | `promptgenie redteam prompt.md`; attack packs (OWASP LLM Top 10 compatible): instruction override, role shift, hidden markdown, HTML/comment smuggling, encoded payload, tool misuse, indirect injection; offline heuristic judge first; model judge optional; output: `attack_id`, `passed`, `model`, `response_hash`, `explanation` |
-| **Local-first provider routing** | `routing.default: local`; classification: `public \| internal \| confidential \| restricted`; rules: `if: classification == confidential → provider: ollama`; external sends require clean scan + `--yes` + audit event |
-| **Credential management** | `promptgenie auth login anthropic`; `keyring` optional extra; resolution order: env var → configured ref → system keychain → secret manager → interactive; supports macOS Keychain, Windows Credential Manager, SecretService, 1Password CLI, AWS/GCP/Azure secret managers; config stores references only — never raw keys |
-| **Audit log** | `promptgenie audit list\|show\|export`; local SQLite; stores: timestamp, user, cwd, command, provider/model, prompt hash, response hash, policy decision, `external_send`; no raw prompt/response in enterprise mode; optional tamper-evident hash chain |
-| **Air-gapped mode** | `promptgenie config set security.airgap true`; blocks external providers, remote registry, remote schemas, URL context sources; local packs installable from tarball (`promptgenie pack install ./internal-pack.tar.gz`); clear error messages |
+| ~~**`promptgenie analyze`**~~ ✅ | Aggregate: `lint + scan + policy + custom rules` in one command; unified finding model with `code`, `title`, `severity`, `category`, `location`, `evidence`, `remediation`, `confidence`, `tags`; categories: `prompt-injection`, `data-leakage`, `secret-exposure`, `unsafe-agent-permission`, `destructive-action`, `compliance`, `quality`; SARIF output |
+| ~~**Policy-as-code v2**~~ ✅ | `promptgenie/core/policy_engine.py`; discovery: `.promptgenie.policy.yaml` → `promptgenie.policy.yaml` → `~/.config/promptgenie/policy.yaml`; `--explain` mode; `external_model_send` gate with `allowed_providers` and `block_on_classification`; `PolicyEvaluation` with per-rule violation detail |
+| ~~**Data leakage detector**~~ ✅ | Expanded scanner: `LEAK_JWT`, `LEAK_DB_URL`, `LEAK_INTERNAL_HOST`, `LEAK_EMAIL`, `LEAK_PHONE`, `LEAK_CC`, `LEAK_SSN`, `LEAK_IPADDR`, `LEAK_BEARER`; `promptgenie redact prompt.md --out redacted.md`; `--diff`, `--dry-run`, `--categories`, `--format json`; `[REDACTED:LABEL]` placeholders |
+| ~~**Prompt injection susceptibility tests**~~ ✅ | `promptgenie redteam prompt.md`; 13 attack packs (OWASP LLM Top 10 aligned): instruction override, role shift, indirect injection, HTML smuggling, base64/Unicode obfuscation, system prompt extraction, tool misuse, PII disclosure; offline heuristic judge; `--categories`, `--attacks`, `--list-attacks`, `--fail-on-susceptible`; output: `attack_id`, `susceptible`, `confidence`, `payload_hash`, `explanation` |
+| ~~**Local-first provider routing**~~ ✅ | `RoutingConfig` in config; `routing.default: local`; rules: `if: classification == confidential → provider: ollama`, `if: contains_secrets → provider: ollama`, `if: "*" → provider: anthropic`; `RoutingConfig.resolve()` evaluates rules in order |
+| ~~**Credential management**~~ ✅ | `promptgenie auth login/logout/status`; `--source keyring\|env\|1password\|aws-ssm\|gcp-secret\|azure-keyvault`; `--ref` for external secret manager paths; `get_credential()` resolves `ref:` pointers at runtime; supports macOS Keychain, Windows Credential Manager, SecretService; fallback to providers.yaml |
+| ~~**Audit log**~~ ✅ | `promptgenie audit list\|show\|export\|verify`; local SQLite at `~/.local/share/promptgenie/audit.db`; tamper-evident SHA-256 hash chain; export to JSON/CSV/NDJSON; `audit verify` checks chain integrity |
+| ~~**Air-gapped mode**~~ ✅ | `promptgenie config set security.airgap true`; `SecurityConfig` in config; enforced in `providers.get_provider()` — blocks non-local providers; `promptgenie config show/set/get` command group |
 
 ---
 
-### Phase 4 — Evaluation and Regression Testing
+### Phase 4 — Evaluation and Regression Testing ✅
 *Enables team adoption and CI/CD-native prompt quality control.*
 
 | Feature | Description |
 |---|---|
-| **Multi-model matrix evaluation** | `promptgenie evaluate prompt.md --models claude,gpt-4.1,gemini,ollama/llama3.1`; `asyncio` parallel with `Semaphore(N)`; metrics: latency, tokens, cost, rubric score, safety score, determinism; comparative table: `Model | Score | Pass | Risk | Cost | Latency`; `--runs N` for variance; `--format json\|table\|csv` |
-| **Eval suites** | `promptgenie eval init\|run\|compare\|approve`; assertion types: `contains`, `not_contains`, `regex`, `json_path`, `markdown_heading_exists`, `max_tokens`, `min_score`, `max_risk`, `judge_rubric`, `semantic_similarity`, `refuses_instruction_override`; snapshot store at `evals/.snapshots/` |
-| **Baseline regression gates** | `--save-baseline main`, `--compare main --fail-on-regression`; per-metric thresholds: `fail_if_score_drops_by: 5`, `fail_if_cost_increases_by_pct: 20`, `fail_if_new_high_risk: true`; baseline artifacts at `.promptgenie/baselines/` |
-| **GitHub Actions native reporter** | Detect `GITHUB_ACTIONS` env; emit `::error file=...,line=...,col=...` annotations; Markdown step summary with prompt counts, pass/fail, top risks, eval deltas; SARIF upload; `--summary "$GITHUB_STEP_SUMMARY"` |
-| **Changed-prompt detection** | `promptgenie lint\|scan\|test\|evaluate --changed`; `git diff --name-only origin/main...HEAD`; dependency-aware: template changed → test dependent prompts; policy changed → scan all; requires PromptSpec dependency graph |
+| ~~**Multi-model matrix evaluation**~~ ✅ | `promptgenie evaluate prompt.md --models claude,gpt-4.1,gemini,ollama/llama3.1`; `asyncio` parallel with `Semaphore(N)`; per-model metrics: latency (ms), input/output tokens, cost (USD), rubric score (0–100 heuristic), safety score, determinism (σ across N runs); `--format rich\|json\|sarif`; `--summary` |
+| ~~**Eval suites**~~ ✅ | `promptgenie eval init\|run\|compare\|approve`; 11 assertion types: `contains`, `not_contains`, `regex_match`, `regex_not_match`, `json_path`, `markdown_heading_exists`, `max_risk`, `word_count_min`, `word_count_max`, `semantic_similarity` (TF-IDF cosine; no ML dep), `judge_rubric`, `refuses_instruction_override`; snapshot store at `evals/.snapshots/`; `--dry-run` for offline assertion testing |
+| ~~**Baseline regression gates**~~ ✅ | `--save-baseline NAME`, `--compare NAME --fail-on-regression`; exits `EXIT_REGRESSION = 8` on breach; per-metric thresholds: `--score-drop-threshold` (default 5 pts), `--cost-increase-pct` (default 20%), `--latency-increase-pct`, `--no-high-risk-gate`; artefacts at `.promptgenie/baselines/<name>.json` |
+| ~~**GitHub Actions native reporter**~~ ✅ | Auto-detected via `GITHUB_ACTIONS=true`; `::error file=...,line=...,col=...` and `::warning` annotations for findings and regressions; Markdown step summary appended to `$GITHUB_STEP_SUMMARY`; SARIF 2.1.0 output via `eval_results_to_sarif()`; wired into `evaluate`, `eval run`, and `eval compare` |
+| ~~**Changed-prompt detection**~~ ✅ | `--changed` flag on `evaluate` and `eval run`; `git diff --name-only <base-ref>...HEAD`; dependency-aware expansion: policy file changed → all specs affected; template changed → all dependent specs; `--base-ref` (default: `origin/main`) |
 
 ---
 
-### Phase 5 — Advanced TUI and Ecosystem
+### Phase 5 — Advanced TUI and Ecosystem ✅
 *Polish, extensibility, and ecosystem value. Builds on stable Phase 1–4 abstractions.*
 
 | Feature | Description |
 |---|---|
-| **Full-screen Textual TUI** | `promptgenie tui`; optional extra `promptgenie[tui]`; components: text inputs, select lists, multi-line TextArea, findings panel, score/token status bar; shortcuts: `Ctrl+S` save, `Ctrl+R` run, `Ctrl+D` diff, `Ctrl+L` lint, `Ctrl+T` test; thin UI shell — no duplicated core logic |
-| **Guided prompt wizard** | `promptgenie wizard`; step-by-step questions: objective, scope, out-of-scope, forbidden, output format, verification, target, context packs; produces both rendered Markdown and reusable `.promptgenie.yaml` spec |
-| **Smart command palette** | `promptgenie palette`; Textual fuzzy finder; indexes: commands, templates, profiles, packs, recent files, recent evaluations; keyboard-driven: type "lint auth" → select file → run |
-| **Prompt history** | `promptgenie history list\|show\|diff\|replay\|export`; SQLite at `~/.local/share/promptgenie/history.db`; content hashes for deduplication; `--no-history` for privacy-sensitive environments |
-| **Watch mode** | `promptgenie watch prompts/ --run lint --run scan`; `watchfiles` optional extra; on-change: re-render → re-lint → re-scan → compact dashboard; debounced; exits non-zero if final state has policy failures |
-| **Template command group** | `promptgenie template list\|show\|edit\|new\|validate\|render`; layered locations: built-in → project `.promptgenie/templates/` → user `~/.config/promptgenie/templates/`; `$EDITOR` default; validate before save; dry-run preview |
-| **Prompt lockfiles** | `promptgenie lock prompt.yaml`, `--locked`, `--check`; lockfile hashes: template, policy, context files, pack versions, provider model; `--check` fails on stale lockfile; useful for regulated environments |
-| **Plugin SDK** | Python entry points: `promptgenie.providers`, `promptgenie.rules`, `promptgenie.renderers`, `promptgenie.context_sources`, `promptgenie.evaluators`; `promptgenie plugin list\|install\|doctor\|scaffold`; compatibility checks and origin display |
-| **Signed enterprise packs** | Pack signatures (cosign/minisign); pack diff: `promptgenie pack diff security-baseline@1.1 security-baseline@1.2`; pack promotion: `promote dev baseline --to prod`; pack unit test format with expected findings |
+| ~~**Full-screen Textual TUI**~~ ✅ | `promptgenie tui [FILE]`; optional extra `promptgenie[tui]`; layout: file-tree navigator (30%), Markdown TextArea (1fr), live findings panel (10 lines), score/token/provider status bar; bindings: `Ctrl+S` save, `Ctrl+R` run, `Ctrl+L` lint, `Ctrl+D` diff, `Ctrl+T` eval-suite test, `Ctrl+Q` quit; graceful degradation when `textual` is absent |
+| ~~**Guided prompt wizard**~~ ✅ | `promptgenie wizard`; 8-step Q&A (objective, scope, out-of-scope, forbidden, output format, verification, target profile, context packs); produces rendered Markdown + optional PromptSpec YAML; `--out`, `--spec-out`, `--no-spec`; no Textual dependency required |
+| ~~**Smart command palette**~~ ✅ | `promptgenie palette`; Textual fuzzy finder across all commands, templates, context packs, and recent history entries; readline fallback when `textual` absent; `--print-only` emits selected CLI command for shell piping (`eval $(promptgenie palette --print-only)`) |
+| ~~**Prompt history**~~ ✅ | `promptgenie history list\|show\|diff\|replay\|export\|clear`; SQLite at `~/.local/share/promptgenie/history.db`; SHA-256 content-hash deduplication; sub-commands: `list` (--limit, --provider, --status, --spec, --search, --format), `show` (run-ID prefix matching), `diff` (unified diff between two responses), `replay` (--dry-run), `export` (json/csv/ndjson), `clear` |
+| ~~**Watch mode**~~ ✅ | `promptgenie watch <paths> --run lint\|scan\|policy`; `watchfiles` optional extra (`promptgenie[watch]`) with polling fallback; `--debounce` (ms); `--fail-on-policy`; debounced Rich `Live` dashboard showing pass/fail per file per pipeline |
+| ~~**Template command group**~~ ✅ | `promptgenie template list\|show\|render\|validate\|new\|edit`; layered resolution: project (`.promptgenie/templates/`) → user (`~/.config/promptgenie/templates/`) → built-in; higher-priority layers shadow by ID; `$EDITOR` integration; re-validates after `edit`; `--format json` on `list` and `show` |
+| ~~**Prompt lockfiles**~~ ✅ | `promptgenie lock prompt.yaml` creates `<spec>.lock` (SHA-256 hashes of spec, template, policy, context sources, provider/model); `--check` detects drift (exits 1); `--strict` also fails on missing optional files; `--format json` for CI; safe to commit — contains only paths and digests, never content |
+| ~~**Plugin SDK**~~ ✅ | Python `importlib.metadata` entry points across 5 groups: `promptgenie.providers`, `promptgenie.rules`, `promptgenie.renderers`, `promptgenie.context_sources`, `promptgenie.evaluators`; `plugin list` (--format json), `plugin doctor` (compat checks), `plugin scaffold NAME --group GROUP` (writes stub `.py`), `plugin install` (thin `pip install` wrapper) |
+| ~~**Signed enterprise packs**~~ ✅ | `pack verify <pack> --pubkey KEY --method minisign\|cosign`; `pack diff old.yaml new.yaml` (added/removed/modified rule IDs); `pack promote <name> --from dev --to staging` (copies between `.promptgenie/pack-envs/<env>/` slots); `pack test pack.yaml tests.yaml` (declarative YAML unit tests; exits 1 on failures) |
+
+---
+
+### Phase 6 — Governance, SSO, and Cloud Sync
+*Enterprise hardening: team-scale policy enforcement, identity-aware access, and centralised prompt management.*
+
+| Feature | Description |
+|---|---|
+| **Team policy server** | Central `.promptgenie-policy` server; policies fetched on every run; org-wide `disabled_rules`, allowlists, routing rules, approved provider list; policy version pinned in lockfile |
+| **SSO / OIDC credential binding** | `promptgenie auth login --sso`; OIDC device flow; per-user audit attribution; credential scoped to authenticated identity; `PROMPTGENIE_TOKEN` env var for CI |
+| **Prompt registry (self-hosted or cloud)** | `promptgenie registry push prompt.yaml --tag v1.2`; `promptgenie registry pull org/auth-review:latest`; versioned, signed, searchable; OCI-compatible layout |
+| **Remote eval runners** | Offload matrix evaluations to a cloud runner pool; results streamed back; cost and latency budgets enforced server-side; results stored in registry alongside the prompt |
+| **VSCode extension — Phase 2** | Inline eval results, baseline delta badge, TUI launcher from the editor title bar; history sidebar; lockfile status indicator |
+| **`promptgenie fmt`** | Normalise Markdown prompt files and PromptSpec YAML: heading order, section structure, key sort, trailing whitespace; `--check` exits 1 if formatting would change (CI-safe) |
+| **`promptgenie make`** | YAML task graph (`promptgenie.make.yaml`): `lint`, `scan`, `test`, `evaluate`; `--changed` filtering; `--parallel N`; compatible with Make, just, Taskfile |
 
 ---
 
@@ -97,18 +112,20 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 
 Ordered by development leverage and user adoption impact:
 
-| Rank | Feature | Example |
-|---|---|---|
-| 1 | ~~**Universal stdin/stdout**~~ ✅ **Done** | `cat prompt.md \| promptgenie lint - --format json \| jq '.issues[]'` |
-| 2 | **PromptSpec declarative YAML** | `promptgenie run prompts/auth-review.promptgenie.yaml` |
-| 3 | **`promptgenie run` execution engine** | `promptgenie run prompt.yaml --provider ollama --model llama3.1` |
-| 4 | **Local-first provider support (Ollama)** | `promptgenie provider add ollama --base-url http://localhost:11434` |
-| 5 | **Multi-model matrix evaluation** | `promptgenie evaluate prompt.md --models claude,gpt-4.1,ollama/llama3.1` |
-| 6 | **Policy-as-code v2** | `promptgenie policy prompt.md --policy promptgenie.policy.yaml --explain` |
-| 7 | **Pre-send secret / data leakage gate** | `promptgenie run prompt.yaml --block-secrets` |
-| 8 | **Dynamic context resolver** | `promptgenie run prompt.yaml --context "@cmd:git diff --staged"` |
-| 9 | **GitHub Actions annotations and SARIF** | `promptgenie ci run --annotations --sarif promptgenie.sarif` |
-| 10 | **Full Textual TUI** | `promptgenie tui --template threat-model --target claude-code` |
+| Rank | Feature | Status | Example |
+|---|---|---|---|
+| 1 | ~~**Universal stdin/stdout**~~ | ✅ Done | `cat prompt.md \| promptgenie lint - --format json \| jq '.issues[]'` |
+| 2 | ~~**PromptSpec declarative YAML**~~ | ✅ Done | `promptgenie run prompts/auth-review.promptgenie.yaml` |
+| 3 | ~~**`promptgenie run` execution engine**~~ | ✅ Done | `promptgenie run prompt.yaml --provider ollama --model llama3.1` |
+| 4 | ~~**Local-first provider support (Ollama)**~~ | ✅ Done | `promptgenie provider add ollama --base-url http://localhost:11434` |
+| 5 | ~~**Multi-model matrix evaluation**~~ | ✅ Done | `promptgenie evaluate prompt.md --models claude,gpt-4.1,ollama/llama3.1` |
+| 6 | ~~**Policy-as-code v2**~~ | ✅ Done | `promptgenie policy prompt.md --policy promptgenie.policy.yaml --explain` |
+| 7 | ~~**Pre-send secret / data leakage gate**~~ | ✅ Done | `promptgenie run prompt.yaml --block-secrets` |
+| 8 | ~~**Dynamic context resolver**~~ | ✅ Done | `promptgenie context build --git-diff --glob "src/**/*.py"` |
+| 9 | ~~**GitHub Actions annotations and SARIF**~~ | ✅ Done | Auto-detected; `::error` annotations + step summary + SARIF upload |
+| 10 | ~~**Full Textual TUI**~~ | ✅ Done | `promptgenie tui --provider claude prompts/auth.md` |
+
+**All 10 highest-impact features shipped.** Next focus: team-scale governance (Phase 6).
 
 ---
 
@@ -236,6 +253,7 @@ Dynamic completions for `--template`, `--target`, `--provider`, `--model`, conte
 5. **Composable, not monolithic.** Every command should work in isolation, pipe cleanly, and produce stable structured output suitable for downstream tools.
 6. **Provider-agnostic.** The core engine should never hardcode a specific LLM provider. The `Provider` protocol handles all provider-specific behavior.
 7. **Reproducible.** Prompt lockfiles, content hashing, and baseline snapshots make prompt workflows as reproducible as software builds.
+8. **Extensible by default.** The plugin SDK and entry-point system let teams add providers, rules, renderers, and evaluators without forking the codebase.
 
 ---
 
@@ -245,14 +263,26 @@ Dynamic completions for `--template`, `--target`, `--provider`, `--model`, conte
 |---|---|---|
 | `benchmark` | `anthropic` | `promptgenie benchmark` |
 | `tokenizer` | `tiktoken` | Accurate token counts |
+| `providers` | `httpx` + `anthropic` | `promptgenie run` (full provider support) |
+| `tui` | `textual>=0.50` | `promptgenie tui`, `promptgenie palette` |
+| `watch` | `watchfiles>=0.21` | `promptgenie watch` (fast inotify/FSEvents mode) |
 | `llm` | `openai` | `promptgenie scan --llm` |
-| `tui` | `textual` | `promptgenie tui`, `palette`, `wizard` |
-| `watch` | `watchfiles` | `promptgenie watch` |
-| `secrets` | `keyring` | `promptgenie auth login` |
+| `secrets` | `keyring` | `promptgenie auth login` (keyring backend) |
 | `semantic-diff` | `rapidfuzz` | `promptgenie diff --semantic` |
 
 Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyyaml` — no HTTP clients, no API keys, no heavy dependencies.
 
 ---
+
+## Current Status
+
+| Phase | Status | Tests added | Cumulative tests |
+|---|---|---|---|
+| Phase 1 — Terminal and Pipeline Foundations | ✅ Shipped (v1.1.0) | 128 | 765 |
+| Phase 2 — PromptSpec and Run Engine | ✅ Shipped (v1.2.0) | 93 | 858 |
+| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | 929 |
+| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | 1007 |
+| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | **1107** |
+| Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*
