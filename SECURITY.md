@@ -9,7 +9,7 @@
 | 1.0.x   | ✗ End of life      |
 | < 1.0   | ✗ End of life      |
 
-Current release: **1.2.1**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
+Current release: **1.2.2**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
 
 ---
 
@@ -29,7 +29,7 @@ You will receive an acknowledgement within **48 hours** and a resolution timelin
 
 ---
 
-## Run Engine Security Model (v1.2.1+)
+## Run Engine Security Model (v1.2.2+)
 
 The `promptgenie run` command executes PromptSpec YAML files that can name context sources,
 provider URLs, and shell commands. The following hardened defaults are in effect from v1.2.1:
@@ -47,10 +47,15 @@ Never use `--allow-secrets` in production pipelines that handle real credentials
 ### URL context sources — SSRF protection
 
 `context: [{type: url, url: ...}]` entries are validated before any network call:
-- Only `http://` and `https://` schemes are permitted. `file://`, `ftp://`, `data:`, and all other
-  schemes raise `SecurityError`.
+- Only `https://` is permitted by default. `http://`, `file://`, `ftp://`, `data:`, and all other
+  schemes raise `SecurityError`. Plain HTTP can be re-enabled with `--allow-insecure-url` (emits a
+  security warning).
+- **DNS rebinding defence** — the hostname is resolved via `socket.getaddrinfo()` before the
+  connection is opened. Every returned IP is checked against the blocklist. A hostname that
+  resolves to a private IP at request time is blocked even if the URL string appeared public.
 - Requests to loopback addresses (`127.0.0.1`, `::1`), RFC-1918 private ranges (`10.x`,
-  `172.16–31.x`, `192.168.x`), and link-local addresses (`169.254.x`) are blocked.
+  `172.16–31.x`, `192.168.x`), and link-local addresses (`169.254.x`) are blocked at both the
+  URL-string level and the post-resolution level.
 - URL context sources are additionally gated behind the `--allow-url` CLI flag.
 
 ### File context sources — path containment
@@ -65,7 +70,37 @@ escape via `../`, absolute references, or symlink chains raise `SecurityError`.
 and the executable basename is checked against a fixed allowlist of safe tools (`git`, `cat`,
 `grep`, `python3`, `make`, and a small set of equivalents). Executables not on the allowlist
 (`rm`, `bash`, `sh`, `curl`, `nc`, and any other tool) raise `SecurityError` before any process
-is spawned.
+is spawned. All `subprocess.run` calls use `shell=False` explicitly.
+
+---
+
+## VS Code Extension Security Model (v1.2.2+)
+
+### Trusted binary path enforcement
+
+The extension resolves the CLI binary to execute via the `promptgenie.executablePath` setting
+(falls back to `promptgenie` on `$PATH`). From v1.2.2, custom paths are validated before use:
+
+- **Absolute path required** — relative paths are rejected unconditionally.
+- **Basename check** — the resolved basename must be `promptgenie` or `promptgenie.exe`.
+- **Regular file check** — the path must exist as a regular file (not a dangling symlink or
+  directory).
+- **Trust prompt for non-standard locations** — if a custom path is not under a recognised install
+  prefix (`/usr/local/bin`, `~/.local/bin`, npm global bin, pipx bin), a one-time VS Code modal
+  warning is shown: "This workspace has configured a custom PromptGenie binary at \<path\>. Do
+  you trust this path?" The user's answer is stored in extension `globalState` (not workspace
+  state) keyed by a hash of the absolute path, so it persists across sessions and cannot be reset
+  by a workspace `.vscode/settings.json`.
+
+### Setting scope: machine
+
+`promptgenie.executablePath` (and the deprecated `promptgenie.cliPath`) use `scope: "machine"` in
+`package.json`. This means workspace-level or folder-level `.vscode/settings.json` files **cannot
+override** the binary path. Only user-level or machine-level settings apply. This prevents a
+malicious repository from silently redirecting the extension to an arbitrary binary on clone.
+
+> **If you manage VS Code settings via policy or MDM:** the `promptgenie.executablePath` setting
+> can be locked at machine scope to a known-good path, preventing any per-user override.
 
 ---
 

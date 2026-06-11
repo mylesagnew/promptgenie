@@ -281,9 +281,10 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 | Phase 1 — Terminal and Pipeline Foundations | ✅ Shipped (v1.1.0) | 128 | 765 |
 | Phase 2 — PromptSpec and Run Engine | ✅ Shipped (v1.2.0) | 93 | 858 |
 | Security patch — SSRF / injection / secrets gate | ✅ Shipped (v1.2.1) | 39 | 897 |
-| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | 968 |
-| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | 1046 |
-| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | **1127** |
+| Security patch — DNS rebinding / VS Code binary / mypy | ✅ Shipped (v1.2.2) | 11 | 908 |
+| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | 979 |
+| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | 1056 |
+| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | **1137** |
 | Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*

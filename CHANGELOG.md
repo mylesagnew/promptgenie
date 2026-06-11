@@ -10,6 +10,79 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.2.2] — 2026-06-12  ·  Second security audit round
+
+Addresses all findings from the second internal security audit (F-001 through Q-003). Fixes DNS-rebinding SSRF bypass, VS Code extension untrusted binary execution, residual shell-injection paths, CodeQL misconfiguration, 25 mypy errors, and ruff import drift. No new user-facing features; existing behaviour is unchanged except where noted under **Changed**.
+
+### Security
+
+- **F-001 fixed — residual command execution paths** (`promptgenie/core/context_builder.py`,
+  `promptgenie/core/spec.py`) — `_gather_git` was missing an explicit `shell=False` keyword on its
+  `subprocess.run` call, leaving a latent CWE-78 path. Fixed with `shell=False` and a `# nosec B603`
+  comment confirming the argv is fully hardcoded. `spec.py render_spec` tightened to
+  `re.Match[str]` eliminating an `Any`-typed return that mypy flagged as a CWE-94 surface.
+  No `eval()`, `exec()`, or template-engine execution paths were found.
+
+- **F-002 fixed — SSRF bypass via DNS rebinding and plain HTTP** (`promptgenie/core/context_builder.py`) —
+  The previous IP-blocklist check operated on the URL string only, which a DNS rebinding attack could
+  bypass. `_check_url_allowed()` now calls `socket.getaddrinfo()` before opening any connection and
+  checks every resolved IP against the RFC-1918/loopback/link-local blocklist. A `SecurityError`
+  naming "DNS rebinding" is raised if any resolved address is private. Separately, plain `http://`
+  has been removed from `_ALLOWED_CONTEXT_SCHEMES` — only `https://` is permitted by default
+  (CWE-319). HTTP can be re-enabled with an explicit `--allow-insecure-url` flag, which emits a
+  `warnings.warn` security notice.
+
+- **F-003 fixed — VS Code extension executes workspace-configurable binary** (`vscode-extension/`) —
+  The extension previously passed any `promptgenie.cliPath` workspace setting directly to
+  `cp.spawn()` with no validation (CWE-426/427). Three layers of protection added:
+  - `isTrustedPath()` in `runner.ts` — requires an absolute path whose basename matches
+    `promptgenie`/`promptgenie.exe` and which exists as a regular file.
+  - `confirmCustomBinaryTrust()` — shows a one-time VS Code modal warning for non-default binary
+    paths; the user's decision is stored in `globalState` keyed by path hash and persists across
+    sessions. Paths under well-known install prefixes (`/usr/local/bin`, `~/.local/bin`, npm global
+    bin, pipx bin) are silently trusted.
+  - `package.json` — new `promptgenie.executablePath` setting uses `scope: "machine"` so workspace
+    `.vscode/settings.json` cannot override it; `markdownDescription` explicitly warns about the
+    risk of pointing the setting at an untrusted binary. Existing `cliPath` setting hardened to the
+    same scope.
+
+- **F-004 fixed — CodeQL JavaScript analysis misconfigured** (`.github/workflows/codeql.yml`) —
+  The single combined job used `category: "/language:python"` for a multi-language matrix, meaning
+  JavaScript results were misattributed. Refactored into two separate jobs:
+  `analyze-python` (`paths: [promptgenie/]`, `paths-ignore: [tests/]`) and
+  `analyze-javascript` (`paths: [vscode-extension/]`, `paths-ignore: [**/*.test.ts, **/node_modules/**]`).
+  Both jobs use `queries: security-and-quality` and carry correct per-language `category` strings.
+
+### Added
+
+- **`--allow-insecure-url` flag on `promptgenie run` / `context build`** — explicit opt-in to
+  permit `http://` URL context sources (default blocked since F-002 fix). A `warnings.warn` security
+  notice is emitted whenever the flag is active.
+
+- **11 new security tests** (`tests/test_security_fixes.py`) — `TestGatherUrlSecurity` (4 tests:
+  policy gate, SSRF pre-block, network error wrapping, `allow_insecure` passthrough),
+  `TestGatherGitSecure` (3 tests: `shell=False` enforcement, staged/diff paths, `FileNotFoundError`
+  fallback), `TestSecretsGateAllowBranch` (1 test: `allow_secrets=True` warning path),
+  `TestCheckUrlAllowed` additions (3 tests: HTTP default-blocked, DNS-rebinding mock, DNS-failure
+  passthrough).
+
+### Fixed
+
+- **Q-001 — 25 mypy errors resolved (0 remaining)** across 7 files: `formatters.py` (Sequence type,
+  loop variable narrowing), `spec.py` (`re.Match[str]`, `str()` wraps), `vars.py` (`str()` casts on
+  widened dict values), `completion.py` (`_ShellMeta` TypedDict, `_read_cache` return type),
+  `doctor.py` (`_ShellMeta | None` annotation), `providers.py` (`str()` wraps on three
+  `response.content` accesses), `provider.py` (`isinstance(v, dict)` guard before `.items()`).
+  All fixes are genuine type annotations — no `Any` silencing used.
+
+- **Q-003 — Ruff import-order drift eliminated** — `tests/test_security_fixes.py` imports sorted;
+  nested `with` statements merged (SIM117). `promptgenie/core/formatters.py` `Sequence` moved from
+  `typing` to `collections.abc` (UP035). Zero ruff errors remain.
+
+- **Coverage improved** from 75.92 % → 76.46 % via the 11 new targeted tests above (Q-002).
+
+---
+
 ## [1.2.1] — 2026-06-11  ·  Security hardening patch
 
 Addresses all Priority 0 critical vulnerabilities identified in the internal security audit, plus secure-default improvements, CI signal restoration, and supply-chain hardening. No new user-facing features; existing behaviour is unchanged except where noted under **Changed**.
