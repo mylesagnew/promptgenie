@@ -9,7 +9,7 @@
 | 1.0.x   | ✗ End of life      |
 | < 1.0   | ✗ End of life      |
 
-Current release: **1.2.3**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
+Current release: **1.2.4**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
 
 ---
 
@@ -78,7 +78,10 @@ Never use `--allow-secrets` in production pipelines that handle real credentials
 - Requests to loopback addresses (`127.0.0.1`, `::1`), RFC-1918 private ranges (`10.x`,
   `172.16–31.x`, `192.168.x`), and link-local addresses (`169.254.x`) are blocked at both the
   URL-string level and the post-resolution level.
-- URL context sources are additionally gated behind the `--allow-url` CLI flag.
+- **The egress gate is user-controlled only.** URL context sources are fetched only when the user
+  passes `--allow-url`. From v1.2.4 a spec can no longer weaken this: the former spec-level
+  `policy_gated` field has been removed, so an untrusted spec cannot enable network egress on its
+  own behalf. (CWE-918 / secure-by-default.)
 
 ### Environment context sources — credential protection
 
@@ -117,9 +120,25 @@ and validated in three layers before any process is spawned (all `subprocess.run
 Executables not on the allowlist (`rm`, `bash`, `sh`, `curl`, `nc`, and any other tool) raise
 `SecurityError`.
 
+### Provider endpoint validation
+
+Provider `base_url` values (from `~/.config/promptgenie/providers.yaml`) are validated before any
+request (`_validate_provider_base_url`, v1.2.4+):
+
+- Non-HTTP(S) schemes are rejected.
+- Plain `http://` is permitted **only** for loopback hosts (`localhost`, `127.0.0.1`, `::1`) or for
+  providers explicitly marked `local: true` with no API key configured. This supports local dev
+  servers (Ollama, LM Studio, vLLM) while preventing an `Authorization` header from ever being sent
+  over cleartext to a remote endpoint (CWE-319).
+- Remote providers must use `https://`.
+
 ---
 
 ## VS Code Extension Security Model (v1.2.2+)
+
+> From **v1.2.4** the custom-binary trust check **fails closed**: if the extension context is
+> unavailable (e.g. an activation-ordering bug), the extension refuses to execute the configured
+> binary rather than allowing it by default.
 
 ### Trusted binary path enforcement
 

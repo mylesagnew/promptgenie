@@ -10,6 +10,65 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.2.4] — 2026-06-12  ·  Fourth security audit round
+
+Addresses findings V-001 through V-005 from an external SecDevOps audit run against `100c19e`. The audit confirmed the v1.2.3 hardening (command allowlist, SSRF/DNS pinning, env guard) is effective; this release closes a remaining secure-by-default bypass and four supporting issues.
+
+### Security
+
+- **V-001 (HIGH) fixed — PromptSpec could bypass the `--allow-url` network gate** (CWE-918)
+  (`promptgenie/core/context_builder.py`, `promptgenie/core/spec.py`) — `ContextSource` carried a
+  spec-author-controlled `policy_gated` field. A spec setting `policy_gated: false` caused the URL
+  egress gate to evaluate `no_url = gate and no_url → False`, fetching a URL **without** the user
+  passing `--allow-url`. The spec must not have authority over the user's network policy. The
+  `policy_gated` field is removed entirely; the URL gate is now governed solely by `--allow-url`
+  (`no_url`). See **Breaking changes**.
+
+- **V-002 (MEDIUM) fixed — CI exposed `ANTHROPIC_API_KEY` to a PR-triggered job that doesn't need
+  it** (CWE-522) (`.github/workflows/prompt-check.yml`) — the "Run prompt test suites" step injected
+  the Anthropic key, but `promptgenie test` runs entirely offline (lint/scan/score). The `env:`
+  block was removed, shrinking the secret's blast radius on pull-request runs.
+
+- **V-003 (MEDIUM) fixed — VS Code extension failed open when the extension context was
+  unavailable** (CWE-494/426) (`vscode-extension/src/runner.ts`) — the custom-binary trust path
+  returned the configured binary "allow by default" when `_extensionContext` was unset. It now fails
+  closed and refuses to execute, so an activation-ordering bug can never silently skip the trust
+  prompt. Tests inject a context via the existing `setExtensionContext`.
+
+- **V-004 (MEDIUM) fixed — provider `base_url` accepted any scheme; API key could be sent over
+  cleartext HTTP** (CWE-319) (`promptgenie/core/providers.py`) — added
+  `_validate_provider_base_url()`: rejects non-HTTP(S) schemes; permits `http://` only for loopback
+  hosts or `local: true` keyless providers; rejects remote `http://` and any `http://` that would
+  transmit an `Authorization` header to a non-loopback host.
+
+- **V-005 (LOW) fixed — malformed `# nosec` comments degraded Bandit signal** (CWE-703) — all
+  suppressions normalized to canonical `# nosec BXXX` form with the justification on the preceding
+  line; removed a spurious `B202` suppression. Bandit now emits zero malformed-nosec warnings and
+  zero HIGH/MEDIUM findings.
+
+### Added
+
+- **Resource caps on context ingestion** — `_gather_stdin` now honours `max_bytes`, and `_gather_glob`
+  stops collecting after `_GLOB_MAX_FILES` (1000) files, bounding memory on large or hostile inputs.
+- **New tests** — `TestV001UrlGateNotBypassable`, `TestV004ProviderBaseUrlValidation`, and
+  `TestResourceCaps` in the test suite (955 tests total, coverage 77.56%).
+
+### Changed
+
+- **`ruff format`** applied to three drifted files; **README** optional-extras table corrected (the
+  `llm` extra never existed — `openai` is installed directly; the real `providers` extra is now
+  documented); **`pyproject.toml`** coverage comment updated to the measured 77.56%.
+
+### Breaking changes
+
+- **PromptSpec: the `policy_gated` context-source key is removed.** It is no longer a recognised
+  field and is silently ignored if present in an existing spec. URL context sources are gated
+  **only** by the `--allow-url` CLI flag (and `--allow-insecure-url` for plain HTTP); a spec can no
+  longer weaken or disable that gate. Specs that previously relied on `policy_gated: false` to fetch
+  URLs without `--allow-url` must now pass `--allow-url` explicitly.
+
+---
+
 ## [1.2.3] — 2026-06-12  ·  Third security audit round
 
 Addresses findings S-1 through S-5 from the third internal security review. The headline fix (S-1) closes a bypass that effectively re-opened the F-001 command-execution vector; S-2 adds a trust boundary around `promptgenie run`. No new product features; behaviour changes are noted under **Changed**.

@@ -1473,13 +1473,14 @@ promptgenie run my-prompt.yaml --no-input --var env=prod
 
 Run history is persisted to `~/.local/share/promptgenie/runs/` (files `0600`, with secrets redacted).
 
-> **Security defaults (v1.2.3+):** The run engine enforces these constraints by default.
+> **Security defaults (v1.2.4+):** The run engine enforces these constraints by default.
 > (1) **Spec trust boundary** — a spec with host-touching context sources (`cmd`/`file`/`glob`/`env`/`url`) must be trusted before it runs. Interactive sessions prompt; CI must pass `--trust`/`--yes` or pre-register via `promptgenie trust add`. Trust is keyed by spec path + content hash, so editing a trusted spec re-prompts.
 > (2) **Command allowlist** — `cmd` sources are restricted to inert read-only tools; interpreters (`python3`, `node`, `awk`, …) and eval flags (`-c`, `-e`, `-exec`) are blocked, and `git` is limited to read-only subcommands. All subprocess calls use `shell=False`.
 > (3) **Env credential guard** — `env` sources refuse credential-like variable names (`*KEY*`, `AWS_*`, `ANTHROPIC_*`, …) unless `--allow-sensitive-env` is passed.
 > (4) **Secrets gate** — a detected secret in the assembled prompt aborts the run (exit 6) before any provider call. Pass `--allow-secrets` to override.
-> (5) **SSRF + DNS rebinding protection** — `url` sources require `https://` and pin the validated IP for the connection. `http://` requires `--allow-insecure-url`; `file://` and private IP ranges are blocked unconditionally.
-> (6) **VS Code trusted binary** — the `promptgenie.executablePath` setting is machine-scoped; custom paths require an absolute path + basename check + one-time trust prompt.
+> (5) **User-controlled URL egress** — `url` sources are fetched **only** when the user passes `--allow-url`; a spec cannot enable network egress on its own (the former `policy_gated` field is removed). Fetches require `https://` and pin the validated IP for the connection. `http://` requires `--allow-insecure-url`; `file://` and private IP ranges are blocked unconditionally.
+> (6) **Provider TLS** — a provider `base_url` may use plain `http://` only for loopback/`local` keyless endpoints; remote providers must use `https://`, so an API key is never sent over cleartext.
+> (7) **VS Code trusted binary** — the `promptgenie.executablePath` setting is machine-scoped; custom paths require an absolute path + basename check + one-time trust prompt, and the check fails closed if the extension context is unavailable.
 > See [SECURITY.md](SECURITY.md) for the full security model.
 
 ---

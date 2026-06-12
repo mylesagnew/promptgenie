@@ -283,9 +283,10 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 | Security patch — SSRF / injection / secrets gate | ✅ Shipped (v1.2.1) | 39 | 897 |
 | Security patch — DNS rebinding / VS Code binary / mypy | ✅ Shipped (v1.2.2) | 11 | 908 |
 | Security patch — allowlist bypass / spec trust / IP pinning | ✅ Shipped (v1.2.3) | 32 | 940 |
-| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | 1011 |
-| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | 1088 |
-| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | **1169** |
+| Security patch — URL gate bypass / provider TLS / extension fail-closed | ✅ Shipped (v1.2.4) | 15 | 955 |
+| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | 1026 |
+| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | 1103 |
+| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | **1184** |
 | Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*
