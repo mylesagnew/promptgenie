@@ -20,6 +20,7 @@ from promptgenie.commands.scan import scan_cmd
 from promptgenie.commands.spec import spec_group
 from promptgenie.commands.targets import list_targets_cmd, list_templates_cmd
 from promptgenie.commands.test import test_cmd
+from promptgenie.commands.trust import trust_group
 from promptgenie.commands.validate import validate_cmd, validate_profiles_cmd
 from promptgenie.commands.vars import vars_group
 from promptgenie.commands.workflow import workflow_cmd
@@ -70,6 +71,7 @@ cli.add_command(doctor_cmd)
 cli.add_command(provider_group)
 cli.add_command(run_cmd)
 cli.add_command(spec_group)
+cli.add_command(trust_group)
 cli.add_command(vars_group)
 
 

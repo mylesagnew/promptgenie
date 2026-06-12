@@ -148,10 +148,6 @@ class TestValidateCmdAllowed:
         argv = _validate_cmd_allowed("echo hello world")
         assert argv == ["echo", "hello", "world"]
 
-    def test_allowed_python_command(self):
-        argv = _validate_cmd_allowed("python3 -c 'print(1)'")
-        assert argv[0] == "python3"
-
     def test_disallowed_rm_blocked(self):
         with pytest.raises(SecurityError, match="allowed"):
             _validate_cmd_allowed("rm -rf /")
@@ -386,10 +382,11 @@ class TestGatherUrlSecurity:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_resp.read.return_value = b"hello"
 
-        with patch.object(cb, "_check_url_allowed") as mock_check, patch(
+        with patch.object(cb, "_check_url_allowed", return_value=[]) as mock_check, patch(
             "promptgenie.core.context_builder.urllib.request.urlopen",
             return_value=mock_resp,
         ):
+            # Empty validated-IP list -> falls back to urlopen path (this test's intent).
             cb._gather_url("http://example.com/data", "lbl", 0, no_url=False, allow_insecure=True)
             mock_check.assert_called_once_with("http://example.com/data", allow_insecure=True)
 
@@ -480,3 +477,352 @@ class TestSecretsGateAllowBranch:
         assert len(warning_events) > 0
         # The warning message should mention the secrets gate
         assert any("secrets-gate" in (e.data or {}).get("message", "") for e in warning_events)
+
+
+# ---------------------------------------------------------------------------
+# S-1: Command allowlist hardening (interpreters/exec primitives removed)
+# ---------------------------------------------------------------------------
+
+
+class TestS1AllowlistHardening:
+    """Interpreters & code-exec primitives must no longer pass the allowlist."""
+
+    def test_python3_eval_blocked(self):
+        with pytest.raises(SecurityError):
+            _validate_cmd_allowed("python3 -c 'print(1)'")
+
+    def test_python_blocked(self):
+        with pytest.raises(SecurityError, match="allowed"):
+            _validate_cmd_allowed("python script.py")
+
+    def test_node_eval_blocked(self):
+        with pytest.raises(SecurityError):
+            _validate_cmd_allowed("node -e 'process.exit(0)'")
+
+    def test_awk_blocked(self):
+        with pytest.raises(SecurityError, match="allowed"):
+            _validate_cmd_allowed("awk 'BEGIN{system(\"id\")}'")
+
+    def test_find_exec_blocked(self):
+        # 'find' is removed from the allowlist entirely.
+        with pytest.raises(SecurityError, match="allowed"):
+            _validate_cmd_allowed("find . -exec cat {} ;")
+
+    def test_env_blocked(self):
+        with pytest.raises(SecurityError, match="allowed"):
+            _validate_cmd_allowed("env sh -c 'id'")
+
+    def test_make_blocked(self):
+        with pytest.raises(SecurityError, match="allowed"):
+            _validate_cmd_allowed("make all")
+
+    def test_sed_blocked(self):
+        with pytest.raises(SecurityError, match="allowed"):
+            _validate_cmd_allowed("sed 'e id' file")
+
+    # --- still-allowed read-only tools ---
+    def test_git_log_allowed(self):
+        argv = _validate_cmd_allowed("git log --oneline -5")
+        assert argv[:2] == ["git", "log"]
+
+    def test_cat_allowed(self):
+        argv = _validate_cmd_allowed("cat README.md")
+        assert argv == ["cat", "README.md"]
+
+    def test_grep_allowed(self):
+        argv = _validate_cmd_allowed("grep x file.txt")
+        assert argv[0] == "grep"
+
+    # --- argument-level eval-flag denylist (defence in depth) ---
+    def test_eval_flag_long_blocked(self):
+        # Even a hypothetical allowlisted tool may not carry --eval.
+        with pytest.raises(SecurityError):
+            _validate_cmd_allowed("grep --eval=foo file")
+
+
+class TestS1GitSubcommandAllowlist:
+    """git is restricted to read-only subcommands and -c is rejected."""
+
+    def test_git_push_blocked(self):
+        with pytest.raises(SecurityError, match="read-only|allowlist"):
+            _validate_cmd_allowed("git push origin main")
+
+    def test_git_config_write_blocked(self):
+        with pytest.raises(SecurityError, match="read-only|allowlist"):
+            _validate_cmd_allowed("git config user.x y")
+
+    def test_git_dash_c_alias_shell_blocked(self):
+        with pytest.raises(SecurityError, match="config injection|-c"):
+            _validate_cmd_allowed("git -c alias.x=!sh log")
+
+    def test_git_diff_allowed(self):
+        argv = _validate_cmd_allowed("git diff --staged")
+        assert argv[:2] == ["git", "diff"]
+
+    def test_git_status_allowed(self):
+        argv = _validate_cmd_allowed("git status --short")
+        assert argv[:2] == ["git", "status"]
+
+
+# ---------------------------------------------------------------------------
+# S-3: env context source credential exfiltration block
+# ---------------------------------------------------------------------------
+
+
+class TestS3EnvExfiltration:
+    """Credential-like env vars must be refused unless explicitly allowed."""
+
+    def test_aws_secret_blocked(self, monkeypatch):
+        from promptgenie.core.context_builder import _gather_env
+
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "abc123")
+        with pytest.raises(SecurityError, match="credential-like"):
+            _gather_env("AWS_SECRET_ACCESS_KEY", "")
+
+    def test_anthropic_key_blocked(self, monkeypatch):
+        from promptgenie.core.context_builder import _gather_env
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-xxx")
+        with pytest.raises(SecurityError, match="credential-like"):
+            _gather_env("ANTHROPIC_API_KEY", "")
+
+    def test_benign_var_allowed(self, monkeypatch):
+        from promptgenie.core.context_builder import _gather_env
+
+        monkeypatch.setenv("MY_PROJECT_NAME", "promptgenie")
+        entry = _gather_env("MY_PROJECT_NAME", "")
+        assert entry is not None
+        assert entry.content == "promptgenie"
+
+    def test_override_flag_permits_sensitive(self, monkeypatch):
+        import warnings
+
+        from promptgenie.core.context_builder import _gather_env
+
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "abc123")
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            entry = _gather_env("AWS_SECRET_ACCESS_KEY", "", allow_sensitive_env=True)
+        assert entry is not None
+        assert entry.content == "abc123"
+        assert any("WARNING" in str(x.message).upper() for x in w)
+
+
+# ---------------------------------------------------------------------------
+# S-5: SSRF DNS pinning (validated IP is what gets connected to)
+# ---------------------------------------------------------------------------
+
+
+class TestS5DnsPinning:
+    """_check_url_allowed returns validated IPs; _gather_url pins to them."""
+
+    def test_check_url_returns_validated_ip(self):
+        with patch("promptgenie.core.context_builder.socket.getaddrinfo") as gai:
+            gai.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
+            ips = _check_url_allowed("https://example.com/data.txt")
+        assert ips == ["93.184.216.34"]
+
+    def test_private_resolution_still_blocked(self):
+        with patch("promptgenie.core.context_builder.socket.getaddrinfo") as gai:
+            gai.return_value = [(2, 1, 6, "", ("10.0.0.5", 0))]
+            with pytest.raises(SecurityError, match="rebinding|private"):
+                _check_url_allowed("https://evil.example.com/x")
+
+    def test_gather_url_pins_validated_ip(self):
+        from promptgenie.core import context_builder as cb
+
+        captured = {}
+
+        def fake_fetch(url, pinned_ip, max_bytes, timeout=20):
+            captured["ip"] = pinned_ip
+            return b"hello world"
+
+        with patch.object(cb.socket, "getaddrinfo") as gai, patch.object(
+            cb, "_fetch_pinned", side_effect=fake_fetch
+        ):
+            gai.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
+            entry = cb._gather_url("https://example.com/x", "", 0, no_url=False)
+        assert captured["ip"] == "93.184.216.34"
+        assert entry.content == "hello world"
+
+
+# ---------------------------------------------------------------------------
+# S-2: spec trust store + run gate
+# ---------------------------------------------------------------------------
+
+
+class TestSpecTrust:
+    """promptgenie.core.trust — trust store + spec_requires_trust + run gate."""
+
+    def _spec(self, *, with_cmd=False, inline_only=False):
+        from promptgenie.core.spec import (
+            ContextSource,
+            OutputContract,
+            PromptSpec,
+            RunOptions,
+        )
+
+        ctx = []
+        if with_cmd:
+            ctx = [ContextSource(type="cmd", command="git log")]
+        spec = PromptSpec(
+            version=1,
+            name="trust-test",
+            target="claude-code",
+            prompt="hello" if inline_only else "",
+            context=ctx,
+            run=RunOptions(dry_run=True, stream=False),
+            output_contract=OutputContract(),
+        )
+        return spec
+
+    def test_requires_trust_with_cmd(self):
+        from promptgenie.core.trust import spec_requires_trust
+
+        assert spec_requires_trust(self._spec(with_cmd=True)) is True
+
+    def test_inline_only_does_not_require_trust(self):
+        from promptgenie.core.trust import spec_requires_trust
+
+        assert spec_requires_trust(self._spec(inline_only=True)) is False
+
+    def test_add_revoke_is_trusted_roundtrip(self, tmp_path, monkeypatch):
+        import promptgenie.core.trust as trust
+
+        monkeypatch.setattr(trust, "_TRUST_FILE", tmp_path / "trust.json")
+        spec_path = tmp_path / "spec.yaml"
+        spec_path.write_text("version: 1\n", encoding="utf-8")
+
+        assert trust.is_trusted(spec_path) is False
+        trust.add_trust(spec_path)
+        assert trust.is_trusted(spec_path) is True
+        records = trust.list_trusted()
+        assert len(records) == 1
+        trust.revoke_trust(spec_path)
+        assert trust.is_trusted(spec_path) is False
+
+    def test_editing_trusted_spec_invalidates(self, tmp_path, monkeypatch):
+        import promptgenie.core.trust as trust
+
+        monkeypatch.setattr(trust, "_TRUST_FILE", tmp_path / "trust.json")
+        spec_path = tmp_path / "spec.yaml"
+        spec_path.write_text("version: 1\n", encoding="utf-8")
+        trust.add_trust(spec_path)
+        assert trust.is_trusted(spec_path) is True
+        # Edit the content -> content hash changes -> trust invalidated.
+        spec_path.write_text("version: 1\n# changed\n", encoding="utf-8")
+        assert trust.is_trusted(spec_path) is False
+
+    def test_trust_file_is_mode_0600(self, tmp_path, monkeypatch):
+        import promptgenie.core.trust as trust
+
+        tf = tmp_path / "trust.json"
+        monkeypatch.setattr(trust, "_TRUST_FILE", tf)
+        spec_path = tmp_path / "spec.yaml"
+        spec_path.write_text("version: 1\n", encoding="utf-8")
+        trust.add_trust(spec_path)
+        assert (tf.stat().st_mode & 0o777) == 0o600
+
+    def test_untrusted_cmd_spec_aborts_no_input(self, tmp_path, monkeypatch):
+        from click.testing import CliRunner
+
+        import promptgenie.core.trust as trust
+        from promptgenie.cli import cli
+
+        monkeypatch.setattr(trust, "_TRUST_FILE", tmp_path / "trust.json")
+        spec_path = tmp_path / "spec.yaml"
+        spec_path.write_text(
+            "version: 1\nname: t\ntarget: claude-code\nprompt: hi\n"
+            "context:\n  - type: cmd\n    command: git log\n",
+            encoding="utf-8",
+        )
+        runner = CliRunner()
+        result = runner.invoke(cli, ["run", str(spec_path), "--no-input", "--dry-run"])
+        assert result.exit_code == EXIT_USAGE
+        assert "not trusted" in result.output.lower() or "trust" in result.output.lower()
+
+    def test_untrusted_cmd_spec_passes_with_trust_flag(self, tmp_path, monkeypatch):
+        from click.testing import CliRunner
+
+        import promptgenie.core.trust as trust
+        from promptgenie.cli import cli
+
+        monkeypatch.setattr(trust, "_TRUST_FILE", tmp_path / "trust.json")
+        spec_path = tmp_path / "spec.yaml"
+        spec_path.write_text(
+            "version: 1\nname: t\ntarget: claude-code\nprompt: hi\n"
+            "context:\n  - type: cmd\n    command: git status\n",
+            encoding="utf-8",
+        )
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["run", str(spec_path), "--no-input", "--dry-run", "--trust"]
+        )
+        # Dry-run exits EXIT_OK; the trust gate must not have aborted.
+        assert "not trusted" not in result.output.lower()
+        assert trust.is_trusted(spec_path) is True
+
+
+# ---------------------------------------------------------------------------
+# S-4: run history permissions + secret redaction
+# ---------------------------------------------------------------------------
+
+
+class TestS4HistoryRedaction:
+    """RunWriter must redact secrets and create files with mode 0o600."""
+
+    def test_prompt_secret_redacted_and_mode_0600(self, tmp_path, monkeypatch):
+        import promptgenie.core.history as history
+
+        monkeypatch.setattr(history, "_RUNS_DIR", tmp_path / "runs")
+        fake_key = "sk-ant-" + "A" * 95
+        writer = history.RunWriter(
+            run_id="abcd1234",
+            spec_name="s",
+            target="claude-code",
+            provider="anthropic",
+            model="claude",
+            dry_run=False,
+            prompt=f"My key is {fake_key}",
+        )
+        writer._ensure_file()
+        writer.write_token("response with " + fake_key)
+        writer.finish(status="ok")
+
+        path = writer._path
+        assert path is not None
+        text = path.read_text(encoding="utf-8")
+        # Prompt secret must not appear; redaction placeholder must.
+        assert fake_key not in text.split('"prompt"')[1].split("}")[0]
+        assert "[REDACTED]" in text
+        # File permissions must be 0o600.
+        assert (path.stat().st_mode & 0o777) == 0o600
+
+    def test_response_redacted_in_done_event(self, tmp_path, monkeypatch):
+        import json as _json
+
+        import promptgenie.core.history as history
+
+        monkeypatch.setattr(history, "_RUNS_DIR", tmp_path / "runs")
+        fake_key = "sk-ant-" + "B" * 95
+        writer = history.RunWriter(
+            run_id="resp1234",
+            spec_name="s",
+            target="claude-code",
+            provider="anthropic",
+            model="claude",
+            dry_run=False,
+            prompt="clean prompt",
+        )
+        writer._ensure_file()
+        writer.write_token("here is " + fake_key)
+        writer.finish(status="ok")
+
+        done_line = [
+            ln
+            for ln in writer._path.read_text(encoding="utf-8").splitlines()
+            if '"event": "done"' in ln
+        ][0]
+        done = _json.loads(done_line)
+        assert fake_key not in done["response"]
+        assert "[REDACTED]" in done["response"]

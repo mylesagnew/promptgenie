@@ -187,6 +187,7 @@ def run_spec(
     max_context_tokens: int = 0,
     context_strategy: str = "manual",
     allow_url: bool = False,
+    allow_sensitive_env: bool = False,
     # Security
     allow_secrets: bool = False,
     # Output callbacks
@@ -224,6 +225,7 @@ def run_spec(
             max_context_tokens=max_context_tokens,
             context_strategy=context_strategy,
             allow_url=allow_url,
+            allow_sensitive_env=allow_sensitive_env,
             allow_secrets=allow_secrets,
             on_token=on_token,
             on_event=on_event,
@@ -254,6 +256,7 @@ async def _run_spec_async(
     max_context_tokens: int,
     context_strategy: str,
     allow_url: bool,
+    allow_sensitive_env: bool,
     allow_secrets: bool,
     on_token: Callable[[str], None] | None,
     on_event: Callable[[RunEvent], None] | None,
@@ -320,6 +323,7 @@ async def _run_spec_async(
             strategy=context_strategy,
             base_dir=base_dir,
             no_url=not allow_url,
+            allow_sensitive_env=allow_sensitive_env,
         )
 
     # ---- 4. assemble prompt ----
@@ -376,6 +380,7 @@ async def _run_spec_async(
             provider=effective_provider,
             model=model_name,
             dry_run=effective_dry_run,
+            prompt=prompt,
         )
         writer._ensure_file()
 

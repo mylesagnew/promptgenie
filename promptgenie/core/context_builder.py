@@ -34,10 +34,13 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import http.client
 import ipaddress
 import os
+import re
 import shlex
 import socket
+import ssl
 import subprocess
 import sys
 import urllib.request
@@ -86,8 +89,10 @@ def _is_private_ip(addr_str: str) -> bool:
         return False
 
 
-def _check_url_allowed(url: str, *, allow_insecure: bool = False) -> None:
-    """Raise SecurityError if *url* uses a disallowed scheme or targets an internal host.
+def _check_url_allowed(url: str, *, allow_insecure: bool = False) -> list[str]:
+    """Validate *url* and return the list of validated (public) resolved IPs.
+
+    Raises SecurityError if *url* uses a disallowed scheme or targets an internal host.
 
     Blocks:
       - Non-HTTPS schemes unless *allow_insecure* is True (CWE-319)
@@ -95,6 +100,14 @@ def _check_url_allowed(url: str, *, allow_insecure: bool = False) -> None:
       - Private/RFC-1918 ranges (10.x, 172.16-31.x, 192.168.x)
       - Link-local / APIPA (169.254.x)
       - Hostnames that DNS-resolve to any private/loopback IP (CWE-918 DNS rebinding)
+
+    Returns
+    -------
+    list[str]
+        The validated resolved IP address(es). For a bare-IP-literal host this
+        is the literal itself. Callers should *pin* the connection to one of
+        these IPs rather than re-resolving the hostname, to close the TOCTOU
+        DNS-rebinding window (S-5).
 
     Parameters
     ----------
@@ -135,41 +148,72 @@ def _check_url_allowed(url: str, *, allow_insecure: bool = False) -> None:
             "Fetching from internal network addresses is disallowed (SSRF prevention).",
             code=EXIT_USAGE,
         )
+    bare = hostname.strip("[]")
+    if hostname and _is_private_ip(bare):
+        # bracketed IPv6 literal
+        raise SecurityError(
+            f"Blocked internal/private IP address {hostname!r} in URL {url!r}. "
+            "Fetching from internal network addresses is disallowed (SSRF prevention).",
+            code=EXIT_USAGE,
+        )
+    if not hostname:
+        return []
+    # If the host is already a bare IP literal, it has passed the private-IP
+    # check above; pin to it directly.
+    try:
+        ipaddress.ip_address(bare)
+        return [bare]
+    except ValueError:
+        pass
     # Resolve hostname to IPs and check each resolved address (DNS-rebinding defence).
-    if hostname and not hostname.replace(".", "").replace(":", "").replace("[", "").replace("]", "").isdigit():
-        # hostname is not a bare IP literal — resolve it
-        try:
-            # strip IPv6 brackets if present
-            bare = hostname.strip("[]")
-            addr_infos = socket.getaddrinfo(bare, None)
-            for _family, _type, _proto, _canonname, sockaddr in addr_infos:
-                resolved_ip = str(sockaddr[0])
-                if _is_private_ip(resolved_ip):
-                    raise SecurityError(
-                        f"Blocked URL {url!r}: hostname {hostname!r} resolved to "
-                        f"internal/private IP {resolved_ip!r}. "
-                        "DNS rebinding / SSRF prevention check failed.",
-                        code=EXIT_USAGE,
-                    )
-        except SecurityError:
-            raise
-        except OSError:
-            # DNS resolution failed — let the request fail naturally at connect time.
-            pass
+    validated_ips: list[str] = []
+    try:
+        addr_infos = socket.getaddrinfo(bare, None)
+        for _family, _type, _proto, _canonname, sockaddr in addr_infos:
+            resolved_ip = str(sockaddr[0])
+            if _is_private_ip(resolved_ip):
+                raise SecurityError(
+                    f"Blocked URL {url!r}: hostname {hostname!r} resolved to "
+                    f"internal/private IP {resolved_ip!r}. "
+                    "DNS rebinding / SSRF prevention check failed.",
+                    code=EXIT_USAGE,
+                )
+            if resolved_ip not in validated_ips:
+                validated_ips.append(resolved_ip)
+    except SecurityError:
+        raise
+    except OSError:
+        # DNS resolution failed — let the request fail naturally at connect time.
+        pass
+    return validated_ips
 
 
 # Allowlist of commands that context sources may invoke.
+#
+# Security policy (third audit round, S-1):
+# This list is restricted to genuinely read-only / inert tools.  Language
+# interpreters and build/code-exec primitives (python, python3, node, npm,
+# make, cargo, go, mvn, gradle, env, awk, sed, find) were REMOVED because each
+# can execute arbitrary code while passing a naive basename check
+# (e.g. ``python3 -c '...'``, ``node -e '...'``, ``awk 'BEGIN{system("id")}'``,
+# ``find . -exec ...``, ``env sh -c '...'``, GNU ``sed`` ``e`` command).
+# Allowing them defeats the purpose of the allowlist.
+#
+# Two further defence-in-depth layers are enforced in _validate_cmd_allowed():
+#   1. An argument-level denylist rejecting eval-style flags (-c, -e, --eval,
+#      -exec, ...) even for allowlisted tools, protecting future additions.
+#   2. A git-specific read-only subcommand allowlist, and a hard reject of
+#      ``git -c ...`` (config-injection / alias-shell escape).
+#
 # Empty set = all external commands blocked by default when using the allowlist.
 # Set to None to disable allowlisting (permissive — not recommended in production).
 _CMD_ALLOWLIST: frozenset[str] | None = frozenset(
     {
-        "git",
+        "git",  # further gated by _GIT_SUBCOMMAND_ALLOWLIST + -c reject
         "cat",
         "ls",
-        "find",
         "grep",
         "echo",
-        "env",
         "printenv",
         "pwd",
         "date",
@@ -181,29 +225,50 @@ _CMD_ALLOWLIST: frozenset[str] | None = frozenset(
         "uniq",
         "cut",
         "tr",
-        "sed",
-        "awk",
         "jq",
-        "python",
-        "python3",
-        "node",
-        "npm",
-        "make",
-        "cargo",
-        "go",
-        "mvn",
-        "gradle",
     }
+)
+
+# Read-only git subcommands that context sources may invoke. Anything that can
+# mutate the repo, the working tree, or remote state (push, commit, config,
+# checkout, clean, reset, ...) is excluded.
+_GIT_SUBCOMMAND_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "log",
+        "diff",
+        "show",
+        "status",
+        "branch",
+        "rev-parse",
+        "ls-files",
+        "blame",
+        "describe",
+        "tag",
+        "remote",
+        "shortlog",
+    }
+)
+
+# Argument-level denylist of eval-/exec-style flags. Any argv token exactly
+# equal to one of these (or ``--eval=...``) is rejected for *every* allowlisted
+# tool. This blocks ``python -c``, ``node -e``, ``find -exec``, ``perl --eval``,
+# etc. even if such a tool were re-added to the allowlist later.
+_DANGEROUS_ARG_FLAGS: frozenset[str] = frozenset(
+    {"-c", "-e", "--eval", "-exec", "-execdir", "--exec"}
 )
 
 
 def _validate_cmd_allowed(command: str) -> list[str]:
-    """Parse *command* into an argv list and validate the executable is allowed.
+    """Parse *command* into an argv list and validate it is safe to run.
 
-    Returns the argv list on success.
-    Raises SecurityError if the command executable is not in the allowlist.
-    Using shlex.split avoids shell=True injection; the allowlist prevents
-    arbitrary executables from being invoked via spec files.
+    Returns the argv list on success. Raises SecurityError if:
+      - the executable is not in _CMD_ALLOWLIST, or
+      - any argument is an eval-/exec-style flag (defence in depth), or
+      - the executable is ``git`` and either uses ``-c`` config injection or
+        its subcommand is not in _GIT_SUBCOMMAND_ALLOWLIST.
+
+    Using shlex.split avoids shell=True injection; the allowlist + denylist
+    prevent arbitrary code execution via spec files.
     """
     try:
         argv = shlex.split(command)
@@ -223,6 +288,40 @@ def _validate_cmd_allowed(command: str) -> list[str]:
             "Add it to _CMD_ALLOWLIST in context_builder.py if it is safe to run.",
             code=EXIT_USAGE,
         )
+
+    # Defence-in-depth: reject eval-/exec-style flags for every tool.
+    for arg in argv[1:]:
+        if arg in _DANGEROUS_ARG_FLAGS or arg.startswith("--eval="):
+            raise SecurityError(
+                f"Command argument {arg!r} is a code-evaluation flag and is "
+                "rejected. Eval/exec-style flags (-c, -e, --eval, -exec, ...) "
+                "could run arbitrary code and are never permitted in context "
+                "commands.",
+                code=EXIT_USAGE,
+            )
+
+    if executable == "git":
+        # ``git -c key=val ...`` can inject aliases that spawn shells
+        # (e.g. ``git -c alias.x='!sh' x``). Reject any -c usage for git.
+        # (The bare ``-c`` token is already caught above, but a future
+        # change to _DANGEROUS_ARG_FLAGS must not silently re-open this.)
+        for arg in argv[1:]:
+            if arg == "-c" or arg.startswith("-c"):
+                raise SecurityError(
+                    "Refusing 'git -c ...': config injection can run arbitrary "
+                    "shell via aliases. Remove the -c flag.",
+                    code=EXIT_USAGE,
+                )
+        # The first non-flag argument is the subcommand — it must be read-only.
+        subcommand = next((a for a in argv[1:] if not a.startswith("-")), None)
+        if subcommand is None or subcommand not in _GIT_SUBCOMMAND_ALLOWLIST:
+            raise SecurityError(
+                f"git subcommand {subcommand!r} is not in the read-only "
+                f"allowlist {sorted(_GIT_SUBCOMMAND_ALLOWLIST)}. "
+                "Only non-mutating git commands may be used as context sources.",
+                code=EXIT_USAGE,
+            )
+
     return argv
 
 
@@ -364,7 +463,33 @@ def _gather_stdin(label: str) -> SourceEntry:
     )
 
 
-def _gather_env(var_name: str, label: str) -> SourceEntry | None:
+# Regex matching credential-like environment variable names (S-3). A spec must
+# not be able to pull, e.g., ANTHROPIC_API_KEY or AWS_SECRET_ACCESS_KEY into the
+# prompt context. Matched case-insensitively against the variable name.
+_SENSITIVE_ENV_RE = re.compile(
+    r"(KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|SESSION"
+    r"|^AWS_|^AZURE_|^GCP_|^GOOGLE_|^OPENAI_|^ANTHROPIC_|^GITHUB_|^SLACK_)",
+    re.IGNORECASE,
+)
+
+
+def _gather_env(
+    var_name: str, label: str, *, allow_sensitive_env: bool = False
+) -> SourceEntry | None:
+    if _SENSITIVE_ENV_RE.search(var_name):
+        if not allow_sensitive_env:
+            raise SecurityError(
+                f"Refusing to read credential-like environment variable "
+                f"{var_name!r} into prompt context. This prevents accidental "
+                "secret exfiltration. Pass --allow-sensitive-env to override.",
+                code=EXIT_USAGE,
+            )
+        warnings.warn(
+            f"SECURITY WARNING: reading credential-like environment variable "
+            f"{var_name!r} into prompt context (--allow-sensitive-env). "
+            "Its value may be sent to the provider and logged.",
+            stacklevel=2,
+        )
     value = os.environ.get(var_name)
     if value is None:
         return None
@@ -423,6 +548,78 @@ def _gather_git(staged: bool, label: str) -> SourceEntry:
     )
 
 
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPSConnection that dials a pinned IP but does TLS against the hostname.
+
+    The socket connects to ``self._pinned_ip``; SNI and certificate hostname
+    verification still use the real hostname (``self.host``). This closes the
+    DNS-rebinding TOCTOU window (S-5) while keeping cert validation correct.
+    """
+
+    def __init__(
+        self, host: str, pinned_ip: str, *, context: ssl.SSLContext, **kwargs: Any
+    ) -> None:
+        super().__init__(host, context=context, **kwargs)
+        self._pinned_ip = pinned_ip
+        self._ssl_ctx = context
+
+    def connect(self) -> None:  # pragma: no cover - exercised via integration
+        # Open the raw socket to the validated IP, not a freshly-resolved host.
+        sock = socket.create_connection((self._pinned_ip, self.port), self.timeout)
+        # server_hostname=self.host -> SNI + cert verification use real hostname.
+        self.sock = self._ssl_ctx.wrap_socket(sock, server_hostname=self.host)
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """HTTPConnection that dials a pinned IP while preserving the Host header."""
+
+    def __init__(self, host: str, pinned_ip: str, **kwargs: Any) -> None:
+        super().__init__(host, **kwargs)
+        self._pinned_ip = pinned_ip
+
+    def connect(self) -> None:  # pragma: no cover - exercised via integration
+        self.sock = socket.create_connection((self._pinned_ip, self.port), self.timeout)
+
+
+def _fetch_pinned(url: str, pinned_ip: str, max_bytes: int, timeout: int = 20) -> bytes:
+    """Fetch *url* but open the socket against *pinned_ip* instead of re-resolving.
+
+    S-5 (DNS-rebinding / TOCTOU): _check_url_allowed validated the hostname's
+    resolved IP, but a plain ``urlopen`` would re-resolve at connect time,
+    letting a rebinding attacker swap in a private IP between check and use.
+    Here we connect directly to the already-validated IP while keeping the
+    original hostname for the ``Host`` header and (for HTTPS) the TLS SNI /
+    certificate-verification name, so certificate validation still works.
+    """
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").strip("[]")
+    scheme = parsed.scheme.lower()
+    default_port = 443 if scheme == "https" else 80
+    port = parsed.port or default_port
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    conn: http.client.HTTPConnection
+    if scheme == "https":
+        ctx = ssl.create_default_context()
+        conn = _PinnedHTTPSConnection(
+            hostname, pinned_ip, port=port, timeout=timeout, context=ctx
+        )
+    else:
+        conn = _PinnedHTTPConnection(hostname, pinned_ip, port=port, timeout=timeout)
+    try:
+        conn.request(
+            "GET",
+            path,
+            headers={"User-Agent": "PromptGenie/2.0", "Host": hostname},
+        )
+        resp = conn.getresponse()
+        return resp.read(max_bytes or 512_000)
+    finally:
+        conn.close()
+
+
 def _gather_url(
     url: str, label: str, max_bytes: int, no_url: bool, allow_insecure: bool = False
 ) -> SourceEntry:
@@ -434,12 +631,22 @@ def _gather_url(
         )
     # SSRF / scheme validation — raises SecurityError for disallowed schemes,
     # private/loopback IPs, and DNS-resolved private addresses before any
-    # network connection is opened.
-    _check_url_allowed(url, allow_insecure=allow_insecure)
+    # network connection is opened. Returns the validated IP(s) so we can pin
+    # the connection and avoid a re-resolution TOCTOU window (S-5).
+    validated_ips = _check_url_allowed(url, allow_insecure=allow_insecure)
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "PromptGenie/2.0"})
-        with urllib.request.urlopen(req, timeout=20) as resp:  # nosec B310 — scheme validated above
-            raw = resp.read(max_bytes or 512_000)
+        if validated_ips:
+            # Pin to the first validated IP (already confirmed non-private).
+            raw = _fetch_pinned(url, validated_ips[0], max_bytes)
+        else:
+            # No IP available to pin (e.g. resolution returned nothing); fall
+            # back to a normal request — _check_url_allowed already enforced
+            # the scheme/IP policy on whatever it could resolve.
+            req = urllib.request.Request(url, headers={"User-Agent": "PromptGenie/2.0"})
+            with urllib.request.urlopen(  # nosec B310 — scheme validated above
+                req, timeout=20
+            ) as resp:
+                raw = resp.read(max_bytes or 512_000)
         content = raw.decode("utf-8", errors="replace")
         sha = hashlib.sha256(raw).hexdigest()
         return SourceEntry(
@@ -494,6 +701,7 @@ def build_context(
     base_dir: Path | None = None,
     no_url: bool = True,
     allow_insecure_url: bool = False,
+    allow_sensitive_env: bool = False,
 ) -> ContextManifest:
     """Gather all context sources and assemble them into a ContextManifest.
 
@@ -513,6 +721,10 @@ def build_context(
         When True, permit plain ``http://`` URLs in context sources (logs a
         security warning). Only ``https://`` is allowed when False (default).
         Corresponds to ``--allow-insecure-url`` / ``allow_insecure: true``.
+    allow_sensitive_env:
+        When True, permit ``env`` sources that name credential-like variables
+        (logs a security warning). Blocked by default (S-3). Corresponds to
+        ``--allow-sensitive-env``.
     """
     base_dir = base_dir or Path.cwd()
     ignore_patterns = _load_promptignore(base_dir)
@@ -532,7 +744,7 @@ def build_context(
         elif src_type == "stdin":
             raw_entries.append(_gather_stdin(lbl))
         elif src_type == "env":
-            e = _gather_env(src.var, lbl)
+            e = _gather_env(src.var, lbl, allow_sensitive_env=allow_sensitive_env)
             if e:
                 raw_entries.append(e)
         elif src_type == "cmd":

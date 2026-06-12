@@ -24,12 +24,67 @@ import click
 
 from promptgenie.core.errors import (
     EXIT_OK,
+    EXIT_USAGE,
     PromptGenieError,
     handle_error,
 )
 from promptgenie.core.run_engine import RunEvent, run_spec
-from promptgenie.core.spec import load_spec
+from promptgenie.core.spec import PromptSpec, load_spec
+from promptgenie.core.trust import add_trust, is_trusted, spec_requires_trust
 from promptgenie.renderers.rich import diag_console
+
+
+def _describe_sources(spec: PromptSpec) -> list[str]:
+    """Human-readable one-liners for the host-touching context sources."""
+    host_types = {"cmd", "file", "glob", "env", "url"}
+    lines: list[str] = []
+    for s in spec.context or []:
+        if s.type not in host_types:
+            continue
+        detail = s.command or s.path or s.pattern or s.var or s.url or ""
+        lines.append(f"  - [{s.type}] {detail}")
+    return lines
+
+
+def _trust_gate(
+    *,
+    spec: PromptSpec,
+    spec_file: str,
+    no_input: bool,
+    trust_spec: bool,
+    assume_yes: bool,
+) -> None:
+    """Block execution of an untrusted spec's host-touching context sources (S-2)."""
+    if not spec_requires_trust(spec):
+        return
+    spec_path = Path(spec_file)
+    if is_trusted(spec_path):
+        return
+
+    # Explicit non-interactive trust grant.
+    if trust_spec or assume_yes:
+        add_trust(spec_path)
+        return
+
+    interactive = sys.stdin.isatty() and not no_input
+    if not interactive:
+        handle_error(
+            PromptGenieError(
+                "Spec has host-touching context sources (cmd/file/glob/env/url) "
+                "and is not trusted. Re-run with --trust to record it as trusted, "
+                "or run interactively to be prompted.",
+                code=EXIT_USAGE,
+            )
+        )
+
+    diag_console.print(
+        "[yellow]⚠ This spec contains context sources that run on your host:[/yellow]"
+    )
+    for line in _describe_sources(spec):
+        diag_console.print(f"[yellow]{line}[/yellow]")
+    if not click.confirm("Trust this spec and its context sources?", default=False):
+        handle_error(PromptGenieError("Spec not trusted; aborting.", code=EXIT_USAGE))
+    add_trust(spec_path)
 
 
 @click.command("run")
@@ -114,6 +169,25 @@ from promptgenie.renderers.rich import diag_console
     "--allow-url", is_flag=True, help="Allow URL-type context sources (policy-gated by default)."
 )
 @click.option(
+    "--allow-sensitive-env",
+    is_flag=True,
+    help="Permit env-type context sources that name credential-like variables "
+    "(KEY/SECRET/TOKEN/...). Blocked by default to prevent secret exfiltration.",
+)
+@click.option(
+    "--trust",
+    "trust_spec",
+    is_flag=True,
+    help="Trust this spec's context sources without prompting (records the spec as trusted).",
+)
+@click.option(
+    "--yes",
+    "-y",
+    "assume_yes",
+    is_flag=True,
+    help="Assume yes to prompts (also trusts the spec's context sources).",
+)
+@click.option(
     "--allow-secrets",
     is_flag=True,
     help="Override the secrets gate and send the prompt even if secrets are detected. "
@@ -156,6 +230,9 @@ def run_cmd(
     max_context_tokens: int,
     context_strategy: str,
     allow_url: bool,
+    allow_sensitive_env: bool,
+    trust_spec: bool,
+    assume_yes: bool,
     allow_secrets: bool,
     output_format: str,
     tee_file: str | None,
@@ -193,6 +270,18 @@ def run_cmd(
     except PromptGenieError as exc:
         handle_error(exc)
 
+    # ---- spec trust gate (S-2) ----
+    # Specs with host-touching context sources (cmd/file/glob/env/url) must be
+    # explicitly trusted before their sources run, to defend against a cloned
+    # malicious repo executing code on first invocation.
+    _trust_gate(
+        spec=spec,
+        spec_file=spec_file,
+        no_input=no_input,
+        trust_spec=trust_spec,
+        assume_yes=assume_yes,
+    )
+
     if show_context and spec.context:
         from promptgenie.core.context_builder import build_context
 
@@ -203,6 +292,7 @@ def run_cmd(
             strategy=context_strategy,
             base_dir=base_dir,
             no_url=not allow_url,
+            allow_sensitive_env=allow_sensitive_env,
         )
         diag_console.print("[bold]Context manifest:[/bold]")
         for entry in manifest.entries:
@@ -232,6 +322,7 @@ def run_cmd(
             max_context_tokens=max_context_tokens,
             context_strategy=context_strategy,
             allow_url=allow_url,
+            allow_sensitive_env=allow_sensitive_env,
             allow_secrets=allow_secrets,
             on_token=_on_token,
             on_event=_on_event,
