@@ -250,7 +250,8 @@ Optional extras:
 |---|---|---|
 | `benchmark` | `anthropic` SDK — required for `promptgenie benchmark` | `pip install "promptgenie[benchmark]"` |
 | `tokenizer` | `tiktoken` — accurate token counts (falls back to `len/4` without it) | `pip install "promptgenie[tokenizer]"` |
-| `llm` | `openai` SDK — required for `promptgenie scan --llm` | `pip install "promptgenie[llm]"` |
+| `providers` | `httpx` + `anthropic` SDK — required to run prompts against providers | `pip install "promptgenie[providers]"` |
+| _(no extra)_ | `openai` SDK — required for `promptgenie scan --llm` (not packaged as an extra) | `pip install openai` |
 
 ### Docker
 

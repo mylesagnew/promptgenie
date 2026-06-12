@@ -189,8 +189,12 @@ async function resolvedCliPath(): Promise<string> {
 
   // Non-standard location — require explicit one-time user trust confirmation.
   if (!_extensionContext) {
-    // No context available (e.g. tests) — allow by default.
-    return configured;
+    // Fail closed (V-003): without the extension context we cannot record or
+    // verify one-time trust, so we must NOT execute an arbitrary custom binary.
+    throw new Error(
+      `PromptGenie: cannot verify trust for custom binary "${configured}" because ` +
+        "the extension context is unavailable. Refusing to execute."
+    );
   }
   const trusted = await confirmCustomBinaryTrust(configured, _extensionContext);
   if (!trusted) {

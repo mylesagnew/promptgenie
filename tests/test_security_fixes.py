@@ -20,10 +20,13 @@ import pytest
 from promptgenie.core.context_builder import (
     SecurityError,
     _check_url_allowed,
+    _gather_stdin,
     _validate_cmd_allowed,
+    build_context,
 )
 from promptgenie.core.errors import EXIT_SECRETS, EXIT_USAGE, PromptGenieError
 from promptgenie.core.run_engine import _check_secrets_gate
+from promptgenie.core.spec import ContextSource
 
 # ---------------------------------------------------------------------------
 # VULN-002 / F-002: URL scheme / SSRF validation
@@ -108,10 +111,13 @@ class TestCheckUrlAllowed:
 
     def test_dns_rebinding_blocked(self):
         """A public hostname that resolves to a private IP must be blocked (CWE-918)."""
-        with patch(
-            "promptgenie.core.context_builder.socket.getaddrinfo",
-            return_value=[(2, 1, 6, "", ("192.168.1.1", 0))],
-        ), pytest.raises(SecurityError, match="rebinding|internal"):
+        with (
+            patch(
+                "promptgenie.core.context_builder.socket.getaddrinfo",
+                return_value=[(2, 1, 6, "", ("192.168.1.1", 0))],
+            ),
+            pytest.raises(SecurityError, match="rebinding|internal"),
+        ):
             _check_url_allowed("https://evil.attacker.com/steal")
 
     def test_dns_resolution_failure_does_not_block(self):
@@ -363,12 +369,14 @@ class TestGatherUrlSecurity:
 
         from promptgenie.core.context_builder import _gather_url
 
-        with patch(
-            "promptgenie.core.context_builder._check_url_allowed"
-        ), patch(
-            "promptgenie.core.context_builder.urllib.request.urlopen",
-            side_effect=OSError("connection refused"),
-        ), pytest.raises(PromptGenieError, match="Failed to fetch"):
+        with (
+            patch("promptgenie.core.context_builder._check_url_allowed"),
+            patch(
+                "promptgenie.core.context_builder.urllib.request.urlopen",
+                side_effect=OSError("connection refused"),
+            ),
+            pytest.raises(PromptGenieError, match="Failed to fetch"),
+        ):
             _gather_url("https://example.com/data.txt", "", 0, no_url=False)
 
     def test_url_allow_insecure_passes_flag(self):
@@ -382,9 +390,12 @@ class TestGatherUrlSecurity:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_resp.read.return_value = b"hello"
 
-        with patch.object(cb, "_check_url_allowed", return_value=[]) as mock_check, patch(
-            "promptgenie.core.context_builder.urllib.request.urlopen",
-            return_value=mock_resp,
+        with (
+            patch.object(cb, "_check_url_allowed", return_value=[]) as mock_check,
+            patch(
+                "promptgenie.core.context_builder.urllib.request.urlopen",
+                return_value=mock_resp,
+            ),
         ):
             # Empty validated-IP list -> falls back to urlopen path (this test's intent).
             cb._gather_url("http://example.com/data", "lbl", 0, no_url=False, allow_insecure=True)
@@ -637,8 +648,9 @@ class TestS5DnsPinning:
             captured["ip"] = pinned_ip
             return b"hello world"
 
-        with patch.object(cb.socket, "getaddrinfo") as gai, patch.object(
-            cb, "_fetch_pinned", side_effect=fake_fetch
+        with (
+            patch.object(cb.socket, "getaddrinfo") as gai,
+            patch.object(cb, "_fetch_pinned", side_effect=fake_fetch),
         ):
             gai.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
             entry = cb._gather_url("https://example.com/x", "", 0, no_url=False)
@@ -755,9 +767,7 @@ class TestSpecTrust:
             encoding="utf-8",
         )
         runner = CliRunner()
-        result = runner.invoke(
-            cli, ["run", str(spec_path), "--no-input", "--dry-run", "--trust"]
-        )
+        result = runner.invoke(cli, ["run", str(spec_path), "--no-input", "--dry-run", "--trust"])
         # Dry-run exits EXIT_OK; the trust gate must not have aborted.
         assert "not trusted" not in result.output.lower()
         assert trust.is_trusted(spec_path) is True
@@ -826,3 +836,83 @@ class TestS4HistoryRedaction:
         done = _json.loads(done_line)
         assert fake_key not in done["response"]
         assert "[REDACTED]" in done["response"]
+
+
+# ---------------------------------------------------------------------------
+# V-001: spec must not be able to bypass the --allow-url egress gate
+# ---------------------------------------------------------------------------
+
+
+class TestV001UrlGateNotBypassable:
+    """A url ContextSource must respect the user-controlled no_url gate
+    regardless of any spec-supplied attribute."""
+
+    def test_url_blocked_when_no_url_true(self, tmp_path):
+        sources = [ContextSource(type="url", url="https://example.com/data.txt")]
+        with pytest.raises(PromptGenieError):
+            build_context(sources, base_dir=tmp_path, no_url=True)
+
+    def test_stray_policy_gated_attribute_is_ignored(self, tmp_path):
+        # Even if a malicious caller monkeypatches a policy_gated=False attribute
+        # onto the source, the gate must NOT be weakened — the attribute is gone
+        # from the dataclass and no longer consulted.
+        src = ContextSource(type="url", url="https://example.com/data.txt")
+        # Deliberately set a stray attribute (dynamic name) to prove it is ignored.
+        setattr(src, "policy_gated", False)  # noqa: B010
+        with pytest.raises(PromptGenieError):
+            build_context([src], base_dir=tmp_path, no_url=True)
+
+    def test_allow_url_still_works(self, tmp_path, monkeypatch):
+        # With no_url=False (--allow-url) the gate is open; we stub the network
+        # fetch to confirm the request is attempted rather than blocked.
+        import promptgenie.core.context_builder as cb
+
+        called: dict[str, str] = {}
+
+        def fake_gather_url(url, label, max_bytes, *, no_url, allow_insecure):
+            called["url"] = url
+            assert no_url is False
+            return cb.SourceEntry(
+                label=label or url,
+                source_type="url",
+                content="ok",
+                sha256="x",
+                token_estimate=1,
+            )
+
+        monkeypatch.setattr(cb, "_gather_url", fake_gather_url)
+        src = ContextSource(type="url", url="https://example.com/data.txt")
+        manifest = build_context([src], base_dir=tmp_path, no_url=False)
+        assert called["url"] == "https://example.com/data.txt"
+        assert manifest.entries
+
+
+# ---------------------------------------------------------------------------
+# Resource caps (stdin truncation + glob file cap)
+# ---------------------------------------------------------------------------
+
+
+class TestResourceCaps:
+    def test_stdin_truncated_to_max_bytes(self, monkeypatch):
+        import io
+
+        monkeypatch.setattr("sys.stdin", io.StringIO("x" * 5000))
+        entry = _gather_stdin("in", max_bytes=100)
+        assert len(entry.content) == 100
+
+    def test_stdin_unbounded_without_cap(self, monkeypatch):
+        import io
+
+        monkeypatch.setattr("sys.stdin", io.StringIO("y" * 300))
+        entry = _gather_stdin("in")
+        assert len(entry.content) == 300
+
+    def test_glob_stops_at_cap(self, tmp_path, monkeypatch):
+        import promptgenie.core.context_builder as cb
+
+        monkeypatch.setattr(cb, "_GLOB_MAX_FILES", 5)
+        for i in range(20):
+            (tmp_path / f"f{i:02d}.txt").write_text("data", encoding="utf-8")
+        sources = [ContextSource(type="glob", pattern="*.txt")]
+        manifest = build_context(sources, base_dir=tmp_path)
+        assert len(manifest.entries) == 5

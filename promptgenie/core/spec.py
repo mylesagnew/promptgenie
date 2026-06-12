@@ -62,7 +62,6 @@ class ContextSource:
     url: str = ""
     label: str = ""
     max_bytes: int = 0  # 0 = no limit
-    policy_gated: bool = True
 
 
 @dataclass
@@ -228,7 +227,6 @@ def _build_context_source(raw: dict[str, Any]) -> ContextSource:
         url=str(raw.get("url", "")),
         label=str(raw.get("label", "")),
         max_bytes=int(raw.get("max_bytes", 0)),
-        policy_gated=bool(raw.get("policy_gated", True)),
     )
 
 
@@ -293,7 +291,6 @@ def _spec_to_dict(spec: PromptSpec) -> dict[str, Any]:
                     "url": s.url or None,
                     "label": s.label or None,
                     "max_bytes": s.max_bytes or None,
-                    "policy_gated": s.policy_gated,
                 }.items()
                 if v is not None
             }

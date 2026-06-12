@@ -84,7 +84,7 @@ addopts   = "-v --tb=short"
 source = ["promptgenie"]
 
 [tool.coverage.report]
-# Threshold reflects current measured coverage (75.92%) with a small margin.
+# Threshold reflects current measured coverage (77.56%) with a small margin.
 # The security-fix tests added in this pass (test_security_fixes.py) bring
 # context_builder, run_engine, and scanner coverage up.  Reaching 85% requires
 # integration tests for CLI commands and registry network paths which need

@@ -136,7 +136,7 @@ def context_build_cmd(
     if include_git_staged:
         sources.append(ContextSource(type="git_staged"))
     for url in urls:
-        sources.append(ContextSource(type="url", url=url, policy_gated=not allow_url))
+        sources.append(ContextSource(type="url", url=url))
 
     if not sources:
         diag_console.print(

@@ -132,7 +132,8 @@ def _check_ollama() -> CheckResult:
                 detail=f"OLLAMA_BASE_URL has disallowed scheme {_scheme!r}",
                 remediation="Set OLLAMA_BASE_URL to an http:// or https:// URL",
             )
-        req = urllib.request.urlopen(f"{base}/api/tags", timeout=2)  # nosec B310 — scheme validated above
+        # scheme validated above
+        req = urllib.request.urlopen(f"{base}/api/tags", timeout=2)  # nosec B310
         req.close()
         return CheckResult(
             label="Ollama (local provider)",

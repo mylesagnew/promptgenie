@@ -10,6 +10,7 @@ from promptgenie.core.providers import (
     ProviderCapabilities,
     ProviderConfig,
     _default_providers,
+    _validate_provider_base_url,
     add_provider,
     get_provider,
     load_providers_config,
@@ -185,3 +186,71 @@ class TestGetProvider:
         monkeypatch.setattr(prov_mod, "_PROVIDERS_FILE", tmp_path / "no_such.yaml")
         provider = get_provider("ollama")
         assert isinstance(provider, OpenAICompatProvider)
+
+
+# ---------------------------------------------------------------------------
+# V-004: provider base_url TLS / scheme validation (CWE-319)
+# ---------------------------------------------------------------------------
+
+
+class TestV004ProviderBaseUrlValidation:
+    def test_empty_defaults_to_openai_https(self):
+        cfg = ProviderConfig(name="x", type="openai_compat", base_url="")
+        assert _validate_provider_base_url(cfg) == "https://api.openai.com/v1"
+
+    def test_https_allowed(self):
+        cfg = ProviderConfig(name="x", type="openai_compat", base_url="https://api.example.com/v1/")
+        assert _validate_provider_base_url(cfg) == "https://api.example.com/v1"
+
+    def test_remote_http_with_key_rejected(self):
+        cfg = ProviderConfig(
+            name="x",
+            type="openai_compat",
+            base_url="http://api.example.com/v1",
+            api_key_env="OPENAI_API_KEY",
+        )
+        with pytest.raises(PromptGenieError):
+            _validate_provider_base_url(cfg)
+
+    def test_remote_http_without_key_rejected(self):
+        # Non-loopback, non-local: cleartext http is refused even keyless.
+        cfg = ProviderConfig(name="x", type="openai_compat", base_url="http://api.example.com/v1")
+        with pytest.raises(PromptGenieError):
+            _validate_provider_base_url(cfg)
+
+    def test_loopback_http_keyless_allowed(self):
+        cfg = ProviderConfig(
+            name="ollama", type="openai_compat", base_url="http://localhost:11434/v1", local=True
+        )
+        assert _validate_provider_base_url(cfg) == "http://localhost:11434/v1"
+
+    def test_loopback_ip_http_allowed(self):
+        cfg = ProviderConfig(name="x", type="openai_compat", base_url="http://127.0.0.1:8080/v1")
+        assert _validate_provider_base_url(cfg) == "http://127.0.0.1:8080/v1"
+
+    def test_loopback_http_with_key_allowed(self):
+        # Loopback is trusted even with a key (key never leaves the host).
+        cfg = ProviderConfig(
+            name="x",
+            type="openai_compat",
+            base_url="http://localhost:11434/v1",
+            api_key="secret",
+        )
+        assert _validate_provider_base_url(cfg) == "http://localhost:11434/v1"
+
+    def test_local_http_with_key_rejected(self):
+        # local: true but a key is configured and host is not loopback -> reject.
+        cfg = ProviderConfig(
+            name="x",
+            type="openai_compat",
+            base_url="http://lan-host:11434/v1",
+            local=True,
+            api_key="secret",
+        )
+        with pytest.raises(PromptGenieError):
+            _validate_provider_base_url(cfg)
+
+    def test_bad_scheme_rejected(self):
+        cfg = ProviderConfig(name="x", type="openai_compat", base_url="ftp://api.example.com/v1")
+        with pytest.raises(PromptGenieError):
+            _validate_provider_base_url(cfg)

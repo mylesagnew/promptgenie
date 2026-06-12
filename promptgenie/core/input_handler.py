@@ -294,8 +294,10 @@ def _collect_from_zip(
                 for info in members:
                     _assert_safe_zip_member(info, extract_root)
 
-                # Safe to extract — all paths validated
-                zf.extractall(extract_root)  # nosec B202 — paths pre-validated above
+                # Safe to extract — every member path pre-validated above by
+                # _assert_safe_zip_member (absolute paths, .. traversal, symlinks,
+                # and resolved-path escapes all raise before we reach here).
+                zf.extractall(extract_root)
 
         except (zipfile.BadZipFile, zipfile.LargeZipFile, ZipSlipError, OSError) as exc:
             result.skipped.append(

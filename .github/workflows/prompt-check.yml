@@ -176,8 +176,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Run prompt test suites
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        # ANTHROPIC_API_KEY intentionally not exposed — promptgenie test runs offline (lint/scan/score)
         run: |
           FAILED=0
           while IFS= read -r file; do

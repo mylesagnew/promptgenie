@@ -438,11 +438,64 @@ class AnthropicProvider(BaseProvider):
 # ---------------------------------------------------------------------------
 
 
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _validate_provider_base_url(cfg: ProviderConfig) -> str:
+    """Validate and normalise a provider ``base_url`` (V-004, CWE-319).
+
+    Rules:
+      * Empty -> default ``https://api.openai.com/v1``.
+      * Only ``http``/``https`` schemes are accepted.
+      * Plain ``http://`` is only permitted when the host is loopback
+        (``localhost``/``127.0.0.1``/``::1``) OR the provider is marked
+        ``local: true`` AND no API key is configured. This prevents sending an
+        ``Authorization`` header in cleartext to a remote endpoint.
+
+    Returns the base_url with any trailing ``/`` stripped.
+    """
+    from urllib.parse import urlsplit
+
+    raw = (cfg.base_url or "").strip()
+    if not raw:
+        return "https://api.openai.com/v1"
+
+    parts = urlsplit(raw)
+    scheme = parts.scheme.lower()
+    if scheme not in ("http", "https"):
+        raise PromptGenieError(
+            f"Provider '{cfg.name}' base_url uses unsupported scheme {scheme!r}: {raw!r}",
+            code=EXIT_PROVIDER,
+            hint="Use an https:// endpoint (or http:// only for a local loopback dev server).",
+        )
+
+    if scheme == "http":
+        host = (parts.hostname or "").lower()
+        is_loopback = host in _LOOPBACK_HOSTS
+        has_key = bool(cfg.api_key_env or cfg.api_key)
+        # Allow http only for loopback hosts, OR for an explicitly-local provider
+        # that has no API key (a keyless local dev server). Anything else would
+        # risk leaking credentials over cleartext.
+        if not (is_loopback or (cfg.local and not has_key)):
+            raise PromptGenieError(
+                f"Provider '{cfg.name}' base_url uses cleartext http:// to a "
+                f"non-loopback host {host!r}: {raw!r}",
+                code=EXIT_PROVIDER,
+                hint=(
+                    "Use https:// for remote endpoints. Plain http:// is only allowed "
+                    "for loopback hosts (localhost/127.0.0.1/::1) or a keyless local "
+                    "provider, to avoid sending the API key in cleartext."
+                ),
+            )
+
+    return raw.rstrip("/")
+
+
 class OpenAICompatProvider(BaseProvider):
     """Covers any OpenAI-chat-completions-compatible endpoint."""
 
     def _base_url(self) -> str:
-        return self.config.base_url or "https://api.openai.com/v1"
+        return _validate_provider_base_url(self.config)
 
     def _headers(self) -> dict[str, str]:
         headers = {"content-type": "application/json"}

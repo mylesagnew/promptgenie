@@ -9,7 +9,7 @@ Supported source types
   cmd         — run a shell command and capture stdout
   git_diff    — output of ``git diff``
   git_staged  — output of ``git diff --staged``
-  url         — HTTP GET (policy-gated by default)
+  url         — HTTP GET (blocked unless the user passes --allow-url)
 
 Each gathered chunk is called a *SourceEntry*. After gathering, the builder
 trims to a token budget using one of four strategies:
@@ -439,11 +439,18 @@ def _gather_file(
         return None
 
 
+# Cap on the number of files a single glob source may collect, applied before
+# token trimming, to bound memory/CPU on pathological patterns.
+_GLOB_MAX_FILES = 1000
+
+
 def _gather_glob(
     pattern: str, label: str, max_bytes: int, base_dir: Path, ignore_patterns: list[str]
 ) -> list[SourceEntry]:
     entries: list[SourceEntry] = []
     for p in sorted(base_dir.glob(pattern)):
+        if len(entries) >= _GLOB_MAX_FILES:
+            break
         if p.is_file():
             e = _gather_file(str(p), "", max_bytes, base_dir, ignore_patterns)
             if e:
@@ -451,8 +458,10 @@ def _gather_glob(
     return entries
 
 
-def _gather_stdin(label: str) -> SourceEntry:
+def _gather_stdin(label: str, max_bytes: int = 0) -> SourceEntry:
     content = sys.stdin.read()
+    if max_bytes and len(content) > max_bytes:
+        content = content[:max_bytes]
     sha = hashlib.sha256(content.encode()).hexdigest()
     return SourceEntry(
         label=label or "<stdin>",
@@ -508,7 +517,8 @@ def _gather_cmd(command: str, label: str, max_bytes: int) -> SourceEntry:
     # disallowed executables or shell-injection-prone syntax.
     argv = _validate_cmd_allowed(command)
     try:
-        result = subprocess.run(  # nosec B603 — shell=False, argv validated by allowlist above
+        # shell=False; argv validated by allowlist above
+        result = subprocess.run(  # nosec B603
             argv, shell=False, capture_output=True, text=True, timeout=30
         )
         content = result.stdout
@@ -531,7 +541,8 @@ def _gather_git(staged: bool, label: str) -> SourceEntry:
     # check needed here. The argv is always a fixed safe invocation.
     cmd = ["git", "diff", "--staged"] if staged else ["git", "diff"]
     try:
-        result = subprocess.run(  # nosec B603 — shell=False, hardcoded argv (not from spec)
+        # shell=False; hardcoded argv (not from spec)
+        result = subprocess.run(  # nosec B603
             cmd, shell=False, capture_output=True, text=True, timeout=15
         )
         content = result.stdout or "(no diff)\n"
@@ -603,9 +614,7 @@ def _fetch_pinned(url: str, pinned_ip: str, max_bytes: int, timeout: int = 20) -
     conn: http.client.HTTPConnection
     if scheme == "https":
         ctx = ssl.create_default_context()
-        conn = _PinnedHTTPSConnection(
-            hostname, pinned_ip, port=port, timeout=timeout, context=ctx
-        )
+        conn = _PinnedHTTPSConnection(hostname, pinned_ip, port=port, timeout=timeout, context=ctx)
     else:
         conn = _PinnedHTTPConnection(hostname, pinned_ip, port=port, timeout=timeout)
     try:
@@ -643,7 +652,8 @@ def _gather_url(
             # back to a normal request — _check_url_allowed already enforced
             # the scheme/IP policy on whatever it could resolve.
             req = urllib.request.Request(url, headers={"User-Agent": "PromptGenie/2.0"})
-            with urllib.request.urlopen(  # nosec B310 — scheme validated above
+            # scheme validated above
+            with urllib.request.urlopen(  # nosec B310
                 req, timeout=20
             ) as resp:
                 raw = resp.read(max_bytes or 512_000)
@@ -742,7 +752,7 @@ def build_context(
         elif src_type == "glob":
             raw_entries.extend(_gather_glob(src.pattern, lbl, mb, base_dir, ignore_patterns))
         elif src_type == "stdin":
-            raw_entries.append(_gather_stdin(lbl))
+            raw_entries.append(_gather_stdin(lbl, mb))
         elif src_type == "env":
             e = _gather_env(src.var, lbl, allow_sensitive_env=allow_sensitive_env)
             if e:
@@ -754,13 +764,15 @@ def build_context(
         elif src_type == "git_staged":
             raw_entries.append(_gather_git(staged=True, label=lbl))
         elif src_type == "url":
-            gate = src.policy_gated if hasattr(src, "policy_gated") else True
+            # The URL egress gate is controlled solely by the user/CLI
+            # (``no_url`` / ``--allow-url``).  A spec must NOT be able to weaken
+            # the user's network policy (V-001), so we pass ``no_url`` directly.
             raw_entries.append(
                 _gather_url(
                     src.url,
                     lbl,
                     mb,
-                    no_url=gate and no_url,
+                    no_url=no_url,
                     allow_insecure=allow_insecure_url,
                 )
             )

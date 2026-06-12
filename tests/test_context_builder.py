@@ -216,7 +216,7 @@ class TestBuildContext:
         assert manifest.entries == []
 
     def test_url_blocked_by_default(self, tmp_path):
-        sources = [ContextSource(type="url", url="http://example.com", policy_gated=True)]
+        sources = [ContextSource(type="url", url="http://example.com")]
         with pytest.raises(PromptGenieError):
             build_context(sources, base_dir=tmp_path, no_url=True)
 
