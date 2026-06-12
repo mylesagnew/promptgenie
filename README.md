@@ -1461,20 +1461,24 @@ promptgenie run my-prompt.yaml --no-input --var env=prod
 | `--vars FILE` | YAML/JSON variable file |
 | `--max-context-tokens N` | Context token budget |
 | `--context-strategy` | `manual` \| `newest` \| `smallest` \| `git-relevant` |
-| `--allow-url` | Permit URL-type context sources (HTTPS-only; SSRF-protected with DNS pre-resolution) |
+| `--trust` | Trust this spec's context sources without prompting (records the spec as trusted) |
+| `--allow-url` | Permit URL-type context sources (HTTPS-only; SSRF-protected with IP pinning) |
 | `--allow-insecure-url` | Also permit plain `http://` URL sources (emits a security warning; default blocked) |
+| `--allow-sensitive-env` | Permit credential-like env vars in `env` context sources (emits a warning) |
 | `--allow-secrets` | Downgrade secrets gate from hard-block to warning (use only in controlled CI environments) |
 | `--tee FILE` | Write response to file while streaming |
 | `--format text\|ndjson` | NDJSON emits `start/token/warning/error/done` events |
 | `--show-context` | Print context manifest before sending |
 
-Run history is persisted to `~/.local/share/promptgenie/runs/`.
+Run history is persisted to `~/.local/share/promptgenie/runs/` (files `0600`, with secrets redacted).
 
-> **Security defaults (v1.2.2+):** The run engine enforces four hard constraints by default.
-> (1) **Secrets gate** — if the assembled prompt contains a detected secret (API key, token, credential), the run aborts with exit 6 before calling any provider. Pass `--allow-secrets` to override.
-> (2) **SSRF + DNS rebinding protection** — `url` context sources require `https://` and are checked against an IP blocklist both before and after DNS resolution. `http://` requires `--allow-insecure-url`; `file://` and private IP ranges are blocked unconditionally.
-> (3) **Command allowlist** — `cmd` context sources are restricted to a fixed set of known-safe executables; all subprocess calls use `shell=False`.
-> (4) **VS Code trusted binary** — the `promptgenie.executablePath` setting is scoped to machine-level; custom paths require an absolute path + basename check + one-time trust prompt.
+> **Security defaults (v1.2.3+):** The run engine enforces these constraints by default.
+> (1) **Spec trust boundary** — a spec with host-touching context sources (`cmd`/`file`/`glob`/`env`/`url`) must be trusted before it runs. Interactive sessions prompt; CI must pass `--trust`/`--yes` or pre-register via `promptgenie trust add`. Trust is keyed by spec path + content hash, so editing a trusted spec re-prompts.
+> (2) **Command allowlist** — `cmd` sources are restricted to inert read-only tools; interpreters (`python3`, `node`, `awk`, …) and eval flags (`-c`, `-e`, `-exec`) are blocked, and `git` is limited to read-only subcommands. All subprocess calls use `shell=False`.
+> (3) **Env credential guard** — `env` sources refuse credential-like variable names (`*KEY*`, `AWS_*`, `ANTHROPIC_*`, …) unless `--allow-sensitive-env` is passed.
+> (4) **Secrets gate** — a detected secret in the assembled prompt aborts the run (exit 6) before any provider call. Pass `--allow-secrets` to override.
+> (5) **SSRF + DNS rebinding protection** — `url` sources require `https://` and pin the validated IP for the connection. `http://` requires `--allow-insecure-url`; `file://` and private IP ranges are blocked unconditionally.
+> (6) **VS Code trusted binary** — the `promptgenie.executablePath` setting is machine-scoped; custom paths require an absolute path + basename check + one-time trust prompt.
 > See [SECURITY.md](SECURITY.md) for the full security model.
 
 ---

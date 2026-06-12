@@ -9,7 +9,7 @@
 | 1.0.x   | ✗ End of life      |
 | < 1.0   | ✗ End of life      |
 
-Current release: **1.2.2**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
+Current release: **1.2.3**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
 
 ---
 
@@ -29,10 +29,29 @@ You will receive an acknowledgement within **48 hours** and a resolution timelin
 
 ---
 
-## Run Engine Security Model (v1.2.2+)
+## Run Engine Security Model (v1.2.3+)
 
 The `promptgenie run` command executes PromptSpec YAML files that can name context sources,
-provider URLs, and shell commands. The following hardened defaults are in effect from v1.2.1:
+provider URLs, and shell commands. The following hardened defaults are in effect from v1.2.3:
+
+### Spec trust boundary
+
+A PromptSpec can name context sources (`cmd`, `file`, `glob`, `env`, `url`) that read from — or
+execute against — the host. Because a spec may arrive from an untrusted source (a cloned
+repository, a shared gist), `promptgenie run` treats any spec containing a host-touching context
+source as **untrusted until explicitly trusted**:
+
+- On first run, an interactive session lists the dangerous context sources (the `cmd` strings,
+  file paths, and URLs) and prompts for confirmation. On approval the spec is recorded as trusted.
+- A non-interactive session (`--no-input`, CI) aborts with `exit 2` unless `--trust` or `--yes` is
+  passed, or the spec was pre-registered with `promptgenie trust add`.
+- Trust is keyed by the spec's **resolved absolute path and a hash of its content**. Editing a
+  trusted spec invalidates the trust record and re-prompts — a trusted spec cannot be swapped for a
+  malicious one without re-confirmation.
+- The trust store lives at `~/.config/promptgenie/trust.json` (file mode `0600`, directory `0700`).
+  Manage it with `promptgenie trust list | add <spec> | revoke <spec>`.
+- Specs containing only an inline prompt and variables (no host-touching sources) do **not** require
+  trust.
 
 ### Secrets gate — hard block
 
@@ -50,13 +69,25 @@ Never use `--allow-secrets` in production pipelines that handle real credentials
 - Only `https://` is permitted by default. `http://`, `file://`, `ftp://`, `data:`, and all other
   schemes raise `SecurityError`. Plain HTTP can be re-enabled with `--allow-insecure-url` (emits a
   security warning).
-- **DNS rebinding defence** — the hostname is resolved via `socket.getaddrinfo()` before the
-  connection is opened. Every returned IP is checked against the blocklist. A hostname that
-  resolves to a private IP at request time is blocked even if the URL string appeared public.
+- **DNS rebinding defence with IP pinning** — the hostname is resolved via `socket.getaddrinfo()`
+  before the connection is opened, and every returned IP is checked against the blocklist. From
+  v1.2.3 the **validated IP is pinned for the actual connection** (the socket dials the checked IP
+  while the original hostname is preserved in the `Host` header and TLS SNI/certificate
+  verification). This closes the time-of-check/time-of-use window where a rebinding attacker could
+  return a public IP to the validation lookup and a private IP to the connection.
 - Requests to loopback addresses (`127.0.0.1`, `::1`), RFC-1918 private ranges (`10.x`,
   `172.16–31.x`, `192.168.x`), and link-local addresses (`169.254.x`) are blocked at both the
   URL-string level and the post-resolution level.
 - URL context sources are additionally gated behind the `--allow-url` CLI flag.
+
+### Environment context sources — credential protection
+
+`context: [{type: env, var: ...}]` entries refuse to read credential-like variables into the
+prompt. Variable names matching common secret patterns (`*KEY*`, `*SECRET*`, `*TOKEN*`,
+`*PASSWORD*`, `*CREDENTIAL*`, `*PRIVATE*`, `*SESSION*`, and `AWS_`/`AZURE_`/`GCP_`/`GOOGLE_`/
+`OPENAI_`/`ANTHROPIC_`/`GITHUB_`/`SLACK_` prefixes) raise `SecurityError`. This prevents a spec
+from pulling an API key or cloud credential into a prompt and exfiltrating it to a provider. The
+`--allow-sensitive-env` flag overrides this with a printed warning.
 
 ### File context sources — path containment
 
@@ -67,10 +98,24 @@ escape via `../`, absolute references, or symlink chains raise `SecurityError`.
 ### Command context sources — allowlist
 
 `context: [{type: cmd, cmd: ...}]` entries are parsed with `shlex.split()` (no shell expansion)
-and the executable basename is checked against a fixed allowlist of safe tools (`git`, `cat`,
-`grep`, `python3`, `make`, and a small set of equivalents). Executables not on the allowlist
-(`rm`, `bash`, `sh`, `curl`, `nc`, and any other tool) raise `SecurityError` before any process
-is spawned. All `subprocess.run` calls use `shell=False` explicitly.
+and validated in three layers before any process is spawned (all `subprocess.run` calls use
+`shell=False`):
+
+1. **Executable allowlist** — the basename must be one of a small set of inert, read-only
+   inspection tools (`git`, `cat`, `ls`, `grep`, `echo`, `pwd`, `date`, `uname`, `wc`, `head`,
+   `tail`, `sort`, `uniq`, `cut`, `tr`, `printenv`). Interpreters and build tools (`python`,
+   `python3`, `node`, `npm`, `make`, `env`, `awk`, `sed`, `find`, etc.) are **deliberately
+   excluded** — each can execute arbitrary code despite a benign basename.
+2. **Dangerous-argument denylist** — even for an allowlisted tool, any argument that is an
+   eval/exec flag (`-c`, `-e`, `--eval`, `--eval=…`, `-exec`, `-execdir`, `--exec`) is rejected.
+   This is defense-in-depth against future allowlist additions.
+3. **`git` subcommand allowlist** — when the tool is `git`, the subcommand must be read-only
+   (`log`, `diff`, `show`, `status`, `branch`, `rev-parse`, `ls-files`, `blame`, `describe`,
+   `tag`, `remote`, `shortlog`). Mutating subcommands (`push`, `config <key> <value>`, …) and the
+   `git -c …` config-injection form (which can alias a subcommand to a shell) are rejected.
+
+Executables not on the allowlist (`rm`, `bash`, `sh`, `curl`, `nc`, and any other tool) raise
+`SecurityError`.
 
 ---
 

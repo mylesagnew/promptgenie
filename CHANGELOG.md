@@ -10,6 +10,75 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.2.3] — 2026-06-12  ·  Third security audit round
+
+Addresses findings S-1 through S-5 from the third internal security review. The headline fix (S-1) closes a bypass that effectively re-opened the F-001 command-execution vector; S-2 adds a trust boundary around `promptgenie run`. No new product features; behaviour changes are noted under **Changed**.
+
+### Security
+
+- **S-1 fixed — command allowlist bypass via interpreters** (`promptgenie/core/context_builder.py`) —
+  The `_CMD_ALLOWLIST` previously included interpreters and code-exec primitives (`python3`, `node`,
+  `make`, `env`, `awk`, `sed`, `find`, …). Each passed the executable-basename check while still
+  executing arbitrary code (`python3 -c …`, `node -e …`, `awk 'BEGIN{system(…)}'`, `find … -exec …`,
+  `env sh -c …`, `git -c alias.x=!sh …`), nullifying the F-001 hardening. The allowlist is now
+  reduced to genuinely inert read-only tools (`git`, `cat`, `ls`, `grep`, `head`, `tail`, `wc`,
+  `sort`, `uniq`, `cut`, `tr`, `printenv`, …). Three new layers were added: a `_DANGEROUS_ARG_FLAGS`
+  argument denylist (`-c`, `-e`, `--eval`, `-exec`, `-execdir`, …) enforced for **every** command;
+  a read-only `_GIT_SUBCOMMAND_ALLOWLIST` (only `log`, `diff`, `show`, `status`, `branch`,
+  `rev-parse`, `ls-files`, `blame`, `describe`, `tag`, `remote`, `shortlog`); and a hard reject of
+  any `git -c …` config-injection form.
+
+- **S-2 fixed — no trust gate before `run` executes an untrusted spec** (`promptgenie/core/trust.py`,
+  `promptgenie/commands/run.py`, `promptgenie/commands/trust.py`) — `promptgenie run spec.yaml`
+  previously executed a spec's `cmd`/`file`/`glob`/`env`/`url` context sources automatically, with
+  no trust boundary (a cloned malicious repo's spec ran on first invocation). A spec trust store now
+  guards this: specs that touch the host require explicit trust before their context sources run.
+  Interactive sessions prompt and list the dangerous sources; non-interactive sessions abort unless
+  `--trust` or `--yes` is passed. Trust is keyed by resolved-path **and** content hash, so editing a
+  trusted spec re-prompts. The store lives at `~/.config/promptgenie/trust.json` (file `0600`, dir
+  `0700`). Specs with only inline prompt/vars do not require trust.
+
+- **S-3 fixed — `env` context source secret exfiltration** (`promptgenie/core/context_builder.py`) —
+  `_gather_env()` would read any named environment variable (including `ANTHROPIC_API_KEY`,
+  `AWS_SECRET_ACCESS_KEY`) into the prompt and ship it to the provider. Credential-like variable
+  names (matching `_SENSITIVE_ENV_RE`: `*KEY*`, `*SECRET*`, `*TOKEN*`, `*PASSWORD*`, `*CREDENTIAL*`,
+  and `AWS_`/`AZURE_`/`GCP_`/`OPENAI_`/`ANTHROPIC_`/`GITHUB_`/`SLACK_` prefixes) now raise
+  `SecurityError` unless `--allow-sensitive-env` is explicitly passed (which emits a warning).
+
+- **S-4 fixed — run history stored secrets in plaintext, possibly world-readable**
+  (`promptgenie/core/history.py`) — Run NDJSON files are now created with `0600` (parent dirs
+  `0700`), and the assembled prompt (`start` event) and final response (`done` event) are passed
+  through the existing secret redactor before being written. Persisted readers prefer the redacted
+  response.
+
+- **S-5 fixed — SSRF DNS-rebinding TOCTOU window** (`promptgenie/core/context_builder.py`) — The
+  previous fix resolved the hostname for validation but `urlopen` then re-resolved it, leaving a
+  rebinding window. `_check_url_allowed()` now returns the validated public IP, and `_gather_url()`
+  pins the connection to that IP (`_PinnedHTTPSConnection`/`_PinnedHTTPConnection`) while preserving
+  the original `Host` header and TLS SNI/cert hostname — so the IP that was validated is the IP that
+  is connected to.
+
+### Added
+
+- **`promptgenie trust` command group** — `trust list`, `trust add <spec>`, `trust revoke <spec>`
+  for managing the spec trust store.
+- **New `run` flags** — `--trust` (trust this spec's context sources without prompting and record
+  it), `--allow-sensitive-env` (permit credential-like env vars in `env` context sources).
+- **40+ new security tests** in `tests/test_security_fixes.py` across `TestS1AllowlistHardening`,
+  `TestS1GitSubcommandAllowlist`, `TestSpecTrust`, `TestS3EnvExfiltration`,
+  `TestS4HistoryRedaction`, and `TestS5DnsPinning`.
+
+### Changed
+
+- **`promptgenie run` now requires trust for host-touching specs (breaking for non-interactive
+  callers).** Scripts that run specs with `cmd`/`file`/`glob`/`env`/`url` context sources in
+  `--no-input`/CI mode must now pass `--trust` (or `--yes`) or pre-register the spec via
+  `promptgenie trust add`. Specs with only inline content are unaffected.
+- **Command context sources** — the executable allowlist no longer includes any interpreter or
+  build tool; `cmd` sources are limited to read-only inspection utilities (see S-1).
+
+---
+
 ## [1.2.2] — 2026-06-12  ·  Second security audit round
 
 Addresses all findings from the second internal security audit (F-001 through Q-003). Fixes DNS-rebinding SSRF bypass, VS Code extension untrusted binary execution, residual shell-injection paths, CodeQL misconfiguration, 25 mypy errors, and ruff import drift. No new user-facing features; existing behaviour is unchanged except where noted under **Changed**.
