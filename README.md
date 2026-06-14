@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — and executes them end-to-end. It ships a built-in linter, multi-file security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, token estimation, full UNIX-composable pipeline, and a declarative run engine that sends prompts to any provider (Anthropic, OpenAI, Ollama, LM Studio, vLLM) with streaming, variable resolution, context assembly, policy gates, and run history.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — and executes them end-to-end. It ships a built-in linter, multi-file security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, token estimation, full UNIX-composable pipeline, and a declarative run engine that sends prompts to any provider (Anthropic, OpenAI, Ollama, LM Studio, vLLM) with streaming, variable resolution, context assembly, policy gates, and run history. v1.6.0 adds a unified `EventBus` / `EventFormatter` infrastructure so every lifecycle event — run tokens, lint findings, policy violations, eval results — flows through a single typed channel that commands, tests, and future integrations all subscribe to.
 
 ---
 
@@ -59,6 +59,24 @@ promptgenie completion install zsh
 
 # Launch the guided interactive menu
 promptgenie interactive
+```
+
+**Event bus (v1.6.0+):**
+
+```python
+from promptgenie.core.event_bus import EventBus
+from promptgenie.core.event_formatters import NDJSONFormatter
+from promptgenie.core.events import Event, EventKind
+from promptgenie.core.run_engine import run_spec
+
+bus = EventBus()
+tokens: list[str] = []
+bus.subscribe(EventKind.RUN_TOKEN, lambda e: tokens.append(e.text))
+bus.subscribe_all(lambda e: print(e.to_ndjson()))   # log everything
+
+result = run_spec(spec, dry_run=False, event_bus=bus)
+print("".join(tokens))  # assembled response
+print(f"Events: {len(bus)}, tokens: {len(bus.of_kind(EventKind.RUN_TOKEN))}")
 ```
 
 **Pipe-friendly (v1.1.0+):**
@@ -233,6 +251,46 @@ Errors fail CI (exit 1). Warnings are advisory (exit 0). Use `--no-warnings` to 
 
 ---
 
+## Architecture: Event model (v1.6.0)
+
+Every observable lifecycle moment in PromptGenie is an `Event` — a frozen, NDJSON-serialisable value object with a typed `EventKind`.
+
+```
+EventKind domains
+─────────────────────────────────────────────────────
+run.*      start · token · warning · error · tool_call · done · dry
+lint.*     finding
+scan.*     finding
+policy.*   pass · violation
+diff.*     computed
+eval.*     result
+ci.*       check
+audit.*    write
+```
+
+Commands emit events; formatters and subscribers consume them:
+
+```
+EventBus  ──subscribe(kind, fn)──► Listener callbacks
+          ──subscribe_all(fn)────► Catch-all (audit, telemetry)
+          ──emit(event)──────────► dispatches to all matching listeners
+          ──emit_to(event, fmt)──► dispatch + format + write in one call
+          ──collected / of_kind──► test assertions without stdout mocking
+```
+
+Built-in formatters implement the `EventFormatter` protocol (`format(event) → str | None`):
+
+| Formatter | Emits | Suppresses |
+|---|---|---|
+| `NDJSONFormatter` | all events as JSON lines | — |
+| `TokenOnlyFormatter` | `run.token` text only | everything else |
+| `RichFormatter` | human-readable Rich markup | `run.token` |
+| `SilentFormatter` | nothing | everything |
+
+`run_spec()` accepts `event_bus=` alongside the legacy `on_token=` / `on_event=` callbacks — fully backward-compatible. A subscriber exception never propagates into the run pipeline.
+
+---
+
 ## Install
 
 ```bash
@@ -314,6 +372,38 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 | `validate` | Validate YAML config files — profiles, templates, context packs, workflows, prompt tests |
 | `validate-profiles` | Validate all profile YAML files against the profile schema |
 | `interactive` | Launch the guided menu — generate, lint, scan, diff, test, and more |
+| **Phase 3 — SecDevOps** | |
+| `analyze` | Aggregate lint + scan with unified OWASP-aligned finding model; SARIF/JSON/Rich |
+| `redact` | Replace secrets and PII with `[REDACTED:LABEL]` placeholders |
+| `redteam` | 13 offline OWASP LLM Top 10 attack packs; heuristic susceptibility judge |
+| `auth login` | Store provider credentials in keyring or env |
+| `auth logout` | Remove stored credentials |
+| `auth status` | Show credential resolution for all providers |
+| `audit list` | View tamper-evident audit log (SQLite, SHA-256 chain) |
+| `audit export` | Export audit log to JSON/CSV/NDJSON |
+| `audit verify` | Verify the audit chain has not been tampered with |
+| `config show` | Show current PromptGenie config |
+| `config set` | Set a config key (e.g. `security.airgap true`) |
+| **Phase 4 — Evaluation** | |
+| `evaluate` | Multi-model matrix evaluation with latency, cost, safety, and rubric metrics |
+| `eval init` | Scaffold a new eval suite YAML file |
+| `eval run` | Run an eval suite against a prompt or spec |
+| `eval compare` | Compare current run to a baseline; exit 8 on regression |
+| `eval approve` | Approve current snapshots as the new baseline |
+| **Phase 5 — TUI and Ecosystem** | |
+| `tui` | Full-screen Textual TUI (requires `pip install "promptgenie[tui]"`) |
+| `wizard` | Guided 8-step prompt-building Q&A |
+| `palette` | Fuzzy command palette across commands, templates, and history |
+| `history list` | Browse run history with filtering |
+| `history show` | Inspect a single run's events and response |
+| `history diff` | Diff two historical responses |
+| `history replay` | Re-run a historical spec (supports `--dry-run`) |
+| `watch` | File watcher — re-runs lint/scan/policy on change |
+| `template list` | List templates (project → user → built-in resolution) |
+| `template render` | Render a template with variables |
+| `lock` | Create a lockfile with SHA-256 hashes of all spec dependencies |
+| `plugin list` | List installed plugins |
+| `plugin scaffold` | Scaffold a new plugin stub |
 
 ---
 

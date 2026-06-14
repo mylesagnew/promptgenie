@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "promptgenie"
-version = "1.2.0"
+version = "1.6.0"
 description = "Secure prompt engineering for AI agents and engineering teams"
 readme = "README.md"
 license = "MIT"
@@ -47,6 +47,12 @@ tokenizer = [
 providers = [
     "httpx>=0.27",
     "anthropic>=0.100",
+]
+tui = [
+    "textual>=0.50",
+]
+watch = [
+    "watchfiles>=0.21",
 ]
 dev = [
     "pytest>=8.0",

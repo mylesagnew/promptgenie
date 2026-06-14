@@ -125,7 +125,7 @@ Ordered by development leverage and user adoption impact:
 | 9 | ~~**GitHub Actions annotations and SARIF**~~ | ✅ Done | Auto-detected; `::error` annotations + step summary + SARIF upload |
 | 10 | ~~**Full Textual TUI**~~ | ✅ Done | `promptgenie tui --provider claude prompts/auth.md` |
 
-**All 10 highest-impact features shipped.** Next focus: team-scale governance (Phase 6).
+**All 10 highest-impact features shipped.** v1.6.0 adds the unified `EventBus` / `EventFormatter` infrastructure and hardens the `policy` command. Next focus: team-scale governance (Phase 6).
 
 ---
 
@@ -282,7 +282,8 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 | Phase 2 — PromptSpec and Run Engine | ✅ Shipped (v1.2.0) | 93 | 858 |
 | Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | 929 |
 | Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | 1007 |
-| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | **1107** |
+| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | 1107 |
+| v1.6.0 — Internal Event Model + Policy Hardening | ✅ Shipped (v1.6.0) | 110 | **1203** |
 | Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*
