@@ -11,6 +11,7 @@ Thanks for taking the time. Contributions of all sizes are welcome — bug repor
 - [Code style](#code-style)
 - [How to add a lint rule](#how-to-add-a-lint-rule)
 - [How to add a scanner rule](#how-to-add-a-scanner-rule)
+- [How to extend the workspace schema](#how-to-extend-the-workspace-schema)
 - [Profile schema reference](#profile-schema-reference)
 - [Template schema reference](#template-schema-reference)
 - [How to add a profile](#how-to-add-a-profile)
@@ -243,6 +244,30 @@ def test_my_rule_clean():
 ```
 
 Test fixtures live in `tests/fixtures/`. Add a new `.md` file there if your rule needs a dedicated fixture.
+
+---
+
+## How to extend the workspace schema
+
+The workspace schema lives at `promptgenie/schemas/workspace.schema.json`. When you add a new top-level section or new keys to an existing section, you need to update three places:
+
+1. **`workspace.schema.json`** — add the new property to the appropriate `$defs` object. Keep `additionalProperties: false` so typos are caught. Add a `description` field.
+
+2. **`promptgenie/core/config.py`** — add the key to the relevant `_*_KEYS` frozenset used in `validate_workspace_config()`, and add the corresponding type/enum validation branch. If you're adding a new top-level section, also add it to `_TOP_LEVEL_KEYS` and create a new dataclass + `_parse_*` function.
+
+3. **`tests/test_workspace_schema.py`** — add at least:
+   - A test that a valid value for the new key passes validation
+   - A test that an unknown key adjacent to the new key is still caught
+   - A type-error test if the value has a type constraint
+
+Verify `config init` still produces a file that passes `config validate`:
+
+```bash
+promptgenie config init --name testproj --force
+promptgenie config validate --format json
+```
+
+The JSON Schema file is included in the built wheel via `pyproject.toml`'s `package-data` entry — no extra setup needed.
 
 ---
 
