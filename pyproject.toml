@@ -49,11 +49,11 @@ providers = [
     "anthropic>=0.100",
 ]
 dev = [
-    "pytest>=8.0",
+    "pytest>=9.1.0",
     "pytest-cov>=5.0",
-    "ruff>=0.4",
+    "ruff>=0.15.17",
     "bandit>=1.7",
-    "pip-audit>=2.7",
+    "pip-audit>=2.10.1",
     "mypy>=1.10",
     "types-PyYAML>=6.0",
     "build>=1.2",
