@@ -125,7 +125,7 @@ Ordered by development leverage and user adoption impact:
 | 9 | ~~**GitHub Actions annotations and SARIF**~~ | ✅ Done | Auto-detected; `::error` annotations + step summary + SARIF upload |
 | 10 | ~~**Full Textual TUI**~~ | ✅ Done | `promptgenie tui --provider claude prompts/auth.md` |
 
-**All 10 highest-impact features shipped.** v1.6.0 adds the unified `EventBus` / `EventFormatter` infrastructure and hardens the `policy` command. Next focus: team-scale governance (Phase 6).
+**All 10 highest-impact features shipped.** v1.7.0 adds the workspace schema, `WorkspaceConfig`/`DefaultsConfig` parsing, `config validate`, and `config init`. Next focus: team-scale governance (Phase 6).
 
 ---
 

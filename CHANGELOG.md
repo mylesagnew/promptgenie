@@ -12,6 +12,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ---
 
+## [1.7.0] — 2026-06-15  ·  Workspace Schema and Config Validation
+
+### Added
+
+- **`promptgenie/schemas/workspace.schema.json`** — JSON Schema (Draft 2020-12) for `.promptgenie.yaml`. Covers all top-level sections (`workspace`, `defaults`, `scanner`, `linter`, `routing`, `security`, `$schema`) with `additionalProperties: false` enforced at every level. Includes `$defs` for `AllowlistEntry` (string and object oneOf), `CustomScanRule`, `CustomLintRule`, and all nested object shapes. Can be wired to VS Code via `yaml.schemas` for inline autocomplete and error highlighting.
+
+- **`WorkspaceConfig` dataclass** (`promptgenie/core/config.py`) — project-level metadata block parsed from the `workspace:` section: `name`, `version`, `team`, `description`, `policy`. Exposed on `PromptGenieConfig.workspace`.
+
+- **`DefaultsConfig` dataclass** (`promptgenie/core/config.py`) — workspace-wide provider/model/target defaults: `provider`, `model`, `target`. Exposed on `PromptGenieConfig.defaults`. `load_config()` now parses both new sections alongside existing ones.
+
+- **`validate_workspace_config(raw) → (errors, warnings)`** (`promptgenie/core/config.py`) — pure-Python structural validator (no `jsonschema` dependency). Checks: unknown top-level and section keys, type mismatches (string vs bool vs list), invalid enum values for `risk`/`severity`/`confidence`/`severity_overrides`, allowlist entry structure and `expires` ISO-date format, custom rule required fields (`id`, `pattern`), routing rule required fields (`if`, `provider`). Returns two lists — errors (must fix) and advisory warnings.
+
+- **`promptgenie config validate`** — new subcommand. Auto-discovers `.promptgenie.yaml` (or accepts `--config PATH`). Prints all errors and warnings; exits 0 if valid, 1 if errors, 2 if file not found. `--format json` emits `{"valid", "file", "errors", "warnings"}`.
+
+- **`promptgenie config init`** — new subcommand. Scaffolds `.promptgenie.yaml` in the current directory with a `yaml-language-server` comment and `$schema` pointer for editor autocomplete. Writes `workspace.name` from `--name` or the current directory name. Refuses to overwrite without `--force`. The generated file passes `config validate` with zero errors.
+
+### Tests
+
+- **70 new tests** in `tests/test_workspace_schema.py` covering: `WorkspaceConfig` / `DefaultsConfig` dataclass defaults and field population; `PromptGenieConfig` field expansion; `load_config()` workspace and defaults parsing; `validate_workspace_config()` happy path (empty dict, full config, allowlist forms, custom rules), unknown-key detection across all sections, type errors, enum errors, allowlist validation (phrase, expires format, unknown keys), and warnings (blank name, conflicting block+redact); `config validate` command (valid → 0, invalid → 1, missing → 2, explicit path, JSON output, warnings in JSON); `config init` command (creates file, valid YAML, schema pointer, custom name, --force, init output passes validate, yaml-language-server comment); JSON Schema file structural assertions (title, all `$defs` present, `additionalProperties: false` everywhere).
+- **Total: 1,273 tests, all passing.**
+
+---
+
 ## [1.6.0] — 2026-06-15  ·  Internal Event Model and Policy Hardening
 
 ### Added
