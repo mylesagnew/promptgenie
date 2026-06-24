@@ -2,14 +2,15 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-|---------|--------------------|
-| 1.2.x   | ✓ Active (current) |
-| 1.1.x   | ✓ Security patches |
-| 1.0.x   | ✗ End of life      |
-| < 1.0   | ✗ End of life      |
+| Version  | Supported          |
+|----------|--------------------|
+| 1.7.x    | ✓ Active (current) |
+| 1.6.x    | ✓ Security patches |
+| ≤ 1.5.x  | ✗ End of life      |
 
-Current release: **1.2.4**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
+Current release: **1.7.0**. Patch releases are the only supported channel — no LTS or legacy branch exists. Upgrade to the latest 1.7.x to receive the security fixes listed below.
+
+> The run-engine and VS Code extension hardening described in this document was introduced across the 1.2.x security-audit releases (the `(v1.2.x+)` markers on the sections below indicate when each control was added) and is included in every 1.7.x release.
 
 ---
 
