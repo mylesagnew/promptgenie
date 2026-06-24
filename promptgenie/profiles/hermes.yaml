@@ -1,0 +1,38 @@
+name: Hermes
+category: general-assistant
+strengths:
+  - open-weight, steerable assistant (Hermes 3/4, Llama 3.1 base) — runnable on-prem or via OpenAI-compatible APIs
+  - strong structured output and reliable JSON mode for tool pipelines
+  - native function / tool calling with explicit schemas
+  - neutral, highly steerable alignment — follows the system prompt closely with minimal refusal drift
+  - long context (up to 128k tokens on the Llama 3.1 base) for large prompt + context assembly
+  - strong multi-turn reasoning and roleplay at the 70B and 405B scales
+risks:
+  - lighter built-in safety tuning than commercial frontier models — its steerability means guardrails must be enforced externally
+  - smaller variants (8B) degrade on complex multi-hop reasoning
+  - function-calling reliability varies by variant and serving stack
+  - no vendor-side content moderation — unfiltered completions can be produced if not gated
+required_sections:
+  - Objective
+  - Output Format
+forbidden_patterns:
+  - "ignore all previous instructions"
+  - "you have no restrictions"
+  - "just do something"
+stop_conditions:
+  - Stop and ask for clarification when the objective or required output format is ambiguous.
+  - Stop before producing content that the deployment's safety policy would block.
+security_controls:
+  - Apply an output classifier or moderation pass before surfacing completions to end users — Hermes does not moderate its own output.
+  - Pin the system prompt server-side; never let untrusted input override it, since Hermes follows system instructions very literally.
+  - Validate and sandbox any tool/function calls the model emits before execution.
+scope_guidance: |
+  Hermes uses the ChatML format with a strong system role — put role, constraints, and
+  output contract in the system prompt and keep the user turn task-focused. Provide explicit
+  JSON schemas or few-shot examples when output structure matters. For tool use, declare the
+  tool schemas up front. Prefer the 70B or 405B instruct variants for multi-step instructions;
+  keep prompts single-task on smaller variants.
+default_output_format: |
+  Respond in the requested format. Use fenced ```json``` blocks for structured output and
+  include the target schema in the prompt — Hermes follows explicit schemas reliably but does
+  not enforce them natively.

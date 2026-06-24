@@ -38,6 +38,8 @@ _COST_TABLE: dict[str, tuple[float, float]] = {
     "gemini-2.0": (0.10, 0.40),
     "gemini-1.5-pro": (3.50, 10.50),
     "gemini-1.5-flash": (0.075, 0.30),
+    # NousResearch Hermes via the Nous Portal (approximate open-weight hosted rates)
+    "hermes": (0.90, 0.90),
     "ollama": (0.00, 0.00),
     "localai": (0.00, 0.00),
 }

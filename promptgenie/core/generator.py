@@ -12,6 +12,7 @@ TARGET_KEYWORDS = {
     "chatgpt": ["chatgpt", "gpt", "openai", "gpt-4", "gpt-5"],
     "cursor": ["cursor", "ide", "autocomplete", "inline"],
     "gemini": ["gemini", "google", "bard", "vertex"],
+    "hermes": ["hermes", "nous", "nousresearch"],
     "midjourney": ["midjourney", "image", "art", "illustration", "mj"],
     "stable-diffusion": ["stable diffusion", "sdxl", "comfyui", "diffusion"],
 }

@@ -30,7 +30,8 @@ PromptGenie makes prompts:
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles, templates, and context packs versioned alongside your code
 - **Executable** — `promptgenie run spec.yaml` executes a PromptSpec end-to-end: resolves variables, assembles context, enforces policy, streams the response, and persists the run
-- **Provider-agnostic** — built-in adapters for Anthropic, OpenAI, Ollama, LM Studio, LocalAI, and vLLM; add any OpenAI-compatible endpoint with one command; no API key needed for local providers
+- **Provider-agnostic** — built-in adapters for Anthropic, OpenAI, Ollama, LM Studio, LocalAI, vLLM, and NousResearch Hermes; add any OpenAI-compatible endpoint with one command; no API key needed for local providers
+- **Hermes-ready** — first-class NousResearch Hermes support: a `hermes` target profile for `generate`/`adapt`/`lint`/scoring, plus a built-in OpenAI-compatible `hermes` provider (Nous Portal, `NOUS_API_KEY`) for `run`/`benchmark`/`evaluate`
 
 ---
 
@@ -117,6 +118,12 @@ promptgenie spec render code-review.prompt.yaml --var env=prod
 promptgenie provider add ollama \
   --base-url http://localhost:11434/v1 --model llama3 --local
 promptgenie provider doctor ollama
+
+# NousResearch Hermes (built-in provider — just set your key)
+export NOUS_API_KEY=...
+promptgenie provider doctor hermes
+promptgenie generate "summarise this incident" --target hermes
+promptgenie run code-review.prompt.yaml --provider hermes --model Hermes-4-405B --stream
 
 # Execute the spec end-to-end
 promptgenie run code-review.prompt.yaml --provider ollama --stream
@@ -1767,12 +1774,72 @@ Built-in defaults (active before `providers.yaml` exists):
 | `anthropic` | Anthropic Messages API | `ANTHROPIC_API_KEY` |
 | `openai` | OpenAI-compatible | `OPENAI_API_KEY` + `api.openai.com` |
 | `ollama` | OpenAI-compatible (local) | `http://localhost:11434/v1` |
+| `hermes` | OpenAI-compatible (NousResearch) | `NOUS_API_KEY` + `inference-api.nousresearch.com/v1` |
 
 Install optional extras for full provider support:
 
 ```bash
 pip install "promptgenie[providers]"   # httpx + anthropic SDK
 ```
+
+---
+
+### Hermes (NousResearch)
+
+PromptGenie ships first-class support for the **NousResearch Hermes** model family — both a target profile (for authoring/linting prompts) and a built-in provider (for executing them). No `provider add` step is needed; just supply an API key.
+
+**1. Get an API key.** Create one in the [Nous Portal](https://portal.nousresearch.com) and export it:
+
+```bash
+export NOUS_API_KEY=sk-...
+```
+
+The built-in `hermes` provider is OpenAI-compatible and points at the Nous Portal (`https://inference-api.nousresearch.com/v1`), with `Hermes-4-405B` as the default model.
+
+**2. Verify connectivity:**
+
+```bash
+promptgenie provider doctor hermes
+promptgenie provider show hermes
+```
+
+**3. Author Hermes-tuned prompts** with the `hermes` target profile — it encodes ChatML / strong-system-role guidance, reliable JSON-mode and tool-calling, a 128k context window, and the external-guardrail security controls Hermes needs (it is highly steerable and lightly moderated):
+
+```bash
+# Generate (target auto-inferred from "hermes"/"nous", or pass --target)
+promptgenie generate "extract action items from this transcript" --target hermes
+
+# Adapt an existing prompt written for another model
+promptgenie adapt prompts/review.md --from claude --to hermes
+
+# Lint / score against the Hermes profile
+promptgenie lint prompts/review.md
+```
+
+**4. Execute, benchmark, and evaluate** against Hermes:
+
+```bash
+# Run a PromptSpec end-to-end through Hermes
+promptgenie run spec.yaml --provider hermes --stream
+
+# Pick a specific Hermes variant
+promptgenie run spec.yaml --provider hermes --model Hermes-4-70B
+
+# Multi-model evaluation including Hermes (cost is estimated)
+promptgenie evaluate prompts/review.md --models hermes,claude,gpt-4o
+```
+
+**Custom endpoint or model.** If you serve Hermes elsewhere (OpenRouter, Together, a self-hosted vLLM, etc.), override the defaults — your `providers.yaml` entry wins over the built-in default:
+
+```bash
+promptgenie provider add hermes \
+  --type openai_compat \
+  --base-url https://openrouter.ai/api/v1 \
+  --model nousresearch/hermes-4-405b \
+  --api-key-env OPENROUTER_API_KEY
+```
+
+> **Security note:** Hermes follows the system prompt very literally and performs little vendor-side moderation. Pin your system prompt server-side, keep untrusted input in the user turn, and run an output/moderation pass before surfacing completions to end users. The `hermes` profile's `security_controls` section restates these.
 
 ---
 
