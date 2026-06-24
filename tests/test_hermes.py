@@ -25,6 +25,7 @@ A bullet list.
 # Target profile
 # ---------------------------------------------------------------------------
 
+
 class TestHermesProfile:
     def test_profile_loads(self):
         data = load_profile("hermes")
@@ -47,6 +48,7 @@ class TestHermesProfile:
 # Target inference + generate/adapt
 # ---------------------------------------------------------------------------
 
+
 class TestHermesTargeting:
     def test_infer_target_hermes(self):
         assert infer_target("write a prompt for nous hermes") == "hermes"
@@ -55,8 +57,15 @@ class TestHermesTargeting:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["generate", "--no-config", "--no-lint", "--no-scan",
-             "--target", "hermes", "summarise this log file"],
+            [
+                "generate",
+                "--no-config",
+                "--no-lint",
+                "--no-scan",
+                "--target",
+                "hermes",
+                "summarise this log file",
+            ],
         )
         assert result.exit_code == 0
 
@@ -73,6 +82,7 @@ class TestHermesTargeting:
 # ---------------------------------------------------------------------------
 # Provider + cost
 # ---------------------------------------------------------------------------
+
 
 class TestHermesProvider:
     def test_hermes_in_default_providers(self):
