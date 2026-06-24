@@ -6,3 +6,7 @@ LICENSE
 docs/**
 tests/**
 examples/**
+THREAT_MODEL.md
+SECURITY.md
+ROADMAP.md
+CONTRIBUTING.md
