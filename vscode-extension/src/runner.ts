@@ -236,24 +236,70 @@ async function runCli(
     const proc = cp.spawn(cli, args, {
       cwd,
       env: { ...process.env },
-      // Increase buffer — large prompts with many findings can produce verbose JSON
-      maxBuffer: 1024 * 1024,
     } as cp.SpawnOptionsWithoutStdio);
 
-    let stdout = "";
-    let stderr = "";
+    // cp.spawn does NOT honour maxBuffer (that option only applies to exec/
+    // execFile), so without an explicit cap a hostile or runaway CLI could grow
+    // these buffers until the extension host runs out of memory. Bound each
+    // stream and abort if exceeded; also kill the process if it hangs.
+    const MAX_OUTPUT_BYTES = 8 * 1024 * 1024; // 8 MB
+    const TIMEOUT_MS = 30_000;
+
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let settled = false;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const finishResolve = (value: string): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const finishReject = (err: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    };
+
+    timer = setTimeout(() => {
+      proc.kill();
+      finishReject(
+        new Error(
+          `promptgenie ${command} timed out after ${TIMEOUT_MS / 1000}s and was terminated.`
+        )
+      );
+    }, TIMEOUT_MS);
 
     proc.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
+      stdoutBytes += chunk.length;
+      if (stdoutBytes > MAX_OUTPUT_BYTES) {
+        proc.kill();
+        finishReject(
+          new Error(
+            `promptgenie ${command} produced more than ${MAX_OUTPUT_BYTES} bytes of output; aborted.`
+          )
+        );
+        return;
+      }
+      stdoutChunks.push(chunk);
     });
 
     proc.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
+      stderrBytes += chunk.length;
+      // Keep stderr bounded too, but don't abort on it — just stop accumulating
+      // so the error message below still has the earliest output.
+      if (stderrBytes <= MAX_OUTPUT_BYTES) {
+        stderrChunks.push(chunk);
+      }
     });
 
     proc.on("error", (err: NodeJS.ErrnoException) => {
       if (err.code === "ENOENT") {
-        reject(
+        finishReject(
           new Error(
             `PromptGenie CLI not found at "${cli}". ` +
               `Install it with: pip install promptgenie\n` +
@@ -261,19 +307,21 @@ async function runCli(
           )
         );
       } else {
-        reject(err);
+        finishReject(err);
       }
     });
 
     proc.on("close", (code) => {
+      const stdout = Buffer.concat(stdoutChunks).toString();
+      const stderr = Buffer.concat(stderrChunks).toString();
       // exit code 1 = findings found (not an error condition for our purposes)
       if (stdout.trim()) {
-        resolve(stdout);
+        finishResolve(stdout);
       } else if (code !== null && code > 1) {
-        reject(new Error(`promptgenie ${command} exited ${code}: ${stderr.trim()}`));
+        finishReject(new Error(`promptgenie ${command} exited ${code}: ${stderr.trim()}`));
       } else {
         // Clean exit, no output — treat as empty result
-        resolve(stdout || "{}");
+        finishResolve(stdout || "{}");
       }
     });
   });
