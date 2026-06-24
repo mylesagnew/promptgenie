@@ -278,6 +278,34 @@ Use `--yes` only in CI pipelines where the prompt content has already been revie
 
 ---
 
+## Supply Chain — Build Provenance, SBOM, and Verification
+
+Every tagged release is built by the [`release.yml`](.github/workflows/release.yml) workflow on a tag matching `v[0-9]+.[0-9]+.[0-9]+`, gated behind a protected `release` environment. The pipeline:
+
+- **Builds** the sdist + wheel with `uv build` and validates them with `twine check`.
+- **Generates a CycloneDX SBOM** (`sbom.cyclonedx.json`) of the build environment.
+- **Publishes to PyPI** via OIDC **Trusted Publishing** (no long-lived API token) with PEP 740 **attestations** enabled.
+- **Attests build provenance** for the wheel and sdist (`actions/attest-build-provenance`) — a signed, GitHub-hosted SLSA provenance statement binding each artifact to the workflow, commit, and runner.
+- **Attests the SBOM** (`actions/attest-sbom`) — a signed statement linking the SBOM to those same artifacts.
+- **Creates a GitHub Release** with the wheel, sdist, and SBOM attached, and the changelog entry as release notes.
+
+### Verifying a downloaded artifact
+
+Use the GitHub CLI to verify both the provenance and the SBOM attestation against this repository before installing a downloaded wheel/sdist:
+
+```bash
+# Build provenance — confirms the artifact was built by this repo's release workflow
+gh attestation verify ./promptgenie-1.7.0-py3-none-any.whl --repo mylesagnew/promptgenie
+
+# SBOM attestation — confirms the published SBOM corresponds to this artifact
+gh attestation verify ./promptgenie-1.7.0-py3-none-any.whl \
+  --repo mylesagnew/promptgenie --predicate-type https://cyclonedx.org/bom
+```
+
+PyPI installs additionally carry PEP 740 attestations, which `pip`/`uv` surface as the ecosystem adds verification support. All workflow `uses:` actions are pinned by commit SHA.
+
+---
+
 ## Rule and Profile Update Policy
 
 - Scanner and linter rules are updated as new prompt injection techniques and secret formats become known.

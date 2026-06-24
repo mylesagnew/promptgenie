@@ -10,6 +10,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Security
 
+- **Release pipeline — SBOM attestation + verification docs.** The release workflow already built a CycloneDX SBOM, published to PyPI via OIDC Trusted Publishing with PEP 740 attestations, attested build provenance, and attached the SBOM to the GitHub Release. This closes the remaining gaps: the SBOM is now itself **cryptographically attested** (`actions/attest-sbom`, SHA-pinned) and linked to the wheel/sdist, and `SECURITY.md` gains a **"Supply Chain — Build Provenance, SBOM, and Verification"** section documenting how consumers verify a download with `gh attestation verify`. (Sigstore/cosign signing was intentionally skipped — GitHub's signed attestations already provide keyless provenance.)
+
 - **VS Code extension — bounded subprocess output.** The extension's CLI runner (`vscode-extension/src/runner.ts`) accumulated `stdout`/`stderr` without limit: it passed `maxBuffer` to `cp.spawn`, which silently ignores it (the option only applies to `exec`/`execFile`), so a hostile or runaway CLI could grow the buffers until the extension host ran out of memory. The runner now caps each stream at 8 MB (kills the process and rejects with a clear error on overflow) and adds a 30 s watchdog timeout that terminates a hung process. A single `settled` guard prevents double resolve/reject. Verified via `tsc` compile + eslint; a dedicated runner test harness is tracked as separate follow-up (the extension currently ships no test framework).
 
 ### Changed
