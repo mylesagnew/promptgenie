@@ -19,6 +19,7 @@ Public API
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import time
@@ -35,6 +36,10 @@ from promptgenie.core.llm_analyzer import redact_secrets
 _RUNS_DIR = Path("~/.local/share/promptgenie/runs").expanduser()
 
 SCHEMA_VERSION = "1.0"
+
+
+def _hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() if text else ""
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +83,7 @@ class RunWriter:
         model: str,
         dry_run: bool,
         prompt: str = "",
+        store_content: bool = False,
     ) -> None:
         self.run_id = run_id
         self.spec_name = spec_name
@@ -85,8 +91,13 @@ class RunWriter:
         self.provider = provider
         self.model = model
         self.dry_run = dry_run
-        # Redact secrets before the prompt is ever written to disk (S-4).
-        self.prompt = redact_secrets(prompt)[0] if prompt else ""
+        # Privacy default: persist metadata + content hashes only. Prompt/response
+        # bodies are written only when store_content is enabled
+        # (security.store_history_content), and even then are secret-redacted (S-4).
+        self.store_content = store_content
+        self._prompt_redacted = redact_secrets(prompt)[0] if prompt else ""
+        self.prompt = self._prompt_redacted if store_content else ""
+        self.prompt_hash = _hash(self._prompt_redacted)
         self.started_at = datetime.now(timezone.utc).isoformat()
         self._start_time = time.monotonic()
         self._tokens: list[str] = []
@@ -123,6 +134,8 @@ class RunWriter:
                 "dry_run": self.dry_run,
                 "started_at": self.started_at,
                 "prompt": self.prompt,
+                "prompt_hash": self.prompt_hash,
+                "store_content": self.store_content,
                 "schema_version": SCHEMA_VERSION,
             },
         )
@@ -136,7 +149,10 @@ class RunWriter:
     def write_token(self, token: str) -> None:
         self._ensure_file()
         self._tokens.append(token)
-        self._write_event("token", {"text": token})
+        # Only persist per-token text when content storage is enabled — otherwise
+        # the response body would land on disk one token at a time.
+        if self.store_content:
+            self._write_event("token", {"text": token})
 
     def write_warning(self, message: str) -> None:
         self._ensure_file()
@@ -173,7 +189,9 @@ class RunWriter:
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "response_length": len(response),
-                "response": redacted_response,
+                "response_hash": _hash(redacted_response),
+                # Persist the body only when content storage is enabled (default off).
+                "response": redacted_response if self.store_content else "",
             },
         )
         if self._file:
@@ -206,6 +224,7 @@ def open_run_writer(
     model: str,
     dry_run: bool = False,
     prompt: str = "",
+    store_content: bool = False,
 ) -> Generator[RunWriter, None, None]:
     """Context manager that yields a RunWriter and handles cleanup."""
     run_id = str(uuid.uuid4())[:8]
@@ -217,6 +236,7 @@ def open_run_writer(
         model=model,
         dry_run=dry_run,
         prompt=prompt,
+        store_content=store_content,
     )
     try:
         yield writer

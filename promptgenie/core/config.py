@@ -145,11 +145,15 @@ class SecurityConfig:
           airgap: true         # block all external provider calls
           block_secrets: true  # abort run if secrets detected in prompt
           redact_secrets: false # auto-redact instead of blocking
+          store_history_content: false # persist prompt/response bodies in run history
     """
 
     airgap: bool = False
     block_secrets: bool = False
     redact_secrets: bool = False
+    # Privacy default: run history persists metadata + content hashes only.
+    # Set true to also store the (secret-redacted) prompt and response bodies.
+    store_history_content: bool = False
 
 
 @dataclass
@@ -350,6 +354,7 @@ def _parse_security(raw: dict[str, Any]) -> SecurityConfig:
         airgap=bool(raw.get("airgap", False)),
         block_secrets=bool(raw.get("block_secrets", False)),
         redact_secrets=bool(raw.get("redact_secrets", False)),
+        store_history_content=bool(raw.get("store_history_content", False)),
     )
 
 
@@ -394,7 +399,7 @@ _LINTER_KEYS = frozenset(
     {"disabled_rules", "enabled_rules", "custom_vague_verbs", "custom_rules", "rules_dirs"}
 )
 _ROUTING_KEYS = frozenset({"default", "rules"})
-_SECURITY_KEYS = frozenset({"airgap", "block_secrets", "redact_secrets"})
+_SECURITY_KEYS = frozenset({"airgap", "block_secrets", "redact_secrets", "store_history_content"})
 _VALID_RISK = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW"})
 _VALID_SEVERITY = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
 _VALID_CONFIDENCE = frozenset({"HIGH", "MEDIUM", "LOW"})
@@ -527,7 +532,7 @@ def validate_workspace_config(raw: dict[str, Any]) -> tuple[list[str], list[str]
     if "security" in raw:
         se = _check_dict("security", raw["security"], _SECURITY_KEYS)
         if se:
-            for key in ("airgap", "block_secrets", "redact_secrets"):
+            for key in ("airgap", "block_secrets", "redact_secrets", "store_history_content"):
                 if key in se:
                     _check_bool(f"security.{key}", se[key])
             if se.get("block_secrets") and se.get("redact_secrets"):

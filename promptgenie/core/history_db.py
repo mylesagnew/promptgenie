@@ -36,10 +36,12 @@ Public API
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import hashlib
 import io
 import json
+import os
 import sqlite3
 import uuid
 from collections.abc import Generator
@@ -156,8 +158,16 @@ class HistoryDB:
 
     def __init__(self, db_path: Path | None = None) -> None:
         self._path = db_path or _DB_PATH
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        # Run history may contain prompt/response text — restrict to the owner.
+        # mkdir mode is masked by umask, so chmod explicitly afterwards.
+        self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with contextlib.suppress(OSError):
+            os.chmod(self._path.parent, 0o700)
+        new_db = not self._path.exists()
         self._conn = sqlite3.connect(str(self._path))
+        if new_db:
+            with contextlib.suppress(OSError):
+                os.chmod(self._path, 0o600)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(SCHEMA_SQL)
         self._conn.commit()
@@ -191,9 +201,27 @@ class HistoryDB:
         tags: list[str] | None = None,
         extra: dict | None = None,
         run_id: str | None = None,
+        store_content: bool = False,
+        redact_content: bool = True,
     ) -> str:
         rid = run_id or str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
+        # Content hashes are always recorded (enable dedup/lookup) but the bodies
+        # themselves are persisted only when store_content is set. When stored,
+        # secrets are redacted first unless the caller explicitly opts out.
+        prompt_hash = _hash(prompt_text)
+        response_hash = _hash(response_text)
+        if store_content:
+            if redact_content:
+                # Same redactor the NDJSON run log uses, for consistent coverage.
+                from promptgenie.core.llm_analyzer import redact_secrets
+
+                stored_prompt = redact_secrets(prompt_text)[0] if prompt_text else ""
+                stored_response = redact_secrets(response_text)[0] if response_text else ""
+            else:
+                stored_prompt, stored_response = prompt_text, response_text
+        else:
+            stored_prompt, stored_response = "", ""
         self._conn.execute(
             """
             INSERT INTO runs
@@ -207,10 +235,10 @@ class HistoryDB:
                 spec_name,
                 provider,
                 model,
-                _hash(prompt_text),
-                _hash(response_text),
-                prompt_text,
-                response_text,
+                prompt_hash,
+                response_hash,
+                stored_prompt,
+                stored_response,
                 status,
                 started_at or now,
                 finished_at or now,

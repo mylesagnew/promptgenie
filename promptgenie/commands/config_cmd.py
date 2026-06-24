@@ -30,6 +30,7 @@ _KNOWN_KEYS: dict[str, type] = {
     "security.airgap": bool,
     "security.block_secrets": bool,
     "security.redact_secrets": bool,
+    "security.store_history_content": bool,
     "routing.default": str,
 }
 
@@ -72,6 +73,7 @@ def config_show_cmd(output_format: str) -> None:
             "airgap": cfg.security.airgap,
             "block_secrets": cfg.security.block_secrets,
             "redact_secrets": cfg.security.redact_secrets,
+            "store_history_content": cfg.security.store_history_content,
         },
         "routing": {
             "default": cfg.routing.default,
@@ -85,9 +87,16 @@ def config_show_cmd(output_format: str) -> None:
         sys.stdout.write(yaml.dump(data, default_flow_style=False))
     else:
         console.print("[bold]Effective Configuration[/bold]")
-        console.print(f"  [cyan]security.airgap[/cyan]        = {cfg.security.airgap}")
-        console.print(f"  [cyan]security.block_secrets[/cyan] = {cfg.security.block_secrets}")
-        console.print(f"  [cyan]security.redact_secrets[/cyan]= {cfg.security.redact_secrets}")
+        console.print(f"  [cyan]security.airgap[/cyan]                = {cfg.security.airgap}")
+        console.print(
+            f"  [cyan]security.block_secrets[/cyan]         = {cfg.security.block_secrets}"
+        )
+        console.print(
+            f"  [cyan]security.redact_secrets[/cyan]        = {cfg.security.redact_secrets}"
+        )
+        console.print(
+            f"  [cyan]security.store_history_content[/cyan] = {cfg.security.store_history_content}"
+        )
         console.print(f"  [cyan]routing.default[/cyan]        = {cfg.routing.default or '(none)'}")
         if cfg.routing.rules:
             console.print("  [cyan]routing.rules[/cyan]:")
@@ -110,10 +119,11 @@ def config_set_cmd(key: str, value: str) -> None:
 
     \b
     Supported keys:
-      security.airgap           true | false
-      security.block_secrets    true | false
-      security.redact_secrets   true | false
-      routing.default           <provider-name>
+      security.airgap                true | false
+      security.block_secrets         true | false
+      security.redact_secrets        true | false
+      security.store_history_content true | false
+      routing.default                <provider-name>
 
     \b
     Examples:
@@ -201,6 +211,7 @@ def config_get_cmd(key: str) -> None:
         "security.airgap": cfg.security.airgap,
         "security.block_secrets": cfg.security.block_secrets,
         "security.redact_secrets": cfg.security.redact_secrets,
+        "security.store_history_content": cfg.security.store_history_content,
         "routing.default": cfg.routing.default,
     }
     if key not in attr_map:
