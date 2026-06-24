@@ -190,7 +190,7 @@ The `promptgenie scan` command is a **heuristic scanner** — it is not a replac
 **Known limitations:**
 - Secret detection covers common patterns (OpenAI, Anthropic, AWS, GitHub, Slack) but not all token formats
 - No entropy-based detection — low-entropy or custom secret formats may be missed
-- Allowlist and rule suppression are available via `.promptgenie.yaml` (`scanner.allowlist`, `scanner.disabled_rules`); see README for format
+- Allowlist and rule suppression are available via `.promptgenie.yaml` (`scanner.allowlist`, `scanner.disabled_rules`); see [docs/configuration.md](docs/configuration.md) for format
 - Injection detection is pattern-based with NFKC Unicode normalisation; will miss synonym substitution, indirect reference, within-word character splits, non-NFKC homoglyphs (e.g. Turkish dotless ı), and multi-turn attacks
 - See `tests/test_scanner_adversarial.py` for the full documented detection gap list
 
@@ -201,7 +201,7 @@ Zip archives are extracted to a temporary directory before scanning. Every membe
 Files collected across all paths are subject to a per-file byte cap (default 1 MB), a total-collection byte cap (default 10 MB), and a total-file count cap (default 500). Files exceeding these limits are skipped and reported via `--show-skipped`. Limits are configurable via `--max-files`, `--max-bytes`, and `--max-file-bytes`.
 
 **Custom rules:**
-Project-specific scanner rules can be added under `scanner.custom_rules` in `.promptgenie.yaml` (see README Configuration section). Each rule is a `ScanRule` with `id`, `category`, `pattern`, `risk`, `confidence`, `message`, `recommendation`, and optional `false_positive_note`. Custom rules are appended after built-in rules and participate in the same allowlist and severity-override system.
+Project-specific scanner rules can be added under `scanner.custom_rules` in `.promptgenie.yaml` (see [docs/configuration.md](docs/configuration.md)). Each rule is a `ScanRule` with `id`, `category`, `pattern`, `risk`, `confidence`, `message`, `recommendation`, and optional `false_positive_note`. Custom rules are appended after built-in rules and participate in the same allowlist and severity-override system.
 
 **Pattern safety:** custom rule patterns are validated at load time by `validate_pattern()` in `promptgenie/core/scanner.py`. Two checks are applied:
 

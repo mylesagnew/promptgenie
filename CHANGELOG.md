@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Documentation
+
+- **Split the long-form docs and added a formal threat model.** The README was ~2,300 lines; the bulky per-command reference and the `.promptgenie.yaml` configuration reference now live in **[docs/commands.md](docs/commands.md)** and **[docs/configuration.md](docs/configuration.md)**, with the README trimmed to ~730 lines plus a Documentation index and pointers. Added **[THREAT_MODEL.md](THREAT_MODEL.md)** — a formal threat model (assets, trust boundaries, attacker model, and an explicit threat→control mapping for the 18 controls described in `SECURITY.md`). The new `docs/` tree is excluded from the prompt-file CI scans (it documents trigger phrases by design).
+
 ### Security
 
 - **CI hardening — secret scanning, version-drift gate, higher coverage floor.** Added a SHA-pinned **gitleaks** job to `ci.yml` that fails the build on committed secrets (previously there was no secret scanning at all). Added a **version-consistency gate** (`scripts/check_version_drift.py`, run in CI) that fails if `pyproject.toml`, the latest released `CHANGELOG.md` heading, and `SECURITY.md`'s "Current release" disagree — preventing the drift fixed in this cycle from recurring. Raised the coverage floor from **75% → 78%** with 46 new meaningful tests (`tests/test_ci_coverage_boost.py`) covering the thinnest modules (vars/spec/lock/trust/context/history commands; watcher/credentials/providers/evaluator/benchmarker core). Reaching the 80%/85% target requires an async-provider + Textual TUI test harness (mocking httpx streaming and the TUI), tracked as a dedicated follow-up.
