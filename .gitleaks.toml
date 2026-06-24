@@ -1,0 +1,37 @@
+# gitleaks configuration for PromptGenie.
+#
+# PromptGenie is a prompt-security tool, so the repo deliberately contains FAKE
+# secrets — adversarial test fixtures, redaction-test placeholder keys, and
+# example key *formats* in the docs. This config keeps the default gitleaks
+# rules (so real secrets in source/config are still caught) but allowlists those
+# known-intentional locations and placeholder patterns.
+
+title = "PromptGenie gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Intentional fake secrets in fixtures, examples, and security docs."
+
+# Paths that exist specifically to hold fake/adversarial secrets or to document
+# secret *formats*. Source code under promptgenie/ (excluding the registry data
+# packs) and CI config are still scanned.
+paths = [
+  '''tests/.*''',
+  '''examples/.*''',
+  '''SECURITY\.md''',
+  '''README\.md''',
+  '''CHANGELOG\.md''',
+  '''\.secrets\.baseline''',
+  '''promptgenie/registry/.*''',
+  '''promptgenie/context-packs/.*''',
+]
+
+# Placeholder/redaction-test key shapes used throughout the test suite and docs
+# (e.g. "sk-ant-" followed by a long run of repeated capital letters). RE2 — no
+# backreferences.
+regexes = [
+  '''sk-ant-(?:api03-)?[A-Z]{20,}''',
+  '''(?i)(placeholder|example|dummy|fake|redacted|test[_-]?key)''',
+]
