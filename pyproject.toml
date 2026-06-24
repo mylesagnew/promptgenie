@@ -90,12 +90,12 @@ addopts   = "-v --tb=short"
 source = ["promptgenie"]
 
 [tool.coverage.report]
-# Threshold reflects current measured coverage (77.56%) with a small margin.
-# The security-fix tests added in this pass (test_security_fixes.py) bring
-# context_builder, run_engine, and scanner coverage up.  Reaching 85% requires
-# integration tests for CLI commands and registry network paths which need
-# mocking work beyond the security hardening scope — tracked as a follow-on task.
-fail_under = 75
+# Measured coverage is ~78.6% (test_ci_coverage_boost.py adds command-level and
+# core-helper tests for the thinnest modules: vars/spec/lock/trust/context/
+# history/watcher/credentials/providers/evaluator/benchmarker). Gate set just
+# below with a small margin. Reaching 85% requires an async-provider + Textual
+# TUI test harness (mocking httpx streaming and the TUI), tracked as follow-up.
+fail_under = 78
 show_missing = true
 
 [tool.ruff]
