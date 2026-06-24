@@ -351,7 +351,7 @@ def install_from_local(
                     member_path = (tmp / member.name).resolve()
                     if not str(member_path).startswith(str(tmp.resolve())):
                         raise ValueError(f"Unsafe path in tarball: {member.name!r}")
-                tf.extractall(tmp)  # nosec B202 - members validated against path traversal above
+                tf.extractall(tmp, filter="data")  # nosec B202 - path-validated above + tarfile data filter
 
             # Find the pack YAML: prefer pack.yaml at root, then any *.yaml
             yaml_files = list(tmp.rglob("pack.yaml")) + list(tmp.rglob("*.yaml"))
