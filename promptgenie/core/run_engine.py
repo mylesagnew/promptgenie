@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -75,11 +76,18 @@ class RunResult:
     dry_run: bool
     context_manifest: ContextManifest | None = None
     resolved_vars: dict[str, Any] = field(default_factory=dict)
+    secret_var_names: set[str] = field(default_factory=set)
     events: list[RunEvent] = field(default_factory=list)
     error: str = ""
     duration_s: float = 0.0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+
+    def redacted_vars(self) -> dict[str, Any]:
+        """Return resolved_vars with secret values replaced by '***'."""
+        return {
+            k: "***" if k in self.secret_var_names else v for k, v in self.resolved_vars.items()
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +135,8 @@ def _assemble_prompt(
 # Security pre-flight (secrets gate)
 # ---------------------------------------------------------------------------
 
+_SECRETS_GATE_CATEGORIES = {"secret", "data-leakage"}
+
 
 def _check_secrets_gate(text: str) -> list[str]:
     """Return a list of secret-finding messages for potential secrets in *text*.
@@ -137,12 +147,58 @@ def _check_secrets_gate(text: str) -> list[str]:
     from promptgenie.core.scanner import scan
 
     result = scan(text)
+    return [
+        f.message
+        for f in result.findings
+        if f.risk in ("HIGH", "CRITICAL") and f.category in _SECRETS_GATE_CATEGORIES
+    ]
+
+
+def _apply_secrets_gate(
+    prompt: str,
+    *,
+    block_secrets: bool,
+    redact_secrets: bool,
+) -> tuple[str, list[str]]:
+    """Enforce the pre-send secrets gate.
+
+    Returns ``(effective_prompt, warnings)``.
+
+    * ``block_secrets=True``  — raise PromptGenieError if secrets are detected.
+    * ``redact_secrets=True`` — silently redact secrets before sending.
+    * Both False              — emit warnings only (existing behaviour).
+    """
+    from promptgenie.core.redactor import redact as _redact
+    from promptgenie.core.scanner import scan
+
+    result = scan(prompt)
     secret_findings = [
         f
         for f in result.findings
-        if f.risk in ("HIGH", "CRITICAL") and "secret" in f.category.lower()
+        if f.risk in ("HIGH", "CRITICAL") and f.category in _SECRETS_GATE_CATEGORIES
     ]
-    return [f.message for f in secret_findings]
+
+    if not secret_findings:
+        return prompt, []
+
+    warnings = [f.message for f in secret_findings]
+
+    if block_secrets:
+        detail = "; ".join(warnings[:3])
+        raise PromptGenieError(
+            f"Pre-send gate blocked: {len(secret_findings)} secret(s)/PII detected. {detail}",
+            code=EXIT_SECRETS,
+            hint=(
+                "Use --redact-secrets to auto-redact instead of blocking, "
+                "or fix the prompt and re-run."
+            ),
+        )
+
+    if redact_secrets:
+        redact_result = _redact(prompt)
+        return redact_result.redacted_text, warnings
+
+    return prompt, warnings
 
 
 # ---------------------------------------------------------------------------
@@ -188,12 +244,16 @@ def run_spec(
     context_strategy: str = "manual",
     allow_url: bool = False,
     allow_sensitive_env: bool = False,
-    # Security
+    # Security / pre-send secrets gate
     allow_secrets: bool = False,
+    block_secrets: bool = False,
+    redact_secrets: bool = False,
     # Output callbacks
     on_token: Callable[[str], None] | None = None,
     on_event: Callable[[RunEvent], None] | None = None,
     tee_file: Path | None = None,
+    # Optional unified event bus (receives Event objects alongside on_event)
+    event_bus: Any | None = None,
 ) -> RunResult:
     """Execute *spec* end-to-end and return a RunResult.
 
@@ -227,9 +287,12 @@ def run_spec(
             allow_url=allow_url,
             allow_sensitive_env=allow_sensitive_env,
             allow_secrets=allow_secrets,
+            block_secrets=block_secrets,
+            redact_secrets=redact_secrets,
             on_token=on_token,
             on_event=on_event,
             tee_file=tee_file,
+            event_bus=event_bus,
         )
     )
 
@@ -258,9 +321,12 @@ async def _run_spec_async(
     allow_url: bool,
     allow_sensitive_env: bool,
     allow_secrets: bool,
+    block_secrets: bool,
+    redact_secrets: bool,
     on_token: Callable[[str], None] | None,
     on_event: Callable[[RunEvent], None] | None,
     tee_file: Path | None,
+    event_bus: Any | None = None,
 ) -> RunResult:
     # ---- resolve flags from spec + overrides ----
     effective_dry_run = dry_run or spec.run.dry_run
@@ -277,6 +343,15 @@ async def _run_spec_async(
         events.append(event)
         if on_event:
             on_event(event)
+        if event_bus is not None:
+            # Forward to the unified EventBus as an Event (lazy import avoids
+            # circular dependencies in environments that don't use the bus)
+            try:
+                from promptgenie.core.events import Event
+
+                event_bus.emit(Event.from_run_event(event))
+            except Exception:
+                pass  # bus errors must never break the run
 
     # ---- 1. require_clean gate ----
     if effective_require_clean:
@@ -294,6 +369,23 @@ async def _run_spec_async(
         merged_vars.update(load_vars_file(vars_file))
     cli_var_dict = parse_cli_vars(cli_vars or [])
     merged_vars.update(cli_var_dict)
+
+    # Resolve secret bindings from env — these bypass interactive prompting
+    secret_var_names: set[str] = set()
+    for var_name, binding in spec.secret_vars.items():
+        secret_var_names.add(var_name)
+        if var_name in cli_var_dict:
+            # CLI override wins even for secret vars
+            continue
+        resolved_val = os.environ.get(binding.from_env, binding.default)
+        if resolved_val is None:
+            raise PromptGenieError(
+                f"Secret variable '{var_name}' requires env var "
+                f"'{binding.from_env}' but it is not set.",
+                code=EXIT_FAILURE,
+                hint=f"export {binding.from_env}=your-secret",
+            )
+        merged_vars[var_name] = resolved_val
 
     # Build a combined "inline" text with all placeholder occurrences
     combined_text = (spec.prompt or "") + " ".join(
@@ -313,6 +405,10 @@ async def _run_spec_async(
     # Merge spec vars with resolved vars
     final_vars = {**merged_vars, **resolved_vars}
 
+    # Build a redacted copy safe to put in events/logs (secrets → "***")
+    def _redact(vars_dict: dict[str, Any]) -> dict[str, Any]:
+        return {k: "***" if k in secret_var_names else v for k, v in vars_dict.items()}
+
     # ---- 3. build context ----
     context_manifest: ContextManifest | None = None
     if spec.context:
@@ -329,28 +425,37 @@ async def _run_spec_async(
     # ---- 4. assemble prompt ----
     prompt = _assemble_prompt(spec, final_vars, context_manifest)
 
-    # ---- 4b. secrets gate (scan assembled prompt) ----
-    # Hard block by default: any HIGH/CRITICAL secret finding aborts the run
-    # before the prompt reaches the provider.  Pass allow_secrets=True (CLI:
-    # --allow-secrets) to override with explicit acknowledgment.
-    secret_warnings = _check_secrets_gate(prompt)
-    if secret_warnings:
-        if allow_secrets:
-            for warn in secret_warnings:
-                _emit(RunEvent("warning", {"message": f"[secrets-gate] {warn}"}))
-        else:
-            findings_str = "; ".join(secret_warnings)
-            raise PromptGenieError(
-                f"Secrets gate blocked the run: potential secret(s) detected in "
-                f"assembled prompt — {findings_str}. "
-                "Remove secrets from the prompt or use --allow-secrets to override.",
-                code=EXIT_SECRETS,
-                hint="Use environment variables or secret references instead of inline secrets.",
-            )
+    # ---- 4b. pre-send secrets gate ----
+    # Layer 1: explicit block/redact/warn requested by the user.
+    #   --block-secrets  → raise immediately on any secret
+    #   --redact-secrets → strip secrets from the prompt before sending
+    #   neither          → emit warnings only (prompt unchanged)
+    prompt, secret_warnings = _apply_secrets_gate(
+        prompt, block_secrets=block_secrets, redact_secrets=redact_secrets
+    )
+    gate_mode = "block" if block_secrets else ("redact" if redact_secrets else "warn")
+    for warn in secret_warnings:
+        _emit(RunEvent("warning", {"message": f"[secrets-gate:{gate_mode}] {warn}"}))
+
+    # Layer 2: hard-block backstop (secure default). Any HIGH/CRITICAL secret
+    # still present after layer 1 aborts the run before the provider call,
+    # unless allow_secrets (CLI: --allow-secrets) was passed. Redaction in
+    # layer 1 clears this check.
+    remaining_secrets = _check_secrets_gate(prompt)
+    if remaining_secrets and not allow_secrets:
+        findings_str = "; ".join(remaining_secrets)
+        raise PromptGenieError(
+            f"Secrets gate blocked the run: potential secret(s) detected in "
+            f"assembled prompt — {findings_str}. "
+            "Remove secrets from the prompt, redact them with --redact-secrets, "
+            "or use --allow-secrets to override.",
+            code=EXIT_SECRETS,
+            hint="Use environment variables or secret references instead of inline secrets.",
+        )
 
     # ---- dry-run: return without provider call ----
     if effective_dry_run:
-        _emit(RunEvent("done", {"status": "dry_run"}))
+        _emit(RunEvent("done", {"status": "dry_run", "resolved_vars": _redact(final_vars)}))
         return RunResult(
             run_id="dry-run",
             spec_name=spec.name,
@@ -359,6 +464,7 @@ async def _run_spec_async(
             dry_run=True,
             context_manifest=context_manifest,
             resolved_vars=final_vars,
+            secret_var_names=secret_var_names,
             events=events,
         )
 
@@ -462,6 +568,7 @@ async def _run_spec_async(
             dry_run=False,
             context_manifest=context_manifest,
             resolved_vars=final_vars,
+            secret_var_names=secret_var_names,
             events=events,
             duration_s=record.duration_s if record else 0.0,
         )

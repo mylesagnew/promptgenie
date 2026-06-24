@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://promptgenie.dev/schemas/workspace.schema.json",
+  "title": "PromptGenie Workspace Configuration",
+  "description": "Schema for .promptgenie.yaml project configuration file.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema pointer for editor autocomplete and validation."
+    },
+    "workspace": {
+      "$ref": "#/$defs/Workspace"
+    },
+    "defaults": {
+      "$ref": "#/$defs/Defaults"
+    },
+    "scanner": {
+      "$ref": "#/$defs/Scanner"
+    },
+    "linter": {
+      "$ref": "#/$defs/Linter"
+    },
+    "routing": {
+      "$ref": "#/$defs/Routing"
+    },
+    "security": {
+      "$ref": "#/$defs/Security"
+    }
+  },
+
+  "$defs": {
+    "Workspace": {
+      "type": "object",
+      "description": "Project-level metadata for the workspace.",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable name for this workspace."
+        },
+        "version": {
+          "type": "string",
+          "description": "Workspace config schema version (e.g. '1.0')."
+        },
+        "team": {
+          "type": "string",
+          "description": "Team or organisation name that owns this workspace."
+        },
+        "description": {
+          "type": "string",
+          "description": "Free-text description of the workspace purpose."
+        },
+        "policy": {
+          "type": "string",
+          "description": "Relative path to the default policy YAML file for this workspace."
+        }
+      }
+    },
+
+    "Defaults": {
+      "type": "object",
+      "description": "Default provider, model, and target profile used when not specified per-run.",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Default provider name (e.g. anthropic, openai, ollama)."
+        },
+        "model": {
+          "type": "string",
+          "description": "Default model name (e.g. claude-opus-4-5, gpt-4o)."
+        },
+        "target": {
+          "type": "string",
+          "description": "Default target profile name (e.g. claude-code, chatgpt)."
+        }
+      }
+    },
+
+    "Scanner": {
+      "type": "object",
+      "description": "Security scanner configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "allowlist": {
+          "type": "array",
+          "description": "Findings to suppress by matched text phrase.",
+          "items": { "$ref": "#/$defs/AllowlistEntry" }
+        },
+        "disabled_rules": {
+          "type": "array",
+          "description": "Rule codes to disable entirely.",
+          "items": { "type": "string" }
+        },
+        "enabled_rules": {
+          "type": "array",
+          "description": "Whitelist — only these rule codes run (empty = all).",
+          "items": { "type": "string" }
+        },
+        "severity_overrides": {
+          "type": "object",
+          "description": "Override risk level for specific rule codes.",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+          }
+        },
+        "custom_rules": {
+          "type": "array",
+          "description": "Custom scan rules added to the built-in set.",
+          "items": { "$ref": "#/$defs/CustomScanRule" }
+        },
+        "rules_dirs": {
+          "type": "array",
+          "description": "Directories containing additional rule pack YAML files.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "Linter": {
+      "type": "object",
+      "description": "Prompt quality linter configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "disabled_rules": {
+          "type": "array",
+          "description": "Rule codes to disable entirely.",
+          "items": { "type": "string" }
+        },
+        "enabled_rules": {
+          "type": "array",
+          "description": "Whitelist — only these rule codes run (empty = all).",
+          "items": { "type": "string" }
+        },
+        "custom_vague_verbs": {
+          "type": "array",
+          "description": "Extra vague verb patterns appended to the built-in list.",
+          "items": { "type": "string" }
+        },
+        "custom_rules": {
+          "type": "array",
+          "description": "Custom lint rules added to the built-in set.",
+          "items": { "$ref": "#/$defs/CustomLintRule" }
+        },
+        "rules_dirs": {
+          "type": "array",
+          "description": "Directories containing additional rule pack YAML files.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "Routing": {
+      "type": "object",
+      "description": "Local-first provider routing configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string",
+          "description": "Fallback provider when no routing rule matches."
+        },
+        "rules": {
+          "type": "array",
+          "description": "Ordered list of routing rules evaluated top-to-bottom.",
+          "items": {
+            "type": "object",
+            "required": ["if", "provider"],
+            "additionalProperties": false,
+            "properties": {
+              "if": {
+                "type": "string",
+                "description": "Condition: 'contains_secrets', 'classification == <value>', or '*'."
+              },
+              "provider": {
+                "type": "string",
+                "description": "Provider name to route to when condition matches."
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "Security": {
+      "type": "object",
+      "description": "Security enforcement settings.",
+      "additionalProperties": false,
+      "properties": {
+        "airgap": {
+          "type": "boolean",
+          "default": false,
+          "description": "Block all external provider calls; only local providers (Ollama etc.) are allowed."
+        },
+        "block_secrets": {
+          "type": "boolean",
+          "default": false,
+          "description": "Abort the run if secrets are detected in the assembled prompt."
+        },
+        "redact_secrets": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-redact detected secrets instead of blocking the run."
+        }
+      }
+    },
+
+    "AllowlistEntry": {
+      "description": "A suppression entry — string shorthand or full object form.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Phrase that suppresses any finding whose matched text contains it."
+        },
+        {
+          "type": "object",
+          "required": ["phrase"],
+          "additionalProperties": false,
+          "properties": {
+            "phrase": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Text phrase to match against finding's matched region."
+            },
+            "rules": {
+              "type": "array",
+              "description": "If non-empty, only suppress findings with these rule codes.",
+              "items": { "type": "string" }
+            },
+            "expires": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "description": "ISO date (YYYY-MM-DD) after which this suppression is inactive."
+            },
+            "reason": {
+              "type": "string",
+              "description": "Free-text reason / ticket reference for audit purposes."
+            }
+          }
+        }
+      ]
+    },
+
+    "CustomScanRule": {
+      "type": "object",
+      "description": "A custom security scan rule.",
+      "required": ["id", "pattern"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique rule identifier (e.g. CUSTOM_001)."
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Python regex pattern to match against prompt text."
+        },
+        "category": {
+          "type": "string",
+          "description": "Finding category label shown in reports."
+        },
+        "risk": {
+          "type": "string",
+          "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+          "description": "Risk level assigned to findings from this rule."
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["HIGH", "MEDIUM", "LOW"],
+          "description": "Confidence level for findings from this rule."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable finding message."
+        },
+        "recommendation": {
+          "type": "string",
+          "description": "Remediation advice shown with the finding."
+        },
+        "false_positive_note": {
+          "type": "string",
+          "description": "Guidance on common false-positive scenarios."
+        },
+        "use_original_text": {
+          "type": "boolean",
+          "default": false,
+          "description": "Match against original (un-redacted) prompt text."
+        }
+      }
+    },
+
+    "CustomLintRule": {
+      "type": "object",
+      "description": "A custom prompt quality lint rule.",
+      "required": ["id", "pattern"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique rule identifier (e.g. CUSTOM_LINT_001)."
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Python regex pattern to match against prompt text."
+        },
+        "category": {
+          "type": "string",
+          "description": "Finding category label shown in reports."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["HIGH", "MEDIUM", "LOW", "INFO"],
+          "description": "Severity level assigned to findings from this rule."
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["HIGH", "MEDIUM", "LOW"],
+          "description": "Confidence level for findings from this rule."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable finding message."
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "Improvement suggestion shown with the finding."
+        },
+        "false_positive_note": {
+          "type": "string",
+          "description": "Guidance on common false-positive scenarios."
+        },
+        "negate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Flip match logic — flag when the pattern does NOT match."
+        },
+        "requires_agentic": {
+          "type": "boolean",
+          "default": false,
+          "description": "Only apply this rule when the spec's mode is 'agentic'."
+        }
+      }
+    }
+  }
+}

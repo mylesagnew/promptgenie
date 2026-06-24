@@ -37,7 +37,8 @@ jobs:
             -not -path './.venv/*' \
             \( -name '*.md' -o -name '*.prompt.md' \) \
             | grep -v README | grep -v CHANGELOG | grep -v LICENSE \
-            | grep -v SECURITY \
+            | grep -v SECURITY | grep -v ROADMAP | grep -v CONTRIBUTING \
+            | grep -v '/tests/' | grep -v '/examples/' \
             | sort)
           echo "Found prompt files:"
           echo "$files"
@@ -106,7 +107,8 @@ jobs:
             -not -path './.venv/*' \
             \( -name '*.md' -o -name '*.prompt.md' \) \
             | grep -v README | grep -v CHANGELOG | grep -v LICENSE \
-            | grep -v SECURITY \
+            | grep -v SECURITY | grep -v ROADMAP | grep -v CONTRIBUTING \
+            | grep -v '/tests/' | grep -v '/examples/' \
             | sort)
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$files" >> $GITHUB_OUTPUT
@@ -170,6 +172,7 @@ jobs:
             -not -path './.git/*' \
             -not -path './.venv/*' \
             -name '*.prompt-test.yaml' \
+            | grep -v '/tests/' | grep -v '/examples/' \
             | sort)
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$files" >> $GITHUB_OUTPUT

@@ -1,14 +1,11 @@
-"""policy.py — CI policy gate command.
+"""policy.py — Policy-as-code v2 gate command.
 
-Runs lint and scan on a prompt file and exits non-zero when findings violate
-configured thresholds.  Designed to be dropped into a CI pipeline alongside
-``scan`` and ``lint``:
-
-    promptgenie policy my-prompt.md --max-risk HIGH --min-score 70
+Uses policy_engine.py for discovery, evaluation, and explain mode.
+Also supports backward-compatible --max-risk / --min-score inline overrides.
 
 Exit codes:
-    0  — prompt passes all policy thresholds
-    1  — one or more thresholds exceeded (findings printed to stdout)
+    0  — prompt passes all policy rules
+    1  — one or more policy rules violated
     2  — usage / configuration error
 """
 
@@ -18,230 +15,407 @@ import json
 import sys
 
 import click
-from rich.table import Table
 
-from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
+from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE, PromptGenieError
 from promptgenie.core.fileio import safe_read_text
-from promptgenie.core.formatters import lint_to_sarif, scan_to_sarif
-from promptgenie.core.linter import lint
-from promptgenie.core.scanner import scan
-from promptgenie.renderers.rich import console as _shared_console
+from promptgenie.renderers.rich import console, diag_console
 
-_RISK_ORDER: dict[str, int] = {
-    "CRITICAL": 0,
-    "HIGH": 1,
-    "MEDIUM": 2,
-    "LOW": 3,
-    "NONE": 4,
-}
+# Risk level ordering used by the inline gate helper
+_RISK_ORDER = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 
 
 def _risk_at_or_above(level: str, threshold: str) -> bool:
-    """Return True if *level* is at least as severe as *threshold*."""
-    return _RISK_ORDER.get(level, 99) <= _RISK_ORDER.get(threshold, 99)
+    """Return True if *level* is at or above *threshold* in the risk scale.
+
+    Unknown levels (not in the standard set) are treated as below everything
+    and will never breach a threshold.
+    """
+    level_order = _RISK_ORDER.get(level, -1)
+    if level_order < 0:
+        return False
+    threshold_order = _RISK_ORDER.get(threshold, -1)
+    return level_order >= threshold_order
 
 
 @click.command("policy")
 @click.argument("file", type=click.Path(exists=True, readable=True))
+# Inline threshold overrides (backward-compat + common-case convenience)
 @click.option(
     "--max-risk",
     type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"], case_sensitive=False),
-    default="HIGH",
-    show_default=True,
-    help="Fail if any security finding is at or above this risk level.",
+    default=None,
+    help="Override max_risk from policy file. Fail if any finding is at or above this level.",
 )
 @click.option(
-    "--max-findings",
-    type=int,
-    default=0,
-    show_default=True,
-    help=(
-        "Fail if the total number of qualifying security findings exceeds this count. "
-        "0 = any qualifying finding fails (default)."
-    ),
+    "--max-findings", type=int, default=None, help="Override max_findings from policy file."
+)
+@click.option("--min-score", type=int, default=None, help="Override min_score from policy file.")
+# Policy source
+@click.option(
+    "--policy-file",
+    "policy_path",
+    default=None,
+    type=click.Path(),
+    help="Explicit policy file path. Skips auto-discovery.",
 )
 @click.option(
-    "--min-score",
-    type=int,
-    default=0,
-    show_default=True,
-    help=(
-        "Fail if the lint quality score is below this threshold. "
-        "0 = lint score is not checked (default)."
-    ),
+    "--no-policy-file",
+    is_flag=True,
+    help="Ignore any discovered/configured policy file; use inline flags only.",
+)
+# Provider / classification gates
+@click.option(
+    "--provider", default=None, help="Provider name to check against allowed_providers gate."
+)
+@click.option(
+    "--classification",
+    default=None,
+    help="Content classification (public|internal|confidential|restricted) "
+    "to check against external_model_send gate.",
+)
+# Explain / output
+@click.option(
+    "--explain",
+    is_flag=True,
+    help="Print a per-rule evaluation trace (why each rule passed or failed).",
 )
 @click.option(
     "--format",
     "output_format",
-    type=click.Choice(["text", "json", "sarif"]),
+    type=click.Choice(["text", "json", "sarif"], case_sensitive=False),
     default="text",
     show_default=True,
-    help="Output format: text (Rich table), json (machine-readable), or sarif (SARIF v2.1.0).",
+    help="Output format.",
 )
 @click.option(
-    "--config",
-    "config_path",
-    default=None,
-    help="Path to .promptgenie.yaml config file.",
+    "--config", "config_path", default=None, help="Path to .promptgenie.yaml config file."
 )
-@click.option(
-    "--no-config",
-    is_flag=True,
-    default=False,
-    help="Ignore any .promptgenie.yaml config file.",
-)
+@click.option("--no-config", is_flag=True, help="Ignore any .promptgenie.yaml config file.")
 def policy(
     file: str,
-    max_risk: str,
-    max_findings: int,
-    min_score: int,
+    max_risk: str | None,
+    max_findings: int | None,
+    min_score: int | None,
+    policy_path: str | None,
+    no_policy_file: bool,
+    provider: str | None,
+    classification: str | None,
+    explain: bool,
     output_format: str,
     config_path: str | None,
     no_config: bool,
 ) -> None:
-    """CI policy gate — exit 1 if the prompt violates configured thresholds.
+    """Policy-as-code gate — analyse a prompt and exit 1 if policy is violated.
 
-    FILE is the prompt file to evaluate.
-
-    Runs both lint and scan and exits 1 if any threshold is breached:
+    Auto-discovers .promptgenie.policy.yaml → promptgenie.policy.yaml →
+    ~/.config/promptgenie/policy.yaml. Inline flags override discovered values.
 
     \b
-      --max-risk    : any security finding at or above this level → fail
-      --max-findings: total qualifying findings exceed this count → fail
-      --min-score   : lint quality score below this value → fail
-
-    All thresholds default to "any HIGH finding fails; lint score unchecked".
+    Examples:
+      promptgenie policy prompt.md
+      promptgenie policy prompt.md --max-risk HIGH --min-score 70
+      promptgenie policy prompt.md --policy-file team-policy.yaml --explain
+      promptgenie policy prompt.md --provider anthropic --classification confidential
+      promptgenie policy prompt.md --format json | jq '.passed'
     """
+    from promptgenie.core.analyze import analyze
     from promptgenie.core.config import PromptGenieConfig, load_config
+    from promptgenie.core.policy_engine import (
+        PolicyConfig,
+        discover_policy_file,
+        evaluate_policy,
+        load_policy,
+    )
 
-    cfg: PromptGenieConfig
+    # ── Load promptgenie config ─────────────────────────────────────────────
+    pg_cfg: PromptGenieConfig
     if no_config:
-        cfg = PromptGenieConfig()
-    else:
+        pg_cfg = PromptGenieConfig()
+    elif config_path is not None:
+        # Explicit path given — error on failure (exit 2)
         try:
-            cfg = load_config(config_path)
-        except (FileNotFoundError, ValueError) as exc:
-            if config_path:
-                click.echo(f"error: cannot load config {config_path!r}: {exc}", err=True)
-                sys.exit(EXIT_USAGE)
-            cfg = PromptGenieConfig()
+            pg_cfg = load_config(config_path)
+        except (FileNotFoundError, OSError, ValueError) as exc:
+            diag_console.print(f"[red]Error:[/red] Cannot load config {config_path!r}: {exc}")
+            raise SystemExit(EXIT_USAGE) from None
+        except Exception as exc:
+            diag_console.print(f"[red]Error:[/red] Cannot load config {config_path!r}: {exc}")
+            raise SystemExit(EXIT_USAGE) from None
+    else:
+        # Auto-discovery — fall back to defaults on error
+        try:
+            pg_cfg = load_config(None)
+        except Exception:
+            pg_cfg = PromptGenieConfig()
 
-    # ── Read prompt ────────────────────────────────────────────────────────────
+    # ── Read prompt ─────────────────────────────────────────────────────────
     try:
         prompt_text = safe_read_text(file)
     except (OSError, ValueError) as exc:
-        click.echo(f"error: cannot read {file!r}: {exc}", err=True)
-        sys.exit(EXIT_USAGE)
+        diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+        raise SystemExit(EXIT_USAGE) from None
 
-    # ── Run lint + scan ────────────────────────────────────────────────────────
-    lint_result = lint(prompt_text, config=cfg.linter if cfg else None)
-    scan_result = scan(prompt_text, config=cfg.scanner if cfg else None)
+    # ── Load policy ─────────────────────────────────────────────────────────
+    policy_cfg: PolicyConfig
+    policy_source = "defaults"
+    if no_policy_file:
+        policy_cfg = PolicyConfig()
+        policy_source = "defaults (--no-policy-file)"
+    elif policy_path:
+        try:
+            policy_cfg = load_policy(policy_path)
+            policy_source = str(policy_path)
+        except PromptGenieError as exc:
+            diag_console.print(f"[red]Error:[/red] {exc}")
+            raise SystemExit(EXIT_USAGE) from None
+    else:
+        discovered = discover_policy_file()
+        if discovered:
+            policy_cfg = load_policy(discovered)
+            policy_source = str(discovered)
+        else:
+            policy_cfg = PolicyConfig()
+            policy_source = "defaults (no policy file found)"
 
-    # ── Evaluate thresholds ────────────────────────────────────────────────────
-    qualifying_findings = [f for f in scan_result.findings if _risk_at_or_above(f.risk, max_risk)]
+    # Apply inline overrides on top of discovered/loaded policy
+    if max_risk is not None:
+        policy_cfg.max_risk = max_risk.upper()
+    if max_findings is not None:
+        policy_cfg.max_findings = max_findings
+    if min_score is not None:
+        policy_cfg.min_score = min_score
 
-    violations: list[str] = []
+    # ── Analyze prompt ──────────────────────────────────────────────────────
+    result = analyze(
+        prompt_text,
+        file_path=file,
+        scanner_config=pg_cfg.scanner,
+        linter_config=pg_cfg.linter,
+    )
 
-    if qualifying_findings and (max_findings == 0 or len(qualifying_findings) > max_findings):
-        violations.append(
-            f"{len(qualifying_findings)} finding(s) at or above {max_risk} risk "
-            f"(threshold: {'any' if max_findings == 0 else max_findings})"
+    # ── Evaluate policy ─────────────────────────────────────────────────────
+    evaluation = evaluate_policy(
+        result,
+        policy_cfg,
+        provider=provider,
+        classification=classification,
+        explain=explain,
+    )
+
+    # ── Output ──────────────────────────────────────────────────────────────
+    if output_format == "sarif":
+        sarif = _policy_sarif(
+            result, file_path=file, evaluation=evaluation, policy_source=policy_source
+        )
+        sys.stdout.write(json.dumps(sarif, indent=2) + "\n")
+
+    elif output_format == "json":
+        scan_findings = [f for f in result.findings if f.source == "scan"]
+        lint_findings = [f for f in result.findings if f.source == "lint"]
+        qualifying_count = sum(
+            1
+            for f in result.findings
+            if f.source == "scan" and _risk_at_or_above(f.severity, policy_cfg.max_risk)
         )
 
-    if min_score > 0 and lint_result.score < min_score:
-        violations.append(f"lint score {lint_result.score}/100 is below minimum {min_score}")
-
-    # ── Warn on expired / malformed allowlist entries ─────────────────────────
-    allowlist_warnings: list[str] = []
-    if cfg and cfg.scanner.allowlist:
-        for entry in cfg.scanner.allowlist:
-            if entry.expires and entry.is_expired():
+        allowlist_warnings: list[str] = []
+        for entry in pg_cfg.scanner.allowlist:
+            if entry.is_expired():
                 allowlist_warnings.append(
-                    f"Allowlist entry for phrase {entry.phrase!r} "
-                    f"(expires: {entry.expires or 'malformed'}) is expired or malformed — "
-                    "suppression is inactive."
+                    f"Allowlist entry '{entry.phrase}' expired on {entry.expires}"
                 )
 
-    passed = len(violations) == 0
-
-    # ── Output ────────────────────────────────────────────────────────────────
-    if output_format == "sarif":
-        # Emit a combined SARIF document with both lint and scan results.
-        # SARIF does not natively model policy-pass/fail, so we include both
-        # run objects and let the CI system interpret the findings count.
-        import json as _json
-
-        lint_sarif = _json.loads(lint_to_sarif(lint_result, file))
-        scan_sarif = _json.loads(scan_to_sarif(scan_result, file))
-        combined = lint_sarif.copy()
-        combined["runs"] = lint_sarif["runs"] + scan_sarif["runs"]
-        click.echo(_json.dumps(combined, indent=2))
-    elif output_format == "json":
-        out = {
-            "passed": passed,
+        data = {
+            "schema_version": "1.0",
+            "passed": evaluation.passed,
             "file": file,
+            "policy_source": policy_source,
             "policy": {
-                "max_risk": max_risk,
-                "max_findings": max_findings,
-                "min_score": min_score,
+                "max_risk": policy_cfg.max_risk,
+                "max_findings": policy_cfg.max_findings,
+                "min_score": policy_cfg.min_score,
+                "allowed_providers": policy_cfg.allowed_providers,
             },
             "results": {
-                "scan_risk_level": scan_result.risk_level,
-                "qualifying_findings": len(qualifying_findings),
-                "lint_score": lint_result.score,
-                "lint_issues": len(lint_result.issues),
+                "scan_risk_level": result.scan_risk,
+                "qualifying_findings": qualifying_count,
+                "lint_score": result.lint_score,
+                "lint_issues": len(lint_findings),
             },
-            "violations": violations,
-            "allowlist_warnings": allowlist_warnings,
             "findings": [
                 {
                     "code": f.code,
                     "category": f.category,
-                    "risk": f.risk,
+                    "risk": f.severity,
                     "confidence": f.confidence,
-                    "line": f.line,
-                    "message": f.message,
-                    "recommendation": f.recommendation,
+                    "line": f.location.line,
+                    "message": f.title,
+                    "recommendation": f.remediation,
                 }
-                for f in qualifying_findings
+                for f in scan_findings
             ],
+            "violations": [f"{v.rule}: {v.message}" for v in evaluation.violations],
+            "allowlist_warnings": allowlist_warnings,
+            "warnings": evaluation.warnings,
+            **({"explain": evaluation.explain_lines} if explain else {}),
         }
-        click.echo(json.dumps(out, indent=2))
+        sys.stdout.write(json.dumps(data, indent=2) + "\n")
+
     else:
-        console = _shared_console
-        status_icon = "✅" if passed else "❌"
-        console.print(
-            f"\n{status_icon}  PromptGenie Policy — [bold]{'PASSED' if passed else 'FAILED'}[/bold]"
-            f"  [dim]{file}[/dim]\n"
-        )
+        # Rich text output
+        status = "[green]PASSED[/green]" if evaluation.passed else "[red]FAILED[/red]"
+        icon = "✅" if evaluation.passed else "❌"
+        console.print(f"\n{icon}  [bold]PromptGenie Policy — {status}[/bold]  [dim]{file}[/dim]")
+        console.print(f"[dim]Policy: {policy_source}[/dim]")
 
-        if qualifying_findings:
-            table = Table(title=f"Security Findings (≥ {max_risk})", show_lines=False)
-            table.add_column("Code", style="bold red")
-            table.add_column("Risk")
-            table.add_column("Line", justify="right")
-            table.add_column("Message")
-            for f in qualifying_findings:
-                table.add_row(f.code, f.risk, str(f.line), f.message)
-            console.print(table)
-
-        if min_score > 0:
-            score_colour = "green" if lint_result.score >= min_score else "red"
+        # Lint score line (shown when min_score is active)
+        if min_score is not None and min_score > 0:
+            score_color = "green" if result.lint_score >= min_score else "red"
             console.print(
-                f"Lint score: [{score_colour}]{lint_result.score}/100[/{score_colour}]"
-                f"  (minimum: {min_score})"
+                f"[dim]Lint score:[/dim] [{score_color}]{result.lint_score}/100[/{score_color}]"
+                f" [dim](min: {min_score})[/dim]"
             )
 
-        for warning in allowlist_warnings:
-            console.print(f"[yellow]⚠ Allowlist:[/yellow] {warning}")
+        # Findings summary
+        if result.findings:
+            from rich.table import Table
 
-        if violations:
+            tbl = Table(show_header=True, header_style="bold", show_lines=False)
+            tbl.add_column("Sev", width=7)
+            tbl.add_column("Code", style="bold", no_wrap=True)
+            tbl.add_column("Category")
+            tbl.add_column("Finding")
+            _sev_colors = {
+                "CRITICAL": "bold red",
+                "HIGH": "red",
+                "MEDIUM": "yellow",
+                "LOW": "cyan",
+                "INFO": "dim",
+            }
+            for f in sorted(
+                result.findings,
+                key=lambda x: {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}.get(
+                    x.severity, 9
+                ),
+            ):
+                color = _sev_colors.get(f.severity, "dim")
+                tbl.add_row(
+                    f"[{color}]{f.severity[:4]}[/{color}]",
+                    f.code,
+                    f.category,
+                    f.title,
+                )
+            console.print(tbl)
+
+        # Explain trace
+        if explain and evaluation.explain_lines:
+            console.print("\n[bold]Policy evaluation trace:[/bold]")
+            for line in evaluation.explain_lines:
+                color = "green" if "✓" in line else "red"
+                console.print(f"  [{color}]{line}[/{color}]")
+
+        # Violations
+        if evaluation.violations:
             console.print("\n[bold red]Violations:[/bold red]")
-            for v in violations:
-                console.print(f"  • {v}")
+            for v in evaluation.violations:
+                detail = f"  [dim]{v.detail}[/dim]" if v.detail else ""
+                console.print(f"  • [bold]{v.rule}[/bold]: {v.message}{detail}")
         else:
-            console.print("[green]All policy thresholds met.[/green]")
+            console.print("\n[green]All policy thresholds met.[/green]")
+
+        # Allowlist warnings
+        for entry in pg_cfg.scanner.allowlist:
+            if entry.is_expired():
+                console.print(
+                    f"[yellow]⚠[/yellow] Allowlist entry '{entry.phrase}' "
+                    f"expired on {entry.expires} — suppression is inactive."
+                )
+
+        # Warnings
+        for w in evaluation.warnings:
+            console.print(f"[yellow]⚠[/yellow] {w}")
 
         console.print()
 
-    sys.exit(EXIT_OK if passed else EXIT_FAILURE)
+    raise SystemExit(EXIT_OK if evaluation.passed else EXIT_FAILURE)
+
+
+# ---------------------------------------------------------------------------
+# SARIF helper — two runs: one for scan findings, one for lint findings
+# ---------------------------------------------------------------------------
+
+_SARIF_LEVEL_MAP = {
+    "CRITICAL": "error",
+    "HIGH": "error",
+    "MEDIUM": "warning",
+    "LOW": "note",
+    "INFO": "none",
+}
+
+_SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
+
+
+def _policy_sarif(
+    result: object, *, file_path: str, evaluation: object, policy_source: str
+) -> dict:
+    """Build a SARIF 2.1.0 document with separate runs for scan and lint findings."""
+    from promptgenie.core.analyze import AnalyzeResult
+    from promptgenie.core.policy_engine import PolicyEvaluation
+
+    ar: AnalyzeResult = result  # type: ignore[assignment]
+    ev: PolicyEvaluation = evaluation  # type: ignore[assignment]
+
+    def _run(driver_name: str, source_filter: str) -> dict:
+        findings = [f for f in ar.findings if f.source == source_filter]
+        seen: dict[str, dict] = {}
+        results = []
+        for f in findings:
+            if f.code not in seen:
+                seen[f.code] = {
+                    "id": f.code,
+                    "name": f.title[:80],
+                    "shortDescription": {"text": f.title},
+                    "fullDescription": {"text": f.remediation or f.title},
+                }
+            results.append(
+                {
+                    "ruleId": f.code,
+                    "level": _SARIF_LEVEL_MAP.get(f.severity, "note"),
+                    "message": {"text": f.title},
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {"uri": file_path},
+                                "region": {
+                                    "startLine": max(1, f.location.line or 1),
+                                    "startColumn": max(1, f.location.col or 1),
+                                },
+                            }
+                        }
+                    ],
+                }
+            )
+        return {
+            "tool": {
+                "driver": {
+                    "name": driver_name,
+                    "version": "1.0.0",
+                    "rules": list(seen.values()),
+                }
+            },
+            "results": results,
+            "properties": {
+                "policy_passed": ev.passed,
+                "policy_source": policy_source,
+                "violations": [{"rule": v.rule, "message": v.message} for v in ev.violations],
+            },
+        }
+
+    return {
+        "$schema": _SARIF_SCHEMA,
+        "version": "2.1.0",
+        "runs": [
+            _run("promptgenie-scan", "scan"),
+            _run("promptgenie-lint", "lint"),
+        ],
+    }

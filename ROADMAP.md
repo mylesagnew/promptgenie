@@ -125,7 +125,7 @@ Ordered by development leverage and user adoption impact:
 | 9 | ~~**GitHub Actions annotations and SARIF**~~ | ✅ Done | Auto-detected; `::error` annotations + step summary + SARIF upload |
 | 10 | ~~**Full Textual TUI**~~ | ✅ Done | `promptgenie tui --provider claude prompts/auth.md` |
 
-**All 10 highest-impact features shipped.** Next focus: team-scale governance (Phase 6).
+**All 10 highest-impact features shipped.** v1.7.0 adds the workspace schema, `WorkspaceConfig`/`DefaultsConfig` parsing, `config validate`, and `config init`. Next focus: team-scale governance (Phase 6).
 
 ---
 
@@ -134,12 +134,15 @@ Ordered by development leverage and user adoption impact:
 ### Token and Cost Optimizer
 
 ```bash
-promptgenie tokens prompt.md
-promptgenie optimize prompt.md --max-tokens 4000
-promptgenie context build --max-tokens 12000 --strategy git-relevant
+promptgenie compress prompt.md                      # ✅ shipped
+promptgenie optimize prompt.md --max-tokens 4000    # ✅ shipped (alias of compress)
+promptgenie tokens prompt.md                         # 🔲 planned (inspector)
+promptgenie context build --max-tokens 12000 --strategy git-relevant  # ✅ shipped
 ```
 
-Optimization strategies: remove duplicate context, collapse whitespace, remove low-value sections, prioritize git-changed files, summarize long context. Always show diff before destructive optimization. Requires `promptgenie[tokenizer]`.
+**Shipped:** `promptgenie compress` / `optimize` — a native, dependency-free compression engine (`promptgenie/core/compressor.py`) inspired by [headroom](https://github.com/headroomlabs-ai/headroom). Content-routed, fence-aware techniques in two tiers: lossless **default** (`trim-trailing-ws`, `collapse-blank-lines`, `json-compact`) and lossy **aggressive** (`strip-html-comments`, `collapse-spaces`, `dedupe-log-lines`). `--max-tokens` budget, `--diff`/`--dry-run`, `--format json|yaml`. Accurate token counts use `tiktoken` when installed (`promptgenie[tokenizer]`), falling back to a `len/4` estimate.
+
+**Planned next:** `promptgenie tokens` (a read-only per-technique savings inspector), context-builder auto-compression in the run engine, and summarisation / low-value-section removal for further savings.
 
 ---
 
@@ -280,13 +283,16 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 |---|---|---|---|
 | Phase 1 — Terminal and Pipeline Foundations | ✅ Shipped (v1.1.0) | 128 | 765 |
 | Phase 2 — PromptSpec and Run Engine | ✅ Shipped (v1.2.0) | 93 | 858 |
-| Security patch — SSRF / injection / secrets gate | ✅ Shipped (v1.2.1) | 39 | 897 |
-| Security patch — DNS rebinding / VS Code binary / mypy | ✅ Shipped (v1.2.2) | 11 | 908 |
-| Security patch — allowlist bypass / spec trust / IP pinning | ✅ Shipped (v1.2.3) | 32 | 940 |
-| Security patch — URL gate bypass / provider TLS / extension fail-closed | ✅ Shipped (v1.2.4) | 15 | 955 |
-| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | 1026 |
-| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | 1103 |
-| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | **1184** |
+| Security patch — SSRF / injection / secrets gate | ✅ Shipped (v1.2.1) | 39 | — |
+| Security patch — DNS rebinding / VS Code binary / mypy | ✅ Shipped (v1.2.2) | 11 | — |
+| Security patch — allowlist bypass / spec trust / IP pinning | ✅ Shipped (v1.2.3) | 32 | — |
+| Security patch — URL gate bypass / provider TLS / extension fail-closed | ✅ Shipped (v1.2.4) | 15 | — |
+| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | — |
+| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | — |
+| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | — |
+| v1.6.0 — Internal Event Model + Policy Hardening | ✅ Shipped (v1.6.0) | 110 | — |
+| v1.7.0 — Workspace Schema + Config Validation | ✅ Shipped (v1.7.0) | 70 | — |
+| Native token compression (`compress`/`optimize`) | ✅ Shipped (Unreleased) | 30 | **1400** |
 | Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*

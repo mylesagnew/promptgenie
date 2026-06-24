@@ -160,6 +160,10 @@ def vars_inspect_cmd(
 
     prompt_text = spec.prompt or ""
     variables = find_variables(prompt_text)
+    # Include secret binding names even if not referenced in prompt text
+    for sv in spec.secret_vars:
+        if sv not in variables:
+            variables.append(sv)
 
     # Determine source per variable
     rows = []
@@ -168,11 +172,24 @@ def vars_inspect_cmd(
     for v in variables:
         value = None
         source = "unresolved"
-        is_secret = "secret" in v.lower()
+        # Secret if declared via from_env binding or name heuristic
+        is_secret = v in spec.secret_vars or "secret" in v.lower()
 
         if v in cli_var_dict:
             value = cli_var_dict[v]
             source = "cli"
+        elif v in spec.secret_vars:
+            # Secret binding: read from the declared env var
+            binding = spec.secret_vars[v]
+            env_val = os.environ.get(binding.from_env)
+            if env_val is not None:
+                value = env_val
+                source = f"env:{binding.from_env} (secret)"
+            elif binding.default is not None:
+                value = binding.default
+                source = "secret_default"
+            else:
+                source = f"env:{binding.from_env} (unset)"
         elif vars_file and v in (load_vars_file(vars_file) if vars_file else {}):
             value = load_vars_file(vars_file).get(v)
             source = "vars_file"

@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -31,7 +32,7 @@ from promptgenie.core.errors import (
 from promptgenie.core.run_engine import RunEvent, run_spec
 from promptgenie.core.spec import PromptSpec, load_spec
 from promptgenie.core.trust import add_trust, is_trusted, spec_requires_trust
-from promptgenie.renderers.rich import diag_console
+from promptgenie.renderers.rich import console, diag_console
 
 
 def _describe_sources(spec: PromptSpec) -> list[str]:
@@ -193,6 +194,17 @@ def _trust_gate(
     help="Override the secrets gate and send the prompt even if secrets are detected. "
     "Use with caution — secrets in prompts may be logged by providers.",
 )
+# Pre-send secrets gate
+@click.option(
+    "--block-secrets",
+    is_flag=True,
+    help="Abort the run if secrets or PII are detected in the assembled prompt.",
+)
+@click.option(
+    "--redact-secrets",
+    is_flag=True,
+    help="Auto-redact secrets and PII in the assembled prompt before sending.",
+)
 # Output flags
 @click.option(
     "--format",
@@ -234,6 +246,8 @@ def run_cmd(
     trust_spec: bool,
     assume_yes: bool,
     allow_secrets: bool,
+    block_secrets: bool,
+    redact_secrets: bool,
     output_format: str,
     tee_file: str | None,
     show_context: bool,
@@ -252,12 +266,40 @@ def run_cmd(
       promptgenie run my-prompt.yaml --format ndjson | jq 'select(.event=="done")'
     """
     ndjson_mode = output_format == "ndjson"
+    is_tty = sys.stdout.isatty()
+    tokens_buffer: list[str] = []
+
+    # TTY live-display state — set up before run_spec is called
+    _live_ctx: Any | None = None
+    _live_renderable: Any | None = None
+
+    if is_tty and not ndjson_mode:
+        try:
+            from rich.live import Live
+            from rich.markdown import Markdown
+
+            _live_renderable = Markdown("")
+            _live_ctx = Live(
+                _live_renderable,
+                console=console,
+                refresh_per_second=15,
+                vertical_overflow="visible",
+            )
+            _live_ctx.__enter__()
+        except Exception:
+            _live_ctx = None
 
     def _on_token(token: str) -> None:
         if ndjson_mode:
             print(json.dumps({"event": "token", "text": token}), flush=True)
+        elif _live_ctx is not None:
+            # TTY with Rich Live: buffer and rerender Markdown in-place
+            tokens_buffer.append(token)
+            from rich.markdown import Markdown
+
+            _live_ctx.update(Markdown("".join(tokens_buffer)))
         else:
-            # Write directly — bypass Rich so it's raw/streamable
+            # Non-TTY (pipe/redirect) or Live unavailable: raw tokens
             sys.stdout.write(token)
             sys.stdout.flush()
 
@@ -324,18 +366,26 @@ def run_cmd(
             allow_url=allow_url,
             allow_sensitive_env=allow_sensitive_env,
             allow_secrets=allow_secrets,
+            block_secrets=block_secrets,
+            redact_secrets=redact_secrets,
             on_token=_on_token,
             on_event=_on_event,
             tee_file=Path(tee_file) if tee_file else None,
         )
     except PromptGenieError as exc:
+        if _live_ctx is not None:
+            _live_ctx.__exit__(None, None, None)
         if ndjson_mode:
             print(json.dumps({"event": "error", "message": str(exc), "code": exc.code}), flush=True)
         handle_error(exc)
+    finally:
+        if _live_ctx is not None:
+            _live_ctx.__exit__(None, None, None)
 
     # ---- post-run output ----
-    if not ndjson_mode and not dry_run and result.response:
-        # Streaming already printed tokens; add newline separator
+    # Non-TTY: raw tokens already written; add a newline separator.
+    # (TTY uses Rich Live, which manages its own trailing newline.)
+    if not ndjson_mode and not dry_run and result.response and not is_tty:
         sys.stdout.write("\n")
         sys.stdout.flush()
 
@@ -355,9 +405,8 @@ def run_cmd(
             diag_console.print("\n[yellow]Dry run complete.[/yellow]")
             if result.resolved_vars:
                 diag_console.print("[dim]Resolved variables:[/dim]")
-                for k, v in result.resolved_vars.items():
-                    display_v = "***" if "secret" in k.lower() else v
-                    diag_console.print(f"  {k} = {display_v}")
+                for k, v in result.redacted_vars().items():
+                    diag_console.print(f"  {k} = {v}")
             if result.context_manifest:
                 m = result.context_manifest
                 diag_console.print(

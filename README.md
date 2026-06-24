@@ -6,7 +6,7 @@
 
 **Secure prompt engineering for AI agents and engineering teams.**
 
-PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — and executes them end-to-end. It ships a built-in linter, multi-file security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, token estimation, full UNIX-composable pipeline, and a declarative run engine that sends prompts to any provider (Anthropic, OpenAI, Ollama, LM Studio, vLLM) with streaming, variable resolution, context assembly, policy gates, and run history.
+PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — and executes them end-to-end. It ships a built-in linter, multi-file security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, token estimation, full UNIX-composable pipeline, and a declarative run engine that sends prompts to any provider (Anthropic, OpenAI, Ollama, LM Studio, vLLM) with streaming, variable resolution, context assembly, policy gates, and run history. v1.6.0 adds a unified `EventBus` / `EventFormatter` infrastructure so every lifecycle event — run tokens, lint findings, policy violations, eval results — flows through a single typed channel that commands, tests, and future integrations all subscribe to. v1.7.0 adds a formal JSON Schema for `.promptgenie.yaml`, `workspace:` and `defaults:` config blocks, `config validate` for CI-safe schema checking, and `config init` to scaffold a new config with editor autocomplete wired up.
 
 ---
 
@@ -59,6 +59,24 @@ promptgenie completion install zsh
 
 # Launch the guided interactive menu
 promptgenie interactive
+```
+
+**Event bus (v1.6.0+):**
+
+```python
+from promptgenie.core.event_bus import EventBus
+from promptgenie.core.event_formatters import NDJSONFormatter
+from promptgenie.core.events import Event, EventKind
+from promptgenie.core.run_engine import run_spec
+
+bus = EventBus()
+tokens: list[str] = []
+bus.subscribe(EventKind.RUN_TOKEN, lambda e: tokens.append(e.text))
+bus.subscribe_all(lambda e: print(e.to_ndjson()))   # log everything
+
+result = run_spec(spec, dry_run=False, event_bus=bus)
+print("".join(tokens))  # assembled response
+print(f"Events: {len(bus)}, tokens: {len(bus.of_kind(EventKind.RUN_TOKEN))}")
 ```
 
 **Pipe-friendly (v1.1.0+):**
@@ -235,6 +253,95 @@ Errors fail CI (exit 1). Warnings are advisory (exit 0). Use `--no-warnings` to 
 
 ---
 
+## Architecture: Workspace schema (v1.7.0)
+
+`.promptgenie.yaml` now has a published JSON Schema at `promptgenie/schemas/workspace.schema.json`. Wire it to VS Code for inline autocomplete and error highlighting:
+
+```json
+// .vscode/settings.json
+{
+  "yaml.schemas": {
+    "./promptgenie/schemas/workspace.schema.json": ".promptgenie.yaml"
+  }
+}
+```
+
+Or use the `yaml-language-server` comment that `config init` writes automatically:
+
+```yaml
+# yaml-language-server: $schema=https://promptgenie.dev/schemas/workspace.schema.json
+$schema: "https://promptgenie.dev/schemas/workspace.schema.json"
+
+workspace:
+  name: "my-project"
+  team: "platform-eng"
+  policy: ".promptgenie-policy.yaml"
+
+defaults:
+  provider: anthropic
+  model: claude-opus-4-5
+  target: claude-code
+
+security:
+  airgap: false
+  block_secrets: true
+```
+
+Validate any config with `promptgenie config validate` — catches unknown keys, type mismatches, invalid enum values, bad `expires` dates, and missing required rule fields:
+
+```bash
+# Validate and exit 0/1 (CI-safe)
+promptgenie config validate
+
+# Machine-readable output
+promptgenie config validate --format json | jq '.errors[]'
+
+# Scaffold a new config with schema pointer pre-wired
+promptgenie config init --name "my-project"
+```
+
+---
+
+## Architecture: Event model (v1.6.0)
+
+Every observable lifecycle moment in PromptGenie is an `Event` — a frozen, NDJSON-serialisable value object with a typed `EventKind`.
+
+```
+EventKind domains
+─────────────────────────────────────────────────────
+run.*      start · token · warning · error · tool_call · done · dry
+lint.*     finding
+scan.*     finding
+policy.*   pass · violation
+diff.*     computed
+eval.*     result
+ci.*       check
+audit.*    write
+```
+
+Commands emit events; formatters and subscribers consume them:
+
+```
+EventBus  ──subscribe(kind, fn)──► Listener callbacks
+          ──subscribe_all(fn)────► Catch-all (audit, telemetry)
+          ──emit(event)──────────► dispatches to all matching listeners
+          ──emit_to(event, fmt)──► dispatch + format + write in one call
+          ──collected / of_kind──► test assertions without stdout mocking
+```
+
+Built-in formatters implement the `EventFormatter` protocol (`format(event) → str | None`):
+
+| Formatter | Emits | Suppresses |
+|---|---|---|
+| `NDJSONFormatter` | all events as JSON lines | — |
+| `TokenOnlyFormatter` | `run.token` text only | everything else |
+| `RichFormatter` | human-readable Rich markup | `run.token` |
+| `SilentFormatter` | nothing | everything |
+
+`run_spec()` accepts `event_bus=` alongside the legacy `on_token=` / `on_event=` callbacks — fully backward-compatible. A subscriber exception never propagates into the run pipeline.
+
+---
+
 ## Install
 
 ```bash
@@ -302,6 +409,7 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 | `provider show` | Show capabilities and config for a provider |
 | `vars list` | List `{{variable}}` placeholders declared in a spec |
 | `vars inspect` | Show resolved value + source for each variable |
+| `compress` / `optimize` | Shrink a prompt's token footprint with native content-routed compression; `--max-tokens` budget, `--aggressive`, `--format json` |
 | `pack list` | List available context packs |
 | `pack show` | Preview a context pack's rendered content |
 | `pack inject` | Inject a context pack into an existing prompt file |
@@ -317,6 +425,41 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 | `validate` | Validate YAML config files — profiles, templates, context packs, workflows, prompt tests |
 | `validate-profiles` | Validate all profile YAML files against the profile schema |
 | `interactive` | Launch the guided menu — generate, lint, scan, diff, test, and more |
+| **Phase 3 — SecDevOps** | |
+| `analyze` | Aggregate lint + scan with unified OWASP-aligned finding model; SARIF/JSON/Rich |
+| `redact` | Replace secrets and PII with `[REDACTED:LABEL]` placeholders |
+| `redteam` | 13 offline OWASP LLM Top 10 attack packs; heuristic susceptibility judge |
+| `auth login` | Store provider credentials in keyring or env |
+| `auth logout` | Remove stored credentials |
+| `auth status` | Show credential resolution for all providers |
+| `audit list` | View tamper-evident audit log (SQLite, SHA-256 chain) |
+| `audit export` | Export audit log to JSON/CSV/NDJSON |
+| `audit verify` | Verify the audit chain has not been tampered with |
+| `config show` | Show current effective config (rich / JSON / YAML) |
+| `config set` | Set a config key (e.g. `security.airgap true`) |
+| `config get` | Print the current value of a config key |
+| `config validate` | Validate `.promptgenie.yaml` against the workspace schema; exits 0/1/2; `--format json` for CI |
+| `config init` | Scaffold a new `.promptgenie.yaml` with JSON Schema pointer and editor autocomplete comment |
+| **Phase 4 — Evaluation** | |
+| `evaluate` | Multi-model matrix evaluation with latency, cost, safety, and rubric metrics |
+| `eval init` | Scaffold a new eval suite YAML file |
+| `eval run` | Run an eval suite against a prompt or spec |
+| `eval compare` | Compare current run to a baseline; exit 8 on regression |
+| `eval approve` | Approve current snapshots as the new baseline |
+| **Phase 5 — TUI and Ecosystem** | |
+| `tui` | Full-screen Textual TUI (requires `pip install "promptgenie[tui]"`) |
+| `wizard` | Guided 8-step prompt-building Q&A |
+| `palette` | Fuzzy command palette across commands, templates, and history |
+| `history list` | Browse run history with filtering |
+| `history show` | Inspect a single run's events and response |
+| `history diff` | Diff two historical responses |
+| `history replay` | Re-run a historical spec (supports `--dry-run`) |
+| `watch` | File watcher — re-runs lint/scan/policy on change |
+| `template list` | List templates (project → user → built-in resolution) |
+| `template render` | Render a template with variables |
+| `lock` | Create a lockfile with SHA-256 hashes of all spec dependencies |
+| `plugin list` | List installed plugins |
+| `plugin scaffold` | Scaffold a new plugin stub |
 
 ---
 
@@ -659,6 +802,59 @@ Outputs a colour-coded change log (KEPT / REWRITTEN / ADDED / DROPPED per sectio
 | `--out`, `-o` | Save adapted prompt to file |
 | `--show-original` | Print original alongside adapted version |
 | `--strip-agentic-safety` | Remove agentic safety sections when adapting to a non-agentic target (off by default) |
+
+---
+
+### `compress` / `optimize`
+
+Shrink a prompt's (or assembled context's) token footprint *before* it reaches the model — same content, fewer tokens. A native, dependency-free engine inspired by [headroom](https://github.com/headroomlabs-ai/headroom): content-routed structural techniques, no Rust toolchain or heavy ML deps. `optimize` is an alias for `compress`.
+
+```bash
+# Compress to stdout (lossless default tier)
+promptgenie compress prompt.md
+
+# Write the smaller version to a file
+promptgenie compress prompt.md --out smaller.md
+
+# Hit a token budget — enables every technique, exits 1 if it can't fit
+promptgenie compress prompt.md --max-tokens 4000
+
+# Add the aggressive (mildly lossy) tier and show what changed
+promptgenie compress prompt.md --aggressive --diff
+
+# Machine-readable savings report
+promptgenie compress prompt.md --format json | jq '.tokens_saved'
+
+# Pipe-friendly
+cat context.md | promptgenie compress -
+```
+
+**Techniques** (fence-aware — fenced ```code``` blocks are never altered):
+
+| Technique | Tier | What it does |
+|---|---|---|
+| `trim-trailing-ws` | default | Strip trailing whitespace at line ends |
+| `collapse-blank-lines` | default | Collapse 2+ consecutive blank lines into one |
+| `json-compact` | default | Minify whole-document JSON and ```json fenced blocks |
+| `strip-html-comments` | aggressive | Remove `<!-- HTML comments -->` from prose |
+| `collapse-spaces` | aggressive | Collapse runs of inline spaces in prose (keeps indentation) |
+| `dedupe-log-lines` | aggressive | Fold 3+ identical consecutive lines into `line (×N)` |
+
+The **default** tier is lossless / near-lossless for Markdown prompts. The **aggressive** tier (via `--aggressive`, or automatically when `--max-tokens` is set) trades a little fidelity for higher savings — ideal for build logs, search dumps, and verbose tool output. Run `promptgenie compress --list-techniques` for the live catalogue.
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--out`, `-o` | Write compressed output to a file instead of stdout |
+| `--max-tokens N` | Target token budget; enables all techniques; exits 1 if the result still exceeds N |
+| `--techniques T,T` | Run an explicit subset of techniques (overrides the tiers) |
+| `--aggressive` | Add the aggressive tier on top of the defaults |
+| `--list-techniques` | Print the technique catalogue and exit |
+| `--diff` / `--dry-run` | Report per-technique savings to stderr (`--dry-run` skips writing/emitting output) |
+| `--format` | Output format: `text` (default) / `json` / `yaml` |
+
+Exits `0` on success, `1` when a `--max-tokens` budget cannot be met, `2` on a bad technique name or unreadable file.
 
 ---
 
@@ -1768,7 +1964,7 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 - [x] Registry hardening: SHA-256 checksums required, HTTPS-only, 1 MiB download cap, fail-closed YAML parsing
 - [x] VS Code / Cursor extension: inline diagnostics, status bar score, command palette
 - [x] SBOM, release provenance, CodeQL, OpenSSF Scorecard, Dependabot
-- [x] 858 tests · 85%+ coverage · 0 ruff issues · 0 mypy errors
+- [x] 1,273 tests · 85%+ coverage · 0 ruff issues · 0 mypy errors
 
 ---
 
@@ -1797,47 +1993,90 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 
 ---
 
-### Phase 3 — SecDevOps Guardrails
+### Phase 3 — SecDevOps Guardrails ✅
 
-- [ ] `promptgenie analyze` — aggregate `lint + scan + policy + custom rules`; unified finding model; SARIF output
-- [ ] Policy-as-code v2: `--policy promptgenie.policy.yaml`; `--explain` mode; `external_model_send` gate; policy discovery chain
-- [ ] Data leakage detector: JWTs, database URLs, internal hostnames, emails; `promptgenie redact`; `--block-secrets` pre-send gate
-- [ ] `promptgenie redteam` — injection susceptibility testing with attack packs (OWASP LLM); offline heuristic judge
-- [ ] Local-first routing policy: prompt classification; routing rules; external sends require clean scan + `--yes` + audit
-- [ ] Credential management: `promptgenie auth login`; `keyring` optional extra; macOS Keychain, Windows Credential Manager, 1Password CLI
-- [ ] Audit log: `promptgenie audit list|show|export`; SQLite; prompt hash, provider/model, policy decision, `external_send`
-- [ ] Air-gapped mode: `--airgap`; blocks external providers, remote registry, URL context sources; local pack install from tarball
-
----
-
-### Phase 4 — Evaluation and Regression Testing
-
-- [ ] Multi-model matrix evaluation: `--models claude,gpt-4.1,ollama/llama3.1`; async parallel; comparative table; `--runs N`
-- [ ] Eval suites: `promptgenie eval init|run|compare|approve`; 11 assertion types including `refuses_instruction_override`, `judge_rubric`
-- [ ] Baseline regression gates: `--save-baseline`, `--compare`, `--fail-on-regression`; per-metric thresholds
-- [ ] GitHub Actions native reporter: `::error` annotations; Markdown step summary; SARIF upload
-- [ ] Changed-prompt detection: `--changed`; dependency-aware (template → dependent prompts, policy → all)
+- [x] `promptgenie analyze` — aggregate `lint + scan + policy + custom rules`; unified OWASP-aligned finding model; SARIF/JSON/Rich output
+- [x] Policy-as-code v2: `--policy promptgenie.policy.yaml`; `--explain` mode; `external_model_send` gate; policy discovery chain; SARIF multi-run output
+- [x] Data leakage detector: JWTs, database URLs, internal hostnames, emails, phone numbers, credit cards, SSNs; `promptgenie redact`; `[REDACTED:LABEL]` placeholders; `--diff`
+- [x] `promptgenie redteam` — 13 OWASP LLM Top 10 attack packs; offline heuristic susceptibility judge; `--categories`, `--fail-on-susceptible`
+- [x] Local-first routing policy: `RoutingConfig`; condition rules (`contains_secrets`, `classification ==`, `*`); `routing.default` fallback
+- [x] Credential management: `promptgenie auth login|logout|status`; keyring, env, 1Password, AWS SSM, GCP Secret Manager, Azure Key Vault; `ref:` pointer resolution at runtime
+- [x] Audit log: `promptgenie audit list|show|export|verify`; SQLite; SHA-256 tamper-evident hash chain; JSON/CSV/NDJSON export
+- [x] Air-gapped mode: `security.airgap: true` in config; blocks all external provider calls; local providers (Ollama) still work
 
 ---
 
-### Phase 5 — Advanced TUI and Ecosystem
+### Phase 4 — Evaluation and Regression Testing ✅
 
-- [ ] Full-screen Textual TUI: `promptgenie tui`; findings panel, score/token bar, keyboard shortcuts
-- [ ] Guided prompt wizard: `promptgenie wizard`; step-by-step questions → PromptSpec + rendered Markdown
-- [ ] Smart command palette: `promptgenie palette`; Textual fuzzy finder across commands, templates, profiles, packs, history
-- [ ] Prompt history: `promptgenie history list|show|diff|replay`; SQLite; content deduplication; `--no-history`
-- [ ] Watch mode: `promptgenie watch`; on-change re-lint/re-scan dashboard; `watchfiles` optional extra
-- [ ] Template command group: `promptgenie template list|edit|new|validate|render`; `$EDITOR` default; layered locations
-- [ ] Prompt lockfiles: `promptgenie lock`; hash template, policy, packs, context, provider model; `--check` in CI
-- [ ] Plugin SDK: entry points for providers, rules, renderers, context sources, evaluators; `promptgenie plugin scaffold`
+- [x] Multi-model matrix evaluation: `--models claude,gpt-4.1,ollama/llama3.1`; `asyncio` parallel with semaphore; per-model latency/cost/safety/rubric metrics; `--runs N`
+- [x] Eval suites: `promptgenie eval init|run|compare|approve`; 11 assertion types: `contains`, `regex_match`, `json_path`, `semantic_similarity`, `judge_rubric`, `refuses_instruction_override`, and more; snapshot store at `evals/.snapshots/`
+- [x] Baseline regression gates: `--save-baseline`, `--compare --fail-on-regression`; per-metric thresholds; exits `EXIT_REGRESSION = 8` on breach
+- [x] GitHub Actions native reporter: `::error`/`::warning` annotations; Markdown step summary; SARIF 2.1.0 upload; auto-detected via `GITHUB_ACTIONS`
+- [x] Changed-prompt detection: `--changed`; `git diff --name-only`; dependency-aware (template → dependents, policy → all specs)
+
+---
+
+### Phase 5½ — Event Infrastructure and Workspace Schema ✅
+
+- [x] Unified Event model (`EventKind`, `Event`, `EventBus`, `EventFormatter`) — typed pub/sub for every lifecycle moment; NDJSON serialisation; `run_spec()` `event_bus=` kwarg; backward-compatible with `on_token=`/`on_event=` callbacks (v1.6.0)
+- [x] Four built-in `EventFormatter` implementations: `NDJSONFormatter`, `TokenOnlyFormatter`, `RichFormatter`, `SilentFormatter` — `@runtime_checkable` Protocol for custom formatters (v1.6.0)
+- [x] Policy command hardening: `max_risk` gate scoped to scan findings only (not lint); expired allowlist warnings in text/JSON/SARIF output; threshold detail in violation messages (v1.6.0)
+- [x] `promptgenie/schemas/workspace.schema.json` — JSON Schema (Draft 2020-12) for `.promptgenie.yaml`; `additionalProperties: false` at every level; VS Code `yaml-language-server` compatible (v1.7.0)
+- [x] `WorkspaceConfig` + `DefaultsConfig` dataclasses on `PromptGenieConfig`; `load_config()` parses `workspace:` and `defaults:` blocks (v1.7.0)
+- [x] `validate_workspace_config()` — pure-Python structural validator; no `jsonschema` dep; catches unknown keys, type errors, bad enums, ISO date formats, missing required fields (v1.7.0)
+- [x] `config validate` — CI-safe schema validation command; exits 0/1/2; `--format json` for machine-readable output (v1.7.0)
+- [x] `config init` — scaffold `.promptgenie.yaml` with `$schema` pointer and `yaml-language-server` comment; `--name`, `--force` (v1.7.0)
+
+---
+
+### Phase 5 — Advanced TUI and Ecosystem ✅
+
+- [x] Full-screen Textual TUI: `promptgenie tui`; file-tree navigator, Markdown editor, findings panel, score/token/provider status bar; `Ctrl+S/R/L/D/T/Q` bindings; graceful degradation without `textual`
+- [x] Guided prompt wizard: `promptgenie wizard`; 8-step Q&A → PromptSpec YAML + rendered Markdown; `--out`, `--spec-out`, `--no-spec`
+- [x] Smart command palette: `promptgenie palette`; Textual fuzzy finder across commands, templates, context packs, and recent history; readline fallback; `--print-only` for shell piping
+- [x] Prompt history: `promptgenie history list|show|diff|replay|export|clear`; SQLite; SHA-256 content-hash deduplication; `--search`, `--provider`, `--status` filters
+- [x] Watch mode: `promptgenie watch`; `watchfiles` optional extra with polling fallback; `--debounce`; debounced Rich `Live` dashboard
+- [x] Template command group: `promptgenie template list|show|render|validate|new|edit`; layered resolution (project → user → built-in); `$EDITOR` integration; re-validates after `edit`
+- [x] Prompt lockfiles: `promptgenie lock`; SHA-256 hashes of spec, template, policy, context sources, provider/model; `--check` for CI; `--strict` for missing optional files
+- [x] Plugin SDK: 5 entry-point groups (`promptgenie.providers`, `.rules`, `.renderers`, `.context_sources`, `.evaluators`); `plugin list|doctor|scaffold|install`
+
+---
+
+### Phase 6 — Governance, SSO, and Cloud Sync *(planned)*
+
+- [ ] Team policy server — central policy fetch on every run; org-wide `disabled_rules`, allowlists, routing rules; policy version pinned in lockfile
+- [ ] SSO / OIDC credential binding — `promptgenie auth login --sso`; OIDC device flow; per-user audit attribution; `PROMPTGENIE_TOKEN` env var for CI
+- [ ] Prompt registry — `promptgenie registry push|pull`; versioned, signed, searchable; OCI-compatible layout
+- [ ] Remote eval runners — offload matrix evaluations to a cloud runner pool; cost and latency budgets enforced server-side
+- [ ] `promptgenie fmt` — normalise Markdown prompt files and PromptSpec YAML; heading order, key sort, trailing whitespace; `--check` exits 1 if formatting would change (CI-safe)
+- [ ] `promptgenie make` — YAML task graph (`promptgenie.make.yaml`); `--changed` filtering; `--parallel N`; compatible with Make, just, Taskfile
 
 ---
 
 ## Configuration
 
-Place a `.promptgenie.yaml` file in your project root (or any parent directory). The `scan`, `lint`, `generate`, `adapt`, `workflow`, `test`, and `diff` commands auto-discover and load it on every run.
+Place a `.promptgenie.yaml` file in your project root (or any parent directory). All commands auto-discover and load it. Run `promptgenie config init` to scaffold one with the JSON Schema pointer and editor autocomplete pre-wired.
+
+**Full schema:** `promptgenie/schemas/workspace.schema.json` (Draft 2020-12). All sections enforce `additionalProperties: false` — typos in key names are caught by `config validate`.
 
 ```yaml
+# yaml-language-server: $schema=https://promptgenie.dev/schemas/workspace.schema.json
+$schema: "https://promptgenie.dev/schemas/workspace.schema.json"
+
+# Project-level metadata (optional — used in policy server and audit trail)
+workspace:
+  name: "my-project"
+  version: "1.0"
+  team: "platform-eng"
+  description: "Prompt engineering workspace for the payments API."
+  policy: ".promptgenie-policy.yaml"   # default policy file
+
+# Workspace-wide defaults — overridden by --provider/--model/--target CLI flags
+defaults:
+  provider: anthropic
+  model: claude-opus-4-5
+  target: claude-code
+
 scanner:
   # Allowlist entries suppress findings whose *matched text* contains the phrase.
   # Suppression is scoped to the finding's match — not the whole prompt.
@@ -1937,7 +2176,27 @@ The `scan`, `lint`, `generate`, `adapt`, and `workflow` commands all accept:
 
 When a config file is loaded in rich output mode, its path is shown as a dim line before results. A missing or malformed `--config` file is a **fatal error** by default — pass `--best-effort` to fall back to defaults instead.
 
-Copy `.promptgenie.yaml.example` from the repo root as a starting point.
+### Config management commands
+
+```bash
+# Scaffold a new .promptgenie.yaml with schema pointer
+promptgenie config init
+promptgenie config init --name "my-project" --force   # overwrite existing
+
+# Validate .promptgenie.yaml against the workspace schema
+promptgenie config validate                            # exits 0 = valid, 1 = errors, 2 = not found
+promptgenie config validate --format json              # machine-readable for CI
+promptgenie config validate --config path/to/file.yaml
+
+# Show current effective config
+promptgenie config show
+promptgenie config show --format json
+
+# Get / set individual keys
+promptgenie config get security.airgap
+promptgenie config set security.airgap true
+promptgenie config set routing.default ollama
+```
 
 ---
 

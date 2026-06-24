@@ -8,6 +8,153 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+
+- **Native token compression engine** (`promptgenie/core/compressor.py`) — a pure-Python, dependency-free reimplementation of the lossless / low-risk structural techniques popularised by [headroom](https://github.com/headroomlabs-ai/headroom): content-routed compressors that shrink a prompt's token footprint *before* it reaches the model. No Rust toolchain, tree-sitter, or ONNX — keeps the `click`/`rich`/`pyyaml`-only base install. Public API: `compress(text, techniques=None, max_tokens=None) → CompressResult`. Techniques are fence-aware (code blocks are never corrupted) and split into two tiers: **default** (lossless — `trim-trailing-ws`, `collapse-blank-lines`, `json-compact`) and **aggressive** (mildly lossy — `strip-html-comments`, `collapse-spaces`, `dedupe-log-lines`). `CompressResult` reports `tokens_before/after`, `tokens_saved`, `ratio`, per-technique edit counts, and `budget_met`.
+
+- **`promptgenie compress`** (alias **`promptgenie optimize`**) — new command. Compresses a prompt or context file (or stdin) and writes the result to stdout or `--out`. `--max-tokens N` sets a budget (enables every technique, exits 1 if the result still exceeds N tokens); `--aggressive` adds the lossy tier; `--techniques T,T` selects an explicit subset; `--list-techniques` prints the catalogue; `--diff`/`--dry-run` report per-technique savings to stderr without emitting compressed text; `--format json|yaml` emits a machine-readable savings report with `schema_version: "1.0"`. Delivers the ROADMAP's planned Token and Cost Optimizer. 30 new tests.
+
+*Next milestone: Phase 6 — Governance, SSO, and Cloud Sync.*
+
+---
+
+## [1.7.0] — 2026-06-15  ·  Workspace Schema and Config Validation
+
+### Added
+
+- **`promptgenie/schemas/workspace.schema.json`** — JSON Schema (Draft 2020-12) for `.promptgenie.yaml`. Covers all top-level sections (`workspace`, `defaults`, `scanner`, `linter`, `routing`, `security`, `$schema`) with `additionalProperties: false` enforced at every level. Includes `$defs` for `AllowlistEntry` (string and object oneOf), `CustomScanRule`, `CustomLintRule`, and all nested object shapes. Can be wired to VS Code via `yaml.schemas` for inline autocomplete and error highlighting.
+
+- **`WorkspaceConfig` dataclass** (`promptgenie/core/config.py`) — project-level metadata block parsed from the `workspace:` section: `name`, `version`, `team`, `description`, `policy`. Exposed on `PromptGenieConfig.workspace`.
+
+- **`DefaultsConfig` dataclass** (`promptgenie/core/config.py`) — workspace-wide provider/model/target defaults: `provider`, `model`, `target`. Exposed on `PromptGenieConfig.defaults`. `load_config()` now parses both new sections alongside existing ones.
+
+- **`validate_workspace_config(raw) → (errors, warnings)`** (`promptgenie/core/config.py`) — pure-Python structural validator (no `jsonschema` dependency). Checks: unknown top-level and section keys, type mismatches (string vs bool vs list), invalid enum values for `risk`/`severity`/`confidence`/`severity_overrides`, allowlist entry structure and `expires` ISO-date format, custom rule required fields (`id`, `pattern`), routing rule required fields (`if`, `provider`). Returns two lists — errors (must fix) and advisory warnings.
+
+- **`promptgenie config validate`** — new subcommand. Auto-discovers `.promptgenie.yaml` (or accepts `--config PATH`). Prints all errors and warnings; exits 0 if valid, 1 if errors, 2 if file not found. `--format json` emits `{"valid", "file", "errors", "warnings"}`.
+
+- **`promptgenie config init`** — new subcommand. Scaffolds `.promptgenie.yaml` in the current directory with a `yaml-language-server` comment and `$schema` pointer for editor autocomplete. Writes `workspace.name` from `--name` or the current directory name. Refuses to overwrite without `--force`. The generated file passes `config validate` with zero errors.
+
+### Tests
+
+- **70 new tests** in `tests/test_workspace_schema.py` covering: `WorkspaceConfig` / `DefaultsConfig` dataclass defaults and field population; `PromptGenieConfig` field expansion; `load_config()` workspace and defaults parsing; `validate_workspace_config()` happy path (empty dict, full config, allowlist forms, custom rules), unknown-key detection across all sections, type errors, enum errors, allowlist validation (phrase, expires format, unknown keys), and warnings (blank name, conflicting block+redact); `config validate` command (valid → 0, invalid → 1, missing → 2, explicit path, JSON output, warnings in JSON); `config init` command (creates file, valid YAML, schema pointer, custom name, --force, init output passes validate, yaml-language-server comment); JSON Schema file structural assertions (title, all `$defs` present, `additionalProperties: false` everywhere).
+- **Total: 1,273 tests, all passing.**
+
+---
+
+## [1.6.0] — 2026-06-15  ·  Internal Event Model and Policy Hardening
+
+### Added
+
+- **Unified Event model** (`promptgenie/core/events.py`) — `EventKind` typed string enum (22 kinds across 7 domains: `run.*`, `lint.*`, `scan.*`, `policy.*`, `diff.*`, `eval.*`, `ci.*`, `audit.*`). Frozen `Event` dataclass with NDJSON serialisation (`to_dict()`, `to_ndjson()`), typed property accessors (`text`, `message`, `status`), and `Event.from_run_event()` bridge from the legacy `RunEvent` type in `run_engine`.
+
+- **`EventFormatter` protocol and four built-in formatters** (`promptgenie/core/event_formatters.py`):
+  - `NDJSONFormatter` — one JSON line per event; every kind passes through
+  - `TokenOnlyFormatter` — raw token text only; all other kinds suppressed (TTY streaming)
+  - `SilentFormatter` — suppresses all events (tests, dry-run contexts)
+  - `RichFormatter` — human-readable Rich markup with severity-coded icons; tokens suppressed
+
+- **`EventBus`** (`promptgenie/core/event_bus.py`) — per-run synchronous pub/sub dispatcher: `subscribe(kind, fn)`, `subscribe_all(fn)`, `emit(event)`, `emit_to(event, formatter, out)` (dispatch + format + write in one call), `collected` / `of_kind(kind)` for test assertions, `clear()` for teardown.
+
+- **`run_spec()` `event_bus=` kwarg** — optional `EventBus` passed to `run_spec()` and `_run_spec_async()`. Every `RunEvent` emitted by the pipeline is forwarded to the bus via `Event.from_run_event()`. Bus exceptions are caught and swallowed so a broken subscriber never breaks the run.
+
+- **`_risk_at_or_above(level, threshold)`** in `promptgenie/commands/policy.py` — typed risk comparison helper; unknown level strings return `False` (never breach any threshold).
+
+- **Policy `--format json` restructured** — output now has:
+  - `findings` — scan findings only (fields: `code`, `category`, `risk`, `confidence`, `line`, `message`, `recommendation`)
+  - `results` — `scan_risk_level`, `qualifying_findings`, `lint_score`, `lint_issues`
+  - `violations` — list of human-readable strings (e.g. `"max_risk: 1 finding(s) at or above HIGH (threshold: any)"`)
+  - `allowlist_warnings` — one string per expired allowlist entry
+
+- **Policy `--format sarif`** — produces two SARIF 2.1.0 runs: `promptgenie-scan` (security findings) and `promptgenie-lint` (quality findings), with per-run `policy_passed`, `policy_source`, and `violations` properties.
+
+- **Policy text output** — `All policy thresholds met.` wording on pass; lint score line shown when `--min-score > 0`; expired allowlist entries printed as `⚠ Allowlist:` warnings.
+
+### Fixed
+
+- **`max_risk` gate now applies to scan findings only** — lint quality findings (e.g. `TASK_003 HIGH`) no longer trigger the security risk threshold. Quality is governed by `min_score`; security risk by `max_risk`. This corrects a false-positive where a structurally incomplete but content-safe prompt would fail the policy gate.
+
+- **Explicit `--config` path errors now exit 2** — when `--config /path` is given and the file does not exist or cannot be parsed, `policy` exits 2 (usage error). Auto-discovery failures continue to fall back to defaults.
+
+- **Policy violation message includes threshold** — `max_risk` violations now say `(threshold: any)` when `max_findings=0` and `(threshold: N)` when a specific count is set.
+
+### Tests
+
+- **73 new tests** in `tests/test_events.py` covering: `EventKind` exhaustiveness, `Event` construction and serialisation, `from_run_event()` all legacy kinds, `EventBus` subscribe / catch-all / `emit_to` / `collected` / `of_kind` / `clear`, all four formatters, `EventFormatter` protocol structural check, and run-engine integration (dry-run + bus error isolation).
+- **37 new tests** in `tests/test_policy.py` — `_risk_at_or_above` edge cases, exit codes, text/JSON/SARIF output structure, allowlist warning surfacing, config integration.
+- **Total: 1,203 tests, all passing.**
+
+---
+
+## [1.5.0] — 2026-06-12  ·  Phase 5 — Advanced TUI and Ecosystem
+
+### Added
+
+- **Full-screen Textual TUI** (`promptgenie tui [FILE]`) — optional `promptgenie[tui]` extra (`textual>=0.50`). Layout: file-tree navigator (30%), Markdown TextArea (1fr), live findings panel (10 lines), score/token/provider status bar. Bindings: `Ctrl+S` save, `Ctrl+R` run, `Ctrl+L` lint, `Ctrl+D` diff, `Ctrl+T` eval-suite test, `Ctrl+Q` quit. Graceful degradation when `textual` is absent.
+
+- **Guided prompt wizard** (`promptgenie wizard`) — 8-step Q&A (objective, scope, out-of-scope, forbidden, output format, verification, target profile, context packs); produces rendered Markdown + optional PromptSpec YAML. `--out`, `--spec-out`, `--no-spec`. No Textual dependency required.
+
+- **Smart command palette** (`promptgenie palette`) — Textual fuzzy finder across all commands, templates, context packs, and recent history entries. readline fallback when `textual` absent. `--print-only` emits selected CLI command for shell piping (`eval $(promptgenie palette --print-only)`).
+
+- **Prompt history** (`promptgenie history list|show|diff|replay|export|clear`) — SQLite at `~/.local/share/promptgenie/history.db`. SHA-256 content-hash deduplication. Sub-commands: `list` (`--limit`, `--provider`, `--status`, `--spec`, `--search`, `--format`), `show` (run-ID prefix matching), `diff` (unified diff between two responses), `replay` (`--dry-run`), `export` (json/csv/ndjson), `clear`.
+
+- **Watch mode** (`promptgenie watch <paths> --run lint|scan|policy`) — `watchfiles` optional extra (`promptgenie[watch]`) with polling fallback. `--debounce` (ms), `--fail-on-policy`. Debounced Rich `Live` dashboard showing pass/fail per file per pipeline.
+
+- **Template command group** (`promptgenie template list|show|render|validate|new|edit`) — layered resolution: project (`.promptgenie/templates/`) → user (`~/.config/promptgenie/templates/`) → built-in. Higher-priority layers shadow by ID. `$EDITOR` integration; re-validates after `edit`. `--format json` on `list` and `show`.
+
+- **Prompt lockfiles** (`promptgenie lock prompt.yaml`) — creates `<spec>.lock` (SHA-256 hashes of spec, template, policy, context sources, provider/model). `--check` detects drift (exits 1). `--strict` also fails on missing optional files. `--format json` for CI.
+
+- **Plugin SDK** — Python `importlib.metadata` entry points across 5 groups: `promptgenie.providers`, `promptgenie.rules`, `promptgenie.renderers`, `promptgenie.context_sources`, `promptgenie.evaluators`. `plugin list` (`--format json`), `plugin doctor` (compat checks), `plugin scaffold NAME --group GROUP` (writes stub `.py`), `plugin install` (thin `pip install` wrapper).
+
+- **Signed enterprise packs** — `pack verify <pack> --pubkey KEY --method minisign|cosign`. `pack diff old.yaml new.yaml` (added/removed/modified rule IDs). `pack promote <name> --from dev --to staging`. `pack test pack.yaml tests.yaml` (declarative YAML unit tests; exits 1 on failures).
+
+### Tests
+
+- 81 new tests in `tests/test_phase5.py`. Total: **1,107 tests, all passing.**
+
+---
+
+## [1.4.0] — 2026-06-12  ·  Phase 4 — Evaluation and Regression Testing
+
+### Added
+
+- **Multi-model matrix evaluation** (`promptgenie evaluate prompt.md --models claude,gpt-4.1,gemini,ollama/llama3.1`) — `asyncio` parallel execution with `Semaphore(N)`. Per-model metrics: latency (ms), input/output tokens, cost (USD), rubric score (0–100 heuristic), safety score, determinism (σ across N runs). `--format rich|json|sarif`. `--summary`.
+
+- **Eval suites** (`promptgenie eval init|run|compare|approve`) — 11 assertion types: `contains`, `not_contains`, `regex_match`, `regex_not_match`, `json_path`, `markdown_heading_exists`, `max_risk`, `word_count_min`, `word_count_max`, `semantic_similarity` (TF-IDF cosine; no ML dependency), `judge_rubric`, `refuses_instruction_override`. Snapshot store at `evals/.snapshots/`. `--dry-run` for offline assertion testing.
+
+- **Baseline regression gates** — `--save-baseline NAME`, `--compare NAME --fail-on-regression`. Exits `EXIT_REGRESSION = 8` on breach. Per-metric thresholds: `--score-drop-threshold` (default 5 pts), `--cost-increase-pct` (default 20%), `--latency-increase-pct`, `--no-high-risk-gate`. Artefacts at `.promptgenie/baselines/<name>.json`.
+
+- **GitHub Actions native reporter** — auto-detected via `GITHUB_ACTIONS=true`. `::error file=...,line=...,col=...` and `::warning` annotations for findings and regressions. Markdown step summary appended to `$GITHUB_STEP_SUMMARY`. SARIF 2.1.0 output via `eval_results_to_sarif()`. Wired into `evaluate`, `eval run`, and `eval compare`.
+
+- **Changed-prompt detection** — `--changed` flag on `evaluate` and `eval run`. `git diff --name-only <base-ref>...HEAD`. Dependency-aware expansion: policy file changed → all specs affected; template changed → all dependent specs. `--base-ref` (default: `origin/main`).
+
+### Tests
+
+- 77 new tests in `tests/test_phase4.py`. Total: **1,007 tests, all passing.**
+
+---
+
+## [1.3.0] — 2026-06-11  ·  Phase 3 — SecDevOps Guardrails
+
+### Added
+
+- **`promptgenie analyze`** — Aggregate lint + scan with unified `Finding` model (7 OWASP-aligned categories). SARIF, JSON, YAML, Rich output. `--fail-on`, `--min-severity`, `--categories`.
+- **Data leakage detector** — 9 new scanner rules: `LEAK_JWT`, `LEAK_DB_URL`, `LEAK_INTERNAL_HOST`, `LEAK_EMAIL`, `LEAK_PHONE`, `LEAK_CC`, `LEAK_SSN`, `LEAK_IPADDR`, `LEAK_BEARER`.
+- **`promptgenie redact`** — Replace secrets and PII with `[REDACTED:LABEL]` placeholders. `--diff`, `--dry-run`, `--out`, `--categories`, `--format json`.
+- **`promptgenie redteam`** — 13 OWASP LLM Top 10 offline attack packs. Heuristic judge. `--categories`, `--attacks`, `--list-attacks`, `--fail-on-susceptible`. Outputs `attack_id`, `susceptible`, `confidence`, `payload_hash`, `explanation`.
+- **Policy-as-code v2** (`promptgenie/core/policy_engine.py`) — Auto-discovery chain, `external_model_send` gate, `allowed_providers`, `block_on_classification`, `--explain` mode, structured `PolicyEvaluation`.
+- **Provider routing** (`RoutingConfig`) — `routing.default` + declarative rules (`if: classification == confidential → provider: ollama`).
+- **`SecurityConfig`** — `security.airgap`, `security.block_secrets`, `security.redact_secrets`; air-gap enforced in `get_provider()`.
+- **`promptgenie config`** — `config show/set/get` for `security.*` and `routing.default` keys.
+- **`promptgenie auth`** — `auth login/logout/status`; keyring (`pip install 'promptgenie[secrets]'`) with env var fallback.
+- **`promptgenie audit`** — `audit list/show/export/verify`; SQLite at `~/.local/share/promptgenie/audit.db`; tamper-evident SHA-256 chain.
+
+### Tests
+
+- 71 new tests in `tests/test_phase3.py`. Total: **929 tests, all passing.**
+### Security lineage (merged from `main`)
+
+The release entries below come from the parallel security-audit line that was merged into this branch. The fixes they describe (URL-gate bypass, env exfiltration, provider TLS, spec trust, etc.) are present in the merged code.
+
 ---
 
 ## [1.2.4] — 2026-06-12  ·  Fourth security audit round
@@ -1009,7 +1156,11 @@ Initial public release.
 
 ---
 
-[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/mylesagnew/promptgenie/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/mylesagnew/promptgenie/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/mylesagnew/promptgenie/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/mylesagnew/promptgenie/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/mylesagnew/promptgenie/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/mylesagnew/promptgenie/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/mylesagnew/promptgenie/compare/v1.0.19...v1.1.0
 [1.0.11]: https://github.com/mylesagnew/promptgenie/compare/v1.0.10...v1.0.11
