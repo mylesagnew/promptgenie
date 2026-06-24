@@ -14,6 +14,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 - **`promptgenie compress`** (alias **`promptgenie optimize`**) — new command. Compresses a prompt or context file (or stdin) and writes the result to stdout or `--out`. `--max-tokens N` sets a budget (enables every technique, exits 1 if the result still exceeds N tokens); `--aggressive` adds the lossy tier; `--techniques T,T` selects an explicit subset; `--list-techniques` prints the catalogue; `--diff`/`--dry-run` report per-technique savings to stderr without emitting compressed text; `--format json|yaml` emits a machine-readable savings report with `schema_version: "1.0"`. Delivers the ROADMAP's planned Token and Cost Optimizer. 30 new tests.
 
+- **NousResearch Hermes integration** — first-class support for the Hermes model family:
+  - **`hermes` target profile** (`promptgenie/profiles/hermes.yaml`) — a `general-assistant` profile so `generate`/`adapt`/`lint`/`diff`/scoring work with `--target hermes`. Captures Hermes specifics: ChatML/strong-system-role guidance, reliable JSON-mode/tool-calling, 128k context, and external-guardrail security controls (Hermes is steerable and lightly moderated). `generate` auto-infers the target from "hermes"/"nous".
+  - **Built-in `hermes` provider** (`promptgenie/core/providers.py`) — OpenAI-compatible, pointed at the Nous Portal (`https://inference-api.nousresearch.com/v1`, `NOUS_API_KEY`, default model `Hermes-4-405B`, tools + structured output, 128k context). Works with `run`/`benchmark`/`evaluate` and `provider doctor hermes` out of the box; override the model with `--model`.
+  - **Cost estimation** — Hermes rates added to the `evaluate` cost table. 11 new tests.
+
 *Next milestone: Phase 6 — Governance, SSO, and Cloud Sync.*
 
 ---

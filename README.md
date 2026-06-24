@@ -30,7 +30,8 @@ PromptGenie makes prompts:
 - **Scored** — rates every prompt across 7 quality dimensions
 - **Repeatable** — YAML model profiles, templates, and context packs versioned alongside your code
 - **Executable** — `promptgenie run spec.yaml` executes a PromptSpec end-to-end: resolves variables, assembles context, enforces policy, streams the response, and persists the run
-- **Provider-agnostic** — built-in adapters for Anthropic, OpenAI, Ollama, LM Studio, LocalAI, and vLLM; add any OpenAI-compatible endpoint with one command; no API key needed for local providers
+- **Provider-agnostic** — built-in adapters for Anthropic, OpenAI, Ollama, LM Studio, LocalAI, vLLM, and NousResearch Hermes; add any OpenAI-compatible endpoint with one command; no API key needed for local providers
+- **Hermes-ready** — first-class NousResearch Hermes support: a `hermes` target profile for `generate`/`adapt`/`lint`/scoring, plus a built-in OpenAI-compatible `hermes` provider (Nous Portal, `NOUS_API_KEY`) for `run`/`benchmark`/`evaluate`
 
 ---
 
@@ -117,6 +118,12 @@ promptgenie spec render code-review.prompt.yaml --var env=prod
 promptgenie provider add ollama \
   --base-url http://localhost:11434/v1 --model llama3 --local
 promptgenie provider doctor ollama
+
+# NousResearch Hermes (built-in provider — just set your key)
+export NOUS_API_KEY=...
+promptgenie provider doctor hermes
+promptgenie generate "summarise this incident" --target hermes
+promptgenie run code-review.prompt.yaml --provider hermes --model Hermes-4-405B --stream
 
 # Execute the spec end-to-end
 promptgenie run code-review.prompt.yaml --provider ollama --stream

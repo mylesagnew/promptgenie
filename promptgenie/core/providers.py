@@ -182,6 +182,19 @@ def _default_providers() -> dict[str, ProviderConfig]:
                 max_context_tokens=8192,
             ),
         ),
+        "hermes": ProviderConfig(
+            name="hermes",
+            type="openai_compat",
+            base_url="https://inference-api.nousresearch.com/v1",
+            api_key_env="NOUS_API_KEY",
+            default_model="Hermes-4-405B",
+            capabilities=ProviderCapabilities(
+                streaming=True,
+                structured_output=True,
+                max_context_tokens=128_000,
+                supports_tools=True,
+            ),
+        ),
     }
 
 
