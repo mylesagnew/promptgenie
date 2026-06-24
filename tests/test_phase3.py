@@ -4,45 +4,40 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
 from promptgenie.cli import cli
-from promptgenie.core.analyze import analyze, findings_to_sarif, AnalyzeResult
+from promptgenie.core.analyze import AnalyzeResult, analyze, findings_to_sarif
 from promptgenie.core.audit import (
-    write_audit_event,
+    export_audit,
     list_audit_events,
     load_audit_event,
     verify_chain,
-    export_audit,
+    write_audit_event,
 )
 from promptgenie.core.config import (
     PromptGenieConfig,
     RoutingConfig,
     RoutingRule,
     SecurityConfig,
-    load_config,
 )
 from promptgenie.core.policy_engine import (
     PolicyConfig,
-    evaluate_policy,
-    discover_policy_file,
-    load_policy,
     _build_policy,
+    evaluate_policy,
+    load_policy,
 )
 from promptgenie.core.redactor import redact
-from promptgenie.core.redteam import run_redteam, ATTACK_PACKS
+from promptgenie.core.redteam import ATTACK_PACKS, run_redteam
 from promptgenie.core.scanner import scan
-
 
 # ---------------------------------------------------------------------------
 # Scanner — data leakage rules
 # ---------------------------------------------------------------------------
+
 
 class TestDataLeakageRules:
     def test_jwt_detected(self):
@@ -96,6 +91,7 @@ class TestDataLeakageRules:
 # ---------------------------------------------------------------------------
 # Redactor
 # ---------------------------------------------------------------------------
+
 
 class TestRedactor:
     def test_redacts_api_key(self):
@@ -154,6 +150,7 @@ class TestRedactor:
 # ---------------------------------------------------------------------------
 # Analyze
 # ---------------------------------------------------------------------------
+
 
 class TestAnalyze:
     def test_analyze_returns_findings(self):
@@ -236,10 +233,10 @@ class TestAnalyze:
 # Policy engine v2
 # ---------------------------------------------------------------------------
 
+
 class TestPolicyEngineV2:
     def _make_result(self, findings=None):
         """Create a minimal AnalyzeResult for testing."""
-        from promptgenie.core.analyze import AnalyzeResult, Finding, Location
         return AnalyzeResult(
             findings=findings or [],
             lint_score=80,
@@ -254,11 +251,16 @@ class TestPolicyEngineV2:
 
     def test_policy_fails_on_high_finding(self):
         from promptgenie.core.analyze import Finding, Location
+
         finding = Finding(
-            code="SEC_001", title="Injection", severity="HIGH",
+            code="SEC_001",
+            title="Injection",
+            severity="HIGH",
             category="prompt-injection",
             location=Location(file="test.md", line=1),
-            evidence="", remediation="", confidence="HIGH",
+            evidence="",
+            remediation="",
+            confidence="HIGH",
             source="scan",
         )
         policy = PolicyConfig(max_risk="HIGH")
@@ -281,6 +283,7 @@ class TestPolicyEngineV2:
 
     def test_policy_classification_block(self):
         from promptgenie.core.policy_engine import ExternalSendPolicy
+
         policy = PolicyConfig(
             external_model_send=ExternalSendPolicy(
                 block_on_classification=["confidential"],
@@ -292,11 +295,16 @@ class TestPolicyEngineV2:
 
     def test_policy_explain_mode(self):
         from promptgenie.core.analyze import Finding, Location
+
         finding = Finding(
-            code="SEC_001", title="Injection", severity="HIGH",
+            code="SEC_001",
+            title="Injection",
+            severity="HIGH",
             category="prompt-injection",
             location=Location(file="test.md", line=1),
-            evidence="", remediation="", confidence="HIGH",
+            evidence="",
+            remediation="",
+            confidence="HIGH",
             source="scan",
         )
         policy = PolicyConfig(max_risk="HIGH")
@@ -318,7 +326,6 @@ class TestPolicyEngineV2:
 
     def test_policy_min_score_violation(self):
         policy = PolicyConfig(min_score=90)
-        from promptgenie.core.analyze import AnalyzeResult
         result = AnalyzeResult(findings=[], lint_score=60, scan_risk="NONE")
         ev = evaluate_policy(result, policy)
         assert not ev.passed
@@ -328,6 +335,7 @@ class TestPolicyEngineV2:
 # ---------------------------------------------------------------------------
 # Routing config
 # ---------------------------------------------------------------------------
+
 
 class TestRoutingConfig:
     def test_default_provider(self):
@@ -374,11 +382,10 @@ class TestRoutingConfig:
 # Security config — air gap
 # ---------------------------------------------------------------------------
 
+
 class TestSecurityConfig:
     def test_airgap_blocks_external_provider(self):
         from promptgenie.core.providers import get_provider
-        from promptgenie.core.config import PromptGenieConfig, SecurityConfig
-        import promptgenie.core.providers as providers_mod
 
         with patch("promptgenie.core.config.load_config") as mock_cfg:
             cfg = PromptGenieConfig(security=SecurityConfig(airgap=True))
@@ -397,6 +404,7 @@ class TestSecurityConfig:
 # ---------------------------------------------------------------------------
 # Red team
 # ---------------------------------------------------------------------------
+
 
 class TestRedTeam:
     def test_redteam_returns_results(self):
@@ -468,7 +476,9 @@ class TestRedTeam:
         runner = CliRunner()
         f = tmp_path / "prompt.md"
         f.write_text("You are a helpful assistant.")
-        result = runner.invoke(cli, ["redteam", str(f), "--categories", "LLM01", "--format", "json"])
+        result = runner.invoke(
+            cli, ["redteam", str(f), "--categories", "LLM01", "--format", "json"]
+        )
         assert result.exit_code in (0, 1)
         data = json.loads(result.output)
         for ar in data["attack_results"]:
@@ -479,11 +489,13 @@ class TestRedTeam:
 # Audit log
 # ---------------------------------------------------------------------------
 
+
 class TestAuditLog:
     @pytest.fixture(autouse=True)
     def _patch_db(self, tmp_path, monkeypatch):
         """Redirect audit DB to a temp path for each test."""
         import promptgenie.core.audit as audit_mod
+
         db_path = tmp_path / "audit.db"
         monkeypatch.setattr(audit_mod, "_AUDIT_DB", db_path)
         yield
@@ -561,13 +573,18 @@ class TestAuditLog:
 # Config command
 # ---------------------------------------------------------------------------
 
+
 class TestConfigCommand:
     def test_config_set_airgap(self, tmp_path):
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path):
             result = runner.invoke(cli, ["config", "set", "security.airgap", "true"])
             assert result.exit_code == 0
-            assert "air-gap" in result.output.lower() or "airgap" in result.output.lower() or "Air-gap" in result.output
+            assert (
+                "air-gap" in result.output.lower()
+                or "airgap" in result.output.lower()
+                or "Air-gap" in result.output
+            )
 
     def test_config_set_and_get(self, tmp_path):
         runner = CliRunner()
@@ -600,6 +617,7 @@ class TestConfigCommand:
 # Auth command (no actual keyring — mocked)
 # ---------------------------------------------------------------------------
 
+
 class TestAuthCommand:
     def test_auth_status_no_providers(self):
         runner = CliRunner()
@@ -608,27 +626,35 @@ class TestAuthCommand:
             assert result.exit_code == 0
 
     def test_auth_status_with_env_var(self):
-        from promptgenie.core.providers import ProviderConfig, ProviderCapabilities
+        from promptgenie.core.providers import ProviderCapabilities, ProviderConfig
+
         provider = ProviderConfig(
-            name="anthropic", type="anthropic",
+            name="anthropic",
+            type="anthropic",
             api_key_env="ANTHROPIC_API_KEY",
             capabilities=ProviderCapabilities(),
         )
         runner = CliRunner()
-        with patch("promptgenie.commands.auth.load_providers_config",
-                   return_value={"anthropic": provider}):
-            with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-                result = runner.invoke(cli, ["auth", "status"])
-                assert result.exit_code == 0
+        with (
+            patch(
+                "promptgenie.commands.auth.load_providers_config",
+                return_value={"anthropic": provider},
+            ),
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+        ):
+            result = runner.invoke(cli, ["auth", "status"])
+            assert result.exit_code == 0
 
 
 # ---------------------------------------------------------------------------
 # Customer ID scanner rules
 # ---------------------------------------------------------------------------
 
+
 class TestCustomerIDScanner:
     def test_stripe_customer_id_detected(self):
         from promptgenie.core.scanner import scan
+
         text = "Billing customer: cus_1A2B3C4D5E6F7G8"
         result = scan(text)
         codes = [f.code for f in result.findings]
@@ -636,6 +662,7 @@ class TestCustomerIDScanner:
 
     def test_uuid_customer_binding_detected(self):
         from promptgenie.core.scanner import scan
+
         text = "customer_id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'"
         result = scan(text)
         codes = [f.code for f in result.findings]
@@ -643,12 +670,14 @@ class TestCustomerIDScanner:
 
     def test_customer_id_redacted(self):
         from promptgenie.core.redactor import redact
+
         text = "Billing customer: cus_1A2B3C4D5E6F7G8"
         result = redact(text)
         assert "[REDACTED:CUSTOMER_ID]" in result.redacted_text
 
     def test_uuid_customer_id_redacted(self):
         from promptgenie.core.redactor import redact
+
         text = "account_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'"
         result = redact(text)
         assert "[REDACTED:CUSTOMER_ID]" in result.redacted_text
@@ -657,6 +686,7 @@ class TestCustomerIDScanner:
 # ---------------------------------------------------------------------------
 # Custom rules in analyze command
 # ---------------------------------------------------------------------------
+
 
 class TestCustomRulesAnalyze:
     def test_custom_rules_loaded_and_matched(self, tmp_path):
@@ -673,12 +703,19 @@ class TestCustomRulesAnalyze:
         prompt_file = tmp_path / "prompt.txt"
         prompt_file.write_text("This prompt contains forbidden_keyword in it.")
         runner = CliRunner()
-        result = runner.invoke(cli, [
-            "analyze", str(prompt_file),
-            "--format", "json",
-            "--custom-rules", str(rules_file),
-            "--fail-on", "NONE",
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "analyze",
+                str(prompt_file),
+                "--format",
+                "json",
+                "--custom-rules",
+                str(rules_file),
+                "--fail-on",
+                "NONE",
+            ],
+        )
         assert result.exit_code == 0
         data = json.loads(result.output)
         codes = [f["code"] for f in data["findings"]]
@@ -690,11 +727,17 @@ class TestCustomRulesAnalyze:
         prompt_file = tmp_path / "prompt.txt"
         prompt_file.write_text("clean prompt text")
         runner = CliRunner()
-        result = runner.invoke(cli, [
-            "analyze", str(prompt_file),
-            "--custom-rules", str(rules_file),
-            "--fail-on", "NONE",
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "analyze",
+                str(prompt_file),
+                "--custom-rules",
+                str(rules_file),
+                "--fail-on",
+                "NONE",
+            ],
+        )
         # Should not crash — just no custom rules loaded
         assert result.exit_code == 0
 
@@ -703,39 +746,41 @@ class TestCustomRulesAnalyze:
 # Block-secrets / redact-secrets pre-send gate
 # ---------------------------------------------------------------------------
 
+
 class TestSecretsGate:
     def test_block_secrets_halts_run(self, tmp_path):
         spec_file = tmp_path / "spec.yaml"
         spec_file.write_text(
-            "prompt: 'My API key is sk-abc123def456ghi789jkl0'\n"
-            "model: claude-haiku-4-5\n"
+            "prompt: 'My API key is sk-abc123def456ghi789jkl0'\nmodel: claude-haiku-4-5\n"
         )
         runner = CliRunner()
         with patch("promptgenie.commands.run.run_spec") as mock_run:
             from promptgenie.core.errors import EXIT_SECRETS, PromptGenieError
+
             mock_run.side_effect = PromptGenieError("Secrets detected", code=EXIT_SECRETS)
-            result = runner.invoke(cli, [
-                "run", str(spec_file), "--block-secrets", "--dry-run"
-            ])
+            result = runner.invoke(cli, ["run", str(spec_file), "--block-secrets", "--dry-run"])
             # PromptGenieError with EXIT_SECRETS should surface as non-zero exit
             assert result.exit_code != 0
 
     def test_redact_secrets_replaces_before_send(self):
         from promptgenie.core.run_engine import _apply_secrets_gate
+
         text = "key: sk-abcdefghij1234567890klmnop"
         redacted, warnings = _apply_secrets_gate(text, block_secrets=False, redact_secrets=True)
         assert "sk-" not in redacted
         assert "[REDACTED" in redacted
 
     def test_block_secrets_raises_on_secret(self):
-        from promptgenie.core.run_engine import _apply_secrets_gate
         from promptgenie.core.errors import PromptGenieError
+        from promptgenie.core.run_engine import _apply_secrets_gate
+
         text = "key: sk-abcdefghij1234567890klmnop"
         with pytest.raises(PromptGenieError):
             _apply_secrets_gate(text, block_secrets=True, redact_secrets=False)
 
     def test_no_gate_emits_warning_only(self):
         from promptgenie.core.run_engine import _apply_secrets_gate
+
         text = "key: sk-abcdefghij1234567890klmnop"
         redacted, warnings = _apply_secrets_gate(text, block_secrets=False, redact_secrets=False)
         # Text unchanged, but warnings emitted
@@ -747,15 +792,23 @@ class TestSecretsGate:
 # Auth login --source external secret managers
 # ---------------------------------------------------------------------------
 
+
 class TestAuthLoginSource:
     def test_auth_login_source_aws_ssm_stores_ref(self):
         runner = CliRunner()
         with patch("promptgenie.commands.auth.store_credential_ref") as mock_store:
-            result = runner.invoke(cli, [
-                "auth", "login", "anthropic",
-                "--source", "aws-ssm",
-                "--ref", "/promptgenie/anthropic/key",
-            ])
+            runner.invoke(
+                cli,
+                [
+                    "auth",
+                    "login",
+                    "anthropic",
+                    "--source",
+                    "aws-ssm",
+                    "--ref",
+                    "/promptgenie/anthropic/key",
+                ],
+            )
             mock_store.assert_called_once_with(
                 "anthropic", "ref:aws-ssm:/promptgenie/anthropic/key"
             )
@@ -763,11 +816,18 @@ class TestAuthLoginSource:
     def test_auth_login_source_1password_stores_ref(self):
         runner = CliRunner()
         with patch("promptgenie.commands.auth.store_credential_ref") as mock_store:
-            result = runner.invoke(cli, [
-                "auth", "login", "anthropic",
-                "--source", "1password",
-                "--ref", "MyVault/anthropic/api_key",
-            ])
+            runner.invoke(
+                cli,
+                [
+                    "auth",
+                    "login",
+                    "anthropic",
+                    "--source",
+                    "1password",
+                    "--ref",
+                    "MyVault/anthropic/api_key",
+                ],
+            )
             mock_store.assert_called_once_with(
                 "anthropic", "ref:1password:MyVault/anthropic/api_key"
             )
@@ -775,11 +835,18 @@ class TestAuthLoginSource:
     def test_auth_login_source_gcp_stores_ref(self):
         runner = CliRunner()
         with patch("promptgenie.commands.auth.store_credential_ref") as mock_store:
-            result = runner.invoke(cli, [
-                "auth", "login", "anthropic",
-                "--source", "gcp-secret",
-                "--ref", "my-project/anthropic-key",
-            ])
+            runner.invoke(
+                cli,
+                [
+                    "auth",
+                    "login",
+                    "anthropic",
+                    "--source",
+                    "gcp-secret",
+                    "--ref",
+                    "my-project/anthropic-key",
+                ],
+            )
             mock_store.assert_called_once_with(
                 "anthropic", "ref:gcp-secret:my-project/anthropic-key"
             )
@@ -787,24 +854,38 @@ class TestAuthLoginSource:
     def test_auth_login_source_azure_stores_ref(self):
         runner = CliRunner()
         with patch("promptgenie.commands.auth.store_credential_ref") as mock_store:
-            result = runner.invoke(cli, [
-                "auth", "login", "anthropic",
-                "--source", "azure-keyvault",
-                "--ref", "my-vault/anthropic-key",
-            ])
-            mock_store.assert_called_once_with(
-                "anthropic", "ref:azure-kv:my-vault/anthropic-key"
+            runner.invoke(
+                cli,
+                [
+                    "auth",
+                    "login",
+                    "anthropic",
+                    "--source",
+                    "azure-keyvault",
+                    "--ref",
+                    "my-vault/anthropic-key",
+                ],
             )
+            mock_store.assert_called_once_with("anthropic", "ref:azure-kv:my-vault/anthropic-key")
 
     def test_auth_login_keyring_source_unchanged(self):
         runner = CliRunner()
-        with patch("promptgenie.commands.auth.store_credential") as mock_store, \
-             patch("promptgenie.commands.auth.is_keyring_available", return_value=True):
-            result = runner.invoke(cli, [
-                "auth", "login", "anthropic",
-                "--key", "sk-test123",
-                "--source", "keyring",
-            ])
+        with (
+            patch("promptgenie.commands.auth.store_credential") as mock_store,
+            patch("promptgenie.commands.auth.is_keyring_available", return_value=True),
+        ):
+            runner.invoke(
+                cli,
+                [
+                    "auth",
+                    "login",
+                    "anthropic",
+                    "--key",
+                    "sk-test123",
+                    "--source",
+                    "keyring",
+                ],
+            )
             mock_store.assert_called_once_with("anthropic", "sk-test123")
 
 
@@ -812,27 +893,38 @@ class TestAuthLoginSource:
 # Credential ref resolution
 # ---------------------------------------------------------------------------
 
+
 class TestCredentialRefResolution:
     def test_resolve_ref_not_a_ref_returns_literal(self):
         from promptgenie.core.credentials import resolve_credential_ref
+
         assert resolve_credential_ref("sk-literal") == "sk-literal"
 
     def test_resolve_unknown_scheme_returns_none(self):
         from promptgenie.core.credentials import resolve_credential_ref
+
         assert resolve_credential_ref("ref:unknown:foo") is None
 
     def test_get_credential_resolves_ref(self):
         from promptgenie.core.credentials import get_credential
-        from promptgenie.core.providers import ProviderConfig, ProviderCapabilities
+        from promptgenie.core.providers import ProviderCapabilities, ProviderConfig
+
         provider_cfg = ProviderConfig(
-            name="anthropic", type="anthropic",
+            name="anthropic",
+            type="anthropic",
             api_key="ref:aws-ssm:/promptgenie/anthropic/key",
             capabilities=ProviderCapabilities(),
         )
-        with patch("promptgenie.core.providers.load_providers_config",
-                   return_value={"anthropic": provider_cfg}), \
-             patch("promptgenie.core.credentials.resolve_credential_ref",
-                   return_value="resolved-secret-value") as mock_resolve:
+        with (
+            patch(
+                "promptgenie.core.providers.load_providers_config",
+                return_value={"anthropic": provider_cfg},
+            ),
+            patch(
+                "promptgenie.core.credentials.resolve_credential_ref",
+                return_value="resolved-secret-value",
+            ) as mock_resolve,
+        ):
             val = get_credential("anthropic")
             mock_resolve.assert_called_once_with("ref:aws-ssm:/promptgenie/anthropic/key")
             assert val == "resolved-secret-value"
@@ -842,6 +934,7 @@ class TestCredentialRefResolution:
 # Local tarball pack install
 # ---------------------------------------------------------------------------
 
+
 class TestLocalPackInstall:
     def test_local_yaml_install(self, tmp_path):
         pack_yaml = tmp_path / "my-pack.yaml"
@@ -849,12 +942,14 @@ class TestLocalPackInstall:
             "id: my-pack\nname: My Pack\ndescription: Test\nstack: []\nrules: []\n"
         )
         from promptgenie.core.registry import install_from_local
+
         dest = install_from_local(str(pack_yaml))
         assert dest.exists()
         assert dest.name == "my-pack.yaml"
 
     def test_local_tarball_install(self, tmp_path):
         import tarfile
+
         pack_dir = tmp_path / "pack"
         pack_dir.mkdir()
         pack_yaml = pack_dir / "pack.yaml"
@@ -865,11 +960,13 @@ class TestLocalPackInstall:
         with tarfile.open(tarball, "w:gz") as tf:
             tf.add(pack_yaml, arcname="pack/pack.yaml")
         from promptgenie.core.registry import install_from_local
+
         dest = install_from_local(str(tarball), install_dir=tmp_path / "installed")
         assert dest.exists()
 
     def test_local_tarball_sha256_mismatch_raises(self, tmp_path):
         import tarfile
+
         pack_dir = tmp_path / "pack"
         pack_dir.mkdir()
         (pack_dir / "pack.yaml").write_text("id: x\nname: X\ndescription: \nstack: []\nrules: []\n")
@@ -877,5 +974,6 @@ class TestLocalPackInstall:
         with tarfile.open(tarball, "w:gz") as tf:
             tf.add(pack_dir / "pack.yaml", arcname="pack/pack.yaml")
         from promptgenie.core.registry import install_from_local
+
         with pytest.raises(ValueError, match="SHA-256"):
             install_from_local(str(tarball), expected_sha256="000000")

@@ -40,25 +40,54 @@ from promptgenie.renderers.rich import diag_console, is_structured_mode
 def _build_command(name: str) -> click.Command:
     @click.command(name)
     @click.argument("file", default="-", metavar="FILE|-")
-    @click.option("--out", "-o", default=None, type=click.Path(),
-                  help="Write compressed output to FILE instead of stdout.")
-    @click.option("--max-tokens", "max_tokens", default=None, type=int, metavar="N",
-                  help="Target token budget. Enables every technique and exits 1 "
-                       "if the result still exceeds N tokens.")
-    @click.option("--techniques", default=None, metavar="T[,T...]",
-                  help="Comma-separated technique names to run (overrides tiers). "
-                       f"Available: {', '.join(ALL_TECHNIQUES)}.")
-    @click.option("--aggressive", is_flag=True,
-                  help="Include the aggressive (mildly lossy) techniques on top of defaults.")
-    @click.option("--list-techniques", "list_techniques", is_flag=True,
-                  help="List available compression techniques and exit.")
-    @click.option("--format", "output_format",
-                  type=click.Choice(["text", "json", "yaml"], case_sensitive=False),
-                  default="text", show_default=True)
-    @click.option("--diff", is_flag=True,
-                  help="Print a per-technique savings summary to stderr.")
-    @click.option("--dry-run", "dry_run", is_flag=True,
-                  help="Report savings without writing or emitting compressed text.")
+    @click.option(
+        "--out",
+        "-o",
+        default=None,
+        type=click.Path(),
+        help="Write compressed output to FILE instead of stdout.",
+    )
+    @click.option(
+        "--max-tokens",
+        "max_tokens",
+        default=None,
+        type=int,
+        metavar="N",
+        help="Target token budget. Enables every technique and exits 1 "
+        "if the result still exceeds N tokens.",
+    )
+    @click.option(
+        "--techniques",
+        default=None,
+        metavar="T[,T...]",
+        help="Comma-separated technique names to run (overrides tiers). "
+        f"Available: {', '.join(ALL_TECHNIQUES)}.",
+    )
+    @click.option(
+        "--aggressive",
+        is_flag=True,
+        help="Include the aggressive (mildly lossy) techniques on top of defaults.",
+    )
+    @click.option(
+        "--list-techniques",
+        "list_techniques",
+        is_flag=True,
+        help="List available compression techniques and exit.",
+    )
+    @click.option(
+        "--format",
+        "output_format",
+        type=click.Choice(["text", "json", "yaml"], case_sensitive=False),
+        default="text",
+        show_default=True,
+    )
+    @click.option("--diff", is_flag=True, help="Print a per-technique savings summary to stderr.")
+    @click.option(
+        "--dry-run",
+        "dry_run",
+        is_flag=True,
+        help="Report savings without writing or emitting compressed text.",
+    )
     def _cmd(
         file: str,
         out: str | None,
@@ -179,12 +208,8 @@ def _print_techniques() -> None:
         tech = TECHNIQUES[name]
         tier = "[yellow]aggressive[/yellow]" if tech.aggressive else "[green]default[/green]"
         diag_console.print(f"  [bold]{name}[/bold]  {tier}\n    [dim]{tech.description}[/dim]")
-    diag_console.print(
-        f"\n[dim]Default tier: {', '.join(DEFAULT_TECHNIQUES)}[/dim]"
-    )
-    diag_console.print(
-        f"[dim]Aggressive tier: {', '.join(AGGRESSIVE_TECHNIQUES)}[/dim]"
-    )
+    diag_console.print(f"\n[dim]Default tier: {', '.join(DEFAULT_TECHNIQUES)}[/dim]")
+    diag_console.print(f"[dim]Aggressive tier: {', '.join(AGGRESSIVE_TECHNIQUES)}[/dim]")
 
 
 def _print_summary(file: str, result, pct: float) -> None:

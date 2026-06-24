@@ -45,7 +45,6 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -70,12 +69,13 @@ def _sha256_str(s: str) -> str:
 # Dataclasses
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class LockEntry:
-    kind: str           # template | policy | context | pack | provider
-    path: str = ""      # file path (relative to spec dir)
-    hash: str = ""      # sha256:<hex>
-    id: str = ""        # pack id or provider name
+    kind: str  # template | policy | context | pack | provider
+    path: str = ""  # file path (relative to spec dir)
+    hash: str = ""  # sha256:<hex>
+    id: str = ""  # pack id or provider name
     version: str = ""
     model: str = ""
 
@@ -95,14 +95,18 @@ class LockfileRecord:
             "spec": self.spec,
             "spec_hash": self.spec_hash,
             "entries": [
-                {k: v for k, v in {
-                    "kind": e.kind,
-                    "path": e.path or None,
-                    "hash": e.hash or None,
-                    "id": e.id or None,
-                    "version": e.version or None,
-                    "model": e.model or None,
-                }.items() if v}
+                {
+                    k: v
+                    for k, v in {
+                        "kind": e.kind,
+                        "path": e.path or None,
+                        "hash": e.hash or None,
+                        "id": e.id or None,
+                        "version": e.version or None,
+                        "model": e.model or None,
+                    }.items()
+                    if v
+                }
                 for e in self.entries
             ],
         }
@@ -111,13 +115,14 @@ class LockfileRecord:
 @dataclass
 class LockfileCheckResult:
     passed: bool
-    stale: list[str] = field(default_factory=list)      # descriptions of what changed
-    missing: list[str] = field(default_factory=list)    # lock entries that are now absent
+    stale: list[str] = field(default_factory=list)  # descriptions of what changed
+    missing: list[str] = field(default_factory=list)  # lock entries that are now absent
 
 
 # ---------------------------------------------------------------------------
 # Lockfile creation
 # ---------------------------------------------------------------------------
+
 
 def create_lockfile(
     spec_path: str | Path,
@@ -148,20 +153,24 @@ def create_lockfile(
     # Template reference
     if "template" in raw:
         tmpl_path = spec_dir / raw["template"]
-        entries.append(LockEntry(
-            kind="template",
-            path=str(raw["template"]),
-            hash=_sha256_file(tmpl_path),
-        ))
+        entries.append(
+            LockEntry(
+                kind="template",
+                path=str(raw["template"]),
+                hash=_sha256_file(tmpl_path),
+            )
+        )
 
     # Vars file reference
     if "vars_file" in raw:
         vf = spec_dir / raw["vars_file"]
-        entries.append(LockEntry(
-            kind="context",
-            path=str(raw["vars_file"]),
-            hash=_sha256_file(vf),
-        ))
+        entries.append(
+            LockEntry(
+                kind="context",
+                path=str(raw["vars_file"]),
+                hash=_sha256_file(vf),
+            )
+        )
 
     # Context sources with file paths
     for source in raw.get("context", {}).get("sources", []):
@@ -169,30 +178,36 @@ def create_lockfile(
             src_path = source.get("path") or source.get("file")
             if src_path:
                 full = spec_dir / src_path
-                entries.append(LockEntry(
-                    kind="context",
-                    path=str(src_path),
-                    hash=_sha256_file(full),
-                ))
+                entries.append(
+                    LockEntry(
+                        kind="context",
+                        path=str(src_path),
+                        hash=_sha256_file(full),
+                    )
+                )
 
     # Extra context paths passed explicitly
-    for ep in (extra_context_paths or []):
-        entries.append(LockEntry(
-            kind="context",
-            path=ep,
-            hash=_sha256_file(spec_dir / ep),
-        ))
+    for ep in extra_context_paths or []:
+        entries.append(
+            LockEntry(
+                kind="context",
+                path=ep,
+                hash=_sha256_file(spec_dir / ep),
+            )
+        )
 
     # Policy file (auto-discovered)
     _POLICY_NAMES = [".promptgenie.policy.yaml", "promptgenie.policy.yaml"]
     for pname in _POLICY_NAMES:
         pp = spec_dir / pname
         if pp.exists():
-            entries.append(LockEntry(
-                kind="policy",
-                path=pname,
-                hash=_sha256_file(pp),
-            ))
+            entries.append(
+                LockEntry(
+                    kind="policy",
+                    path=pname,
+                    hash=_sha256_file(pp),
+                )
+            )
             break
     else:
         # Walk up to find policy
@@ -200,22 +215,26 @@ def create_lockfile(
             for pname in _POLICY_NAMES:
                 pp = parent / pname
                 if pp.exists():
-                    entries.append(LockEntry(
-                        kind="policy",
-                        path=str(pp),
-                        hash=_sha256_file(pp),
-                    ))
+                    entries.append(
+                        LockEntry(
+                            kind="policy",
+                            path=str(pp),
+                            hash=_sha256_file(pp),
+                        )
+                    )
                     break
 
     # Provider / model
     provider = raw.get("provider", "")
     model = raw.get("model", "")
     if provider or model:
-        entries.append(LockEntry(
-            kind="provider",
-            id=provider,
-            model=model,
-        ))
+        entries.append(
+            LockEntry(
+                kind="provider",
+                id=provider,
+                model=model,
+            )
+        )
 
     return LockfileRecord(
         spec=str(spec_path),
@@ -229,12 +248,11 @@ def create_lockfile(
 # Write / load
 # ---------------------------------------------------------------------------
 
+
 def write_lockfile(record: LockfileRecord, dest: Path | None = None) -> Path:
     """Write *record* to a lockfile and return its path."""
     if dest is None:
-        dest = Path(record.spec).with_suffix(
-            Path(record.spec).suffix + LOCKFILE_SUFFIX
-        )
+        dest = Path(record.spec).with_suffix(Path(record.spec).suffix + LOCKFILE_SUFFIX)
     dest.write_text(
         yaml.dump(record.to_dict(), default_flow_style=False, sort_keys=False),
         encoding="utf-8",
@@ -274,6 +292,7 @@ def load_lockfile(lock_path: str | Path) -> LockfileRecord | None:
 # ---------------------------------------------------------------------------
 # Check
 # ---------------------------------------------------------------------------
+
 
 def check_lockfile(record: LockfileRecord) -> LockfileCheckResult:
     """Verify all locked hashes still match the current files on disk."""

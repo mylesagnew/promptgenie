@@ -332,8 +332,7 @@ def install_from_local(
     if expected_sha256 and not _verify_sha256(src, expected_sha256):
         actual = hashlib.sha256(src.read_bytes()).hexdigest()
         raise ValueError(
-            f"SHA-256 mismatch for local pack {src.name}. "
-            f"Expected {expected_sha256}, got {actual}"
+            f"SHA-256 mismatch for local pack {src.name}. Expected {expected_sha256}, got {actual}"
         )
 
     if src.suffix.lower() == ".yaml":
@@ -343,6 +342,7 @@ def install_from_local(
 
     if src.name.endswith(".tar.gz") or src.suffix.lower() == ".tgz":
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             with _tarfile.open(src, "r:gz") as tf:
@@ -350,10 +350,8 @@ def install_from_local(
                 for member in tf.getmembers():
                     member_path = (tmp / member.name).resolve()
                     if not str(member_path).startswith(str(tmp.resolve())):
-                        raise ValueError(
-                            f"Unsafe path in tarball: {member.name!r}"
-                        )
-                tf.extractall(tmp)
+                        raise ValueError(f"Unsafe path in tarball: {member.name!r}")
+                tf.extractall(tmp)  # nosec B202 - members validated against path traversal above
 
             # Find the pack YAML: prefer pack.yaml at root, then any *.yaml
             yaml_files = list(tmp.rglob("pack.yaml")) + list(tmp.rglob("*.yaml"))
@@ -371,8 +369,7 @@ def install_from_local(
         return dest
 
     raise ValueError(
-        f"Unsupported local pack format: {src.name!r}. "
-        "Use a .yaml file or a .tar.gz tarball."
+        f"Unsupported local pack format: {src.name!r}. Use a .yaml file or a .tar.gz tarball."
     )
 
 

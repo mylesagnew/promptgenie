@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -73,14 +73,14 @@ _MIN_REQUIRED_VERSION = (1, 0, 0)
 class PluginManifest:
     name: str
     group: str
-    entry_point: str        # dotted module:attr reference
-    package: str            # installed package name
+    entry_point: str  # dotted module:attr reference
+    package: str  # installed package name
     version: str
-    dist_name: str          # distribution name
-    origin: str = ""        # PyPI, local, git, etc.
+    dist_name: str  # distribution name
+    origin: str = ""  # PyPI, local, git, etc.
     loaded: bool = False
     load_error: str = ""
-    obj: Any = None         # the loaded object (populated by load_plugins)
+    obj: Any = None  # the loaded object (populated by load_plugins)
 
     @property
     def group_label(self) -> str:
@@ -90,6 +90,7 @@ class PluginManifest:
 # ---------------------------------------------------------------------------
 # Discovery
 # ---------------------------------------------------------------------------
+
 
 def list_plugins(groups: tuple[str, ...] | None = None) -> list[PluginManifest]:
     """Return all installed PromptGenie plugin entry points.
@@ -110,15 +111,17 @@ def list_plugins(groups: tuple[str, ...] | None = None) -> list[PluginManifest]:
             version = getattr(dist, "version", "?") if dist else "?"
             # Detect origin
             origin = _detect_origin(dist)
-            manifests.append(PluginManifest(
-                name=ep.name,
-                group=group,
-                entry_point=ep.value,
-                package=dist_name,
-                version=version,
-                dist_name=dist_name,
-                origin=origin,
-            ))
+            manifests.append(
+                PluginManifest(
+                    name=ep.name,
+                    group=group,
+                    entry_point=ep.value,
+                    package=dist_name,
+                    version=version,
+                    dist_name=dist_name,
+                    origin=origin,
+                )
+            )
 
     return manifests
 
@@ -150,6 +153,7 @@ def _detect_origin(dist: Any) -> str:
         direct_url = dist.read_text("direct_url.json")
         if direct_url:
             import json
+
             data = json.loads(direct_url)
             url = data.get("url", "")
             if url.startswith("file://"):
@@ -165,6 +169,7 @@ def _detect_origin(dist: Any) -> str:
 # ---------------------------------------------------------------------------
 # Compatibility checker
 # ---------------------------------------------------------------------------
+
 
 def check_plugin_compat(manifest: PluginManifest) -> list[str]:
     """Return a list of compatibility warnings for *manifest*.
@@ -188,15 +193,10 @@ def check_plugin_compat(manifest: PluginManifest) -> list[str]:
     if manifest.group == "promptgenie.providers":
         missing = [m for m in ("complete", "stream") if not hasattr(obj, m)]
         if missing:
-            warnings.append(
-                f"Provider {manifest.name!r} is missing methods: {', '.join(missing)}"
-            )
+            warnings.append(f"Provider {manifest.name!r} is missing methods: {', '.join(missing)}")
 
-    if manifest.group == "promptgenie.rules":
-        if not isinstance(obj, (list, tuple)):
-            warnings.append(
-                f"Rules plugin {manifest.name!r} must export a list of ScanRule objects"
-            )
+    if manifest.group == "promptgenie.rules" and not isinstance(obj, (list, tuple)):
+        warnings.append(f"Rules plugin {manifest.name!r} must export a list of ScanRule objects")
 
     return warnings
 
@@ -233,9 +233,7 @@ def scaffold_plugin(
     from pathlib import Path
 
     if group not in PLUGIN_GROUPS:
-        raise ValueError(
-            f"Unknown group {group!r}. Valid groups: {list(PLUGIN_GROUPS)}"
-        )
+        raise ValueError(f"Unknown group {group!r}. Valid groups: {list(PLUGIN_GROUPS)}")
 
     module = re.sub(r"[^a-z0-9_]", "_", name.lower())
     suffix = group.split(".")[-1].rstrip("s")  # "providers" → "provider"

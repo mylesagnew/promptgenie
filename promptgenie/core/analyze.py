@@ -83,15 +83,15 @@ class Location:
 class Finding:
     code: str
     title: str
-    severity: str          # CRITICAL | HIGH | MEDIUM | LOW | INFO
-    category: str          # prompt-injection | data-leakage | secret-exposure |
+    severity: str  # CRITICAL | HIGH | MEDIUM | LOW | INFO
+    category: str  # prompt-injection | data-leakage | secret-exposure |
     #                        unsafe-agent-permission | destructive-action | compliance | quality
     location: Location
     evidence: str
     remediation: str
-    confidence: str        # HIGH | MEDIUM | LOW
+    confidence: str  # HIGH | MEDIUM | LOW
     tags: list[str] = field(default_factory=list)
-    source: str = "scan"   # scan | lint | policy | custom
+    source: str = "scan"  # scan | lint | policy | custom
 
 
 @dataclass
@@ -145,37 +145,41 @@ def analyze(
         for sf in scan_result.findings:
             raw_cat = sf.category or "secret"
             category = _SCAN_CATEGORY_MAP.get(raw_cat, raw_cat)
-            severity = sf.risk
-            findings.append(Finding(
-                code=sf.code,
-                title=sf.message,
-                severity=severity,
-                category=category,
-                location=Location(file=file_path, line=sf.line, col=sf.col),
-                evidence=sf.matched_text,
-                remediation=sf.recommendation,
-                confidence=sf.confidence,
-                tags=[raw_cat],
-                source="scan",
-            ))
+            severity: str = sf.risk
+            findings.append(
+                Finding(
+                    code=sf.code,
+                    title=sf.message,
+                    severity=severity,
+                    category=category,
+                    location=Location(file=file_path, line=sf.line, col=sf.col),
+                    evidence=sf.matched_text,
+                    remediation=sf.recommendation,
+                    confidence=sf.confidence,
+                    tags=[raw_cat],
+                    source="scan",
+                )
+            )
 
     if include_lint:
         lint_result = lint(text, config=linter_config)
         for li in lint_result.issues:
             raw_cat = _lint_category_for_code(li.code)
             severity = _LINT_SEV_MAP.get(li.severity, li.severity)
-            findings.append(Finding(
-                code=li.code,
-                title=li.message,
-                severity=severity,
-                category=raw_cat,
-                location=Location(file=file_path, line=li.line, col=li.col),
-                evidence="",
-                remediation=li.suggestion,
-                confidence=li.confidence,
-                tags=["quality"],
-                source="lint",
-            ))
+            findings.append(
+                Finding(
+                    code=li.code,
+                    title=li.message,
+                    severity=severity,
+                    category=raw_cat,
+                    location=Location(file=file_path, line=li.line, col=li.col),
+                    evidence="",
+                    remediation=li.suggestion,
+                    confidence=li.confidence,
+                    tags=["quality"],
+                    source="lint",
+                )
+            )
 
     return AnalyzeResult(
         findings=findings,
@@ -212,16 +216,18 @@ def findings_to_sarif(result: AnalyzeResult, file_path: str = "<stdin>") -> dict
     for finding in result.findings:
         if finding.code not in seen_codes:
             seen_codes.add(finding.code)
-            rules.append({
-                "id": finding.code,
-                "name": finding.title[:80],
-                "shortDescription": {"text": finding.title},
-                "fullDescription": {"text": finding.remediation or finding.title},
-                "properties": {
-                    "category": finding.category,
-                    "tags": finding.tags,
-                },
-            })
+            rules.append(
+                {
+                    "id": finding.code,
+                    "name": finding.title[:80],
+                    "shortDescription": {"text": finding.title},
+                    "fullDescription": {"text": finding.remediation or finding.title},
+                    "properties": {
+                        "category": finding.category,
+                        "tags": finding.tags,
+                    },
+                }
+            )
 
         sarif_level = {
             "CRITICAL": "error",
@@ -231,30 +237,32 @@ def findings_to_sarif(result: AnalyzeResult, file_path: str = "<stdin>") -> dict
             "INFO": "none",
         }.get(finding.severity, "note")
 
-        results.append({
-            "ruleId": finding.code,
-            "level": sarif_level,
-            "message": {"text": finding.title},
-            "locations": [
-                {
-                    "physicalLocation": {
-                        "artifactLocation": {"uri": file_path},
-                        "region": {
-                            "startLine": max(1, finding.location.line or 1),
-                            "startColumn": max(1, finding.location.col or 1),
-                        },
+        results.append(
+            {
+                "ruleId": finding.code,
+                "level": sarif_level,
+                "message": {"text": finding.title},
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": file_path},
+                            "region": {
+                                "startLine": max(1, finding.location.line or 1),
+                                "startColumn": max(1, finding.location.col or 1),
+                            },
+                        }
                     }
-                }
-            ],
-            "properties": {
-                "category": finding.category,
-                "severity": finding.severity,
-                "confidence": finding.confidence,
-                "source": finding.source,
-                "evidence": finding.evidence,
-                "remediation": finding.remediation,
-            },
-        })
+                ],
+                "properties": {
+                    "category": finding.category,
+                    "severity": finding.severity,
+                    "confidence": finding.confidence,
+                    "source": finding.source,
+                    "evidence": finding.evidence,
+                    "remediation": finding.remediation,
+                },
+            }
+        )
 
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",

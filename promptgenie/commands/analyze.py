@@ -22,7 +22,7 @@ import yaml
 
 from promptgenie.core.analyze import analyze, findings_to_sarif
 from promptgenie.core.config import PromptGenieConfig, load_config
-from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE, PromptGenieError
+from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import safe_read_text
 from promptgenie.renderers.rich import console, diag_console, is_structured_mode
 
@@ -47,29 +47,46 @@ _CATEGORY_LABELS = {
 
 @click.command("analyze")
 @click.argument("file", default="-", metavar="FILE|-")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json", "yaml", "sarif"], case_sensitive=False),
-              default="rich", show_default=True,
-              help="Output format.")
-@click.option("--categories", default=None, metavar="CAT[,CAT...]",
-              help="Comma-separated categories to include. Default: all.")
-@click.option("--min-severity",
-              type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
-                                case_sensitive=False),
-              default="LOW", show_default=True,
-              help="Only report findings at or above this severity.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "yaml", "sarif"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--categories",
+    default=None,
+    metavar="CAT[,CAT...]",
+    help="Comma-separated categories to include. Default: all.",
+)
+@click.option(
+    "--min-severity",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"], case_sensitive=False),
+    default="LOW",
+    show_default=True,
+    help="Only report findings at or above this severity.",
+)
 @click.option("--no-lint", is_flag=True, help="Skip lint analysis.")
 @click.option("--no-scan", is_flag=True, help="Skip security scan.")
-@click.option("--fail-on",
-              type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"],
-                                case_sensitive=False),
-              default="HIGH", show_default=True,
-              help="Exit 1 if any finding at or above this severity is found. "
-                   "Use NONE to always exit 0.")
-@click.option("--config", "config_path", default=None,
-              help="Path to .promptgenie.yaml config file.")
-@click.option("--custom-rules", "custom_rules_file", default=None, type=click.Path(exists=True),
-              help="YAML file with extra scan rules to run alongside built-in rules.")
+@click.option(
+    "--fail-on",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"], case_sensitive=False),
+    default="HIGH",
+    show_default=True,
+    help="Exit 1 if any finding at or above this severity is found. Use NONE to always exit 0.",
+)
+@click.option(
+    "--config", "config_path", default=None, help="Path to .promptgenie.yaml config file."
+)
+@click.option(
+    "--custom-rules",
+    "custom_rules_file",
+    default=None,
+    type=click.Path(exists=True),
+    help="YAML file with extra scan rules to run alongside built-in rules.",
+)
 def analyze_cmd(
     file: str,
     output_format: str,
@@ -100,7 +117,7 @@ def analyze_cmd(
         text = safe_read_text(file)
     except (OSError, ValueError) as exc:
         diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     cfg: PromptGenieConfig
     try:
@@ -111,23 +128,25 @@ def analyze_cmd(
     # Load custom scan rules if provided
     if custom_rules_file and not no_scan:
         import yaml as _yaml
+
         from promptgenie.core.scanner import ScanRule
+
         try:
-            raw_rules = _yaml.safe_load(
-                Path(custom_rules_file).read_text(encoding="utf-8")
-            ) or {}
+            raw_rules = _yaml.safe_load(Path(custom_rules_file).read_text(encoding="utf-8")) or {}
             extra_rules = []
             for r in raw_rules.get("rules", []):
-                extra_rules.append(ScanRule(
-                    id=str(r.get("id", "CUSTOM")),
-                    category=str(r.get("category", "custom")),
-                    pattern=str(r.get("pattern", "")),
-                    risk=str(r.get("risk", "MEDIUM")),
-                    confidence=str(r.get("confidence", "MEDIUM")),
-                    message=str(r.get("message", "Custom rule match.")),
-                    recommendation=str(r.get("recommendation", "")),
-                    use_original_text=bool(r.get("use_original_text", False)),
-                ))
+                extra_rules.append(
+                    ScanRule(
+                        id=str(r.get("id", "CUSTOM")),
+                        category=str(r.get("category", "custom")),
+                        pattern=str(r.get("pattern", "")),
+                        risk=str(r.get("risk", "MEDIUM")),  # type: ignore[arg-type]
+                        confidence=str(r.get("confidence", "MEDIUM")),  # type: ignore[arg-type]
+                        message=str(r.get("message", "Custom rule match.")),
+                        recommendation=str(r.get("recommendation", "")),
+                        use_original_text=bool(r.get("use_original_text", False)),
+                    )
+                )
             cfg.scanner.custom_scan_rules.extend(extra_rules)
         except Exception as exc:
             diag_console.print(f"[yellow]Warning:[/yellow] Could not load custom rules: {exc}")
@@ -143,10 +162,7 @@ def analyze_cmd(
 
     # Filter by severity
     min_order = _SEVERITY_ORDER.get(min_severity.upper(), 4)
-    findings = [
-        f for f in result.findings
-        if _SEVERITY_ORDER.get(f.severity, 99) <= min_order
-    ]
+    findings = [f for f in result.findings if _SEVERITY_ORDER.get(f.severity, 99) <= min_order]
 
     # Filter by category
     if categories:
@@ -159,6 +175,7 @@ def analyze_cmd(
     # ── Output ──────────────────────────────────────────────────────────────
     if output_format == "sarif":
         from promptgenie.core.analyze import AnalyzeResult
+
         filtered_result = AnalyzeResult(
             findings=findings,
             lint_score=result.lint_score,
@@ -208,9 +225,7 @@ def analyze_cmd(
         raise SystemExit(EXIT_OK)
 
     fail_order = _SEVERITY_ORDER.get(fail_on.upper(), 99)
-    has_failure = any(
-        _SEVERITY_ORDER.get(f.severity, 99) <= fail_order for f in findings
-    )
+    has_failure = any(_SEVERITY_ORDER.get(f.severity, 99) <= fail_order for f in findings)
     raise SystemExit(EXIT_FAILURE if has_failure else EXIT_OK)
 
 

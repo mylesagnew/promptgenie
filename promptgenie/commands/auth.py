@@ -15,9 +15,7 @@ import click
 
 from promptgenie.core.credentials import (
     delete_credential,
-    get_credential,
     is_keyring_available,
-    list_stored_credentials,
     store_credential,
     store_credential_ref,
 )
@@ -40,14 +38,20 @@ def auth_group() -> None:
 
 @auth_group.command("login")
 @click.argument("provider")
-@click.option("--key", default=None, envvar="PG_API_KEY",
-              help="API key value. If omitted, prompted interactively.")
-@click.option("--env-var", default=None,
-              help="Read key from this environment variable instead of prompting.")
+@click.option(
+    "--key",
+    default=None,
+    envvar="PG_API_KEY",
+    help="API key value. If omitted, prompted interactively.",
+)
+@click.option(
+    "--env-var", default=None, help="Read key from this environment variable instead of prompting."
+)
 @click.option(
     "--source",
     type=click.Choice(["keyring", "env", "1password", "aws-ssm", "gcp-secret", "azure-keyvault"]),
-    default="keyring", show_default=True,
+    default="keyring",
+    show_default=True,
     help=(
         "Where to read/store the credential. "
         "'keyring' stores the raw key in the system keyring (default). "
@@ -56,12 +60,16 @@ def auth_group() -> None:
         "ref: pointer in providers.yaml and resolve it at runtime."
     ),
 )
-@click.option("--ref", "ref_path", default=None,
-              help=(
-                  "Path in the external secret manager, e.g. "
-                  "'MyVault/anthropic/api_key' for 1password, "
-                  "'/promptgenie/anthropic/key' for aws-ssm."
-              ))
+@click.option(
+    "--ref",
+    "ref_path",
+    default=None,
+    help=(
+        "Path in the external secret manager, e.g. "
+        "'MyVault/anthropic/api_key' for 1password, "
+        "'/promptgenie/anthropic/key' for aws-ssm."
+    ),
+)
 def auth_login_cmd(
     provider: str,
     key: str | None,
@@ -87,9 +95,7 @@ def auth_login_cmd(
     # ── External secret manager path ─────────────────────────────────────────
     if source in _EXTERNAL_SOURCES:
         if not ref_path:
-            ref_path = click.prompt(
-                f"Secret path in {source} for provider {provider!r}"
-            )
+            ref_path = click.prompt(f"Secret path in {source} for provider {provider!r}")
         scheme_map = {
             "1password": "1password",
             "aws-ssm": "aws-ssm",
@@ -102,14 +108,12 @@ def auth_login_cmd(
             store_credential_ref(provider, ref)
         except Exception as exc:
             diag_console.print(f"[red]Error:[/red] {exc}")
-            raise SystemExit(EXIT_USAGE)
+            raise SystemExit(EXIT_USAGE) from None
         console.print(
             f"[green]✓[/green] Credential reference for [bold]{provider}[/bold] stored: "
             f"[dim]{ref}[/dim]"
         )
-        console.print(
-            f"[dim]The key will be resolved from {source} at runtime.[/dim]"
-        )
+        console.print(f"[dim]The key will be resolved from {source} at runtime.[/dim]")
         return
 
     # ── Keyring / env path ───────────────────────────────────────────────────
@@ -125,9 +129,7 @@ def auth_login_cmd(
         env_name = env_var or click.prompt(f"Environment variable name for {provider!r}")
         key = os.environ.get(env_name)
         if not key:
-            diag_console.print(
-                f"[red]Error:[/red] Environment variable {env_name!r} is not set."
-            )
+            diag_console.print(f"[red]Error:[/red] Environment variable {env_name!r} is not set.")
             raise SystemExit(EXIT_USAGE)
     elif not key:
         key = click.prompt(f"API key for {provider!r}", hide_input=True)
@@ -144,17 +146,18 @@ def auth_login_cmd(
     except ImportError:
         # Fallback: save to providers.yaml api_key field
         from promptgenie.core.providers import load_providers_config, save_providers_config
+
         providers = load_providers_config()
         if provider not in providers:
             diag_console.print(
                 f"[yellow]⚠[/yellow] Provider '{provider}' not configured. "
                 f"Add it first with: promptgenie provider add {provider}"
             )
-            raise SystemExit(EXIT_USAGE)
+            raise SystemExit(EXIT_USAGE) from None
         providers[provider].api_key = key
         save_providers_config(providers)
         console.print(
-            f"[yellow]⚠[/yellow] Keyring unavailable. Key saved to providers.yaml. "
+            "[yellow]⚠[/yellow] Keyring unavailable. Key saved to providers.yaml. "
             "Install keyring for secure storage: pip install 'promptgenie[secrets]'"
         )
 
@@ -180,9 +183,7 @@ def auth_logout_cmd(provider: str, yes: bool) -> None:
     if deleted:
         console.print(f"[green]✓[/green] Credentials for [bold]{provider}[/bold] removed.")
     else:
-        diag_console.print(
-            f"[yellow]No stored credentials found for '{provider}'.[/yellow]"
-        )
+        diag_console.print(f"[yellow]No stored credentials found for '{provider}'.[/yellow]")
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +208,7 @@ def auth_status_cmd() -> None:
         raise SystemExit(EXIT_OK)
 
     from rich.table import Table
+
     table = Table(title="Credential Status", show_header=True, header_style="bold")
     table.add_column("Provider", style="cyan", no_wrap=True)
     table.add_column("Type", width=14)
@@ -224,6 +226,7 @@ def auth_status_cmd() -> None:
         if keyring_ok:
             try:
                 import keyring  # type: ignore[import-untyped]
+
                 keyring_has = bool(keyring.get_password("promptgenie", name))
             except Exception:
                 pass
@@ -257,8 +260,7 @@ def auth_status_cmd() -> None:
 
     if not keyring_ok:
         console.print(
-            "\n[dim]Keyring not available. Install with: "
-            "pip install 'promptgenie[secrets]'[/dim]"
+            "\n[dim]Keyring not available. Install with: pip install 'promptgenie[secrets]'[/dim]"
         )
 
     if not all_ok:

@@ -18,16 +18,17 @@ Public API
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
 
 
 @dataclass
 class WatchPipeline:
     """One pipeline step to run on every file change."""
-    name: str              # "lint", "scan", "policy", "test", "evaluate"
-    label: str = ""        # Rich display label
+
+    name: str  # "lint", "scan", "policy", "test", "evaluate"
+    label: str = ""  # Rich display label
     run_fn: Callable[[str, str], dict] | None = None  # (file_path, content) → result dict
 
     def __post_init__(self) -> None:
@@ -49,8 +50,10 @@ class WatchResult:
 # Built-in pipeline runners
 # ---------------------------------------------------------------------------
 
+
 def _run_lint(file_path: str, content: str) -> dict:
     from promptgenie.core.linter import lint
+
     result = lint(content)
     high = sum(1 for i in result.issues if i.severity == "HIGH")
     med = sum(1 for i in result.issues if i.severity == "MEDIUM")
@@ -63,6 +66,7 @@ def _run_lint(file_path: str, content: str) -> dict:
 
 def _run_scan(file_path: str, content: str) -> dict:
     from promptgenie.core.scanner import scan
+
     result = scan(content)
     risk = result.risk_level
     count = len(result.findings)
@@ -75,19 +79,24 @@ def _run_scan(file_path: str, content: str) -> dict:
 
 def _run_policy(file_path: str, content: str) -> dict:
     try:
-        from promptgenie.core.policy_engine import discover_policy_file, evaluate_policy, load_policy
+        from promptgenie.core.policy_engine import (
+            discover_policy_file,
+            evaluate_policy,
+            load_policy,
+        )
+
         policy_file = discover_policy_file()
         if policy_file is None:
             return {"passed": True, "summary": "No policy file", "findings_count": 0}
         policy = load_policy(policy_file)
         from promptgenie.core.analyze import analyze
+
         analysis = analyze(content)
         report = evaluate_policy(analysis, policy)
         return {
             "passed": report.passed,
             "summary": (
-                "Policy passed" if report.passed
-                else f"{len(report.violations)} violation(s)"
+                "Policy passed" if report.passed else f"{len(report.violations)} violation(s)"
             ),
             "findings_count": len(report.violations),
         }
@@ -106,16 +115,14 @@ def make_pipeline(name: str) -> WatchPipeline:
     """Create a built-in WatchPipeline by name."""
     fn = _PIPELINE_RUNNERS.get(name)
     if fn is None:
-        raise ValueError(
-            f"Unknown pipeline {name!r}. "
-            f"Valid: {sorted(_PIPELINE_RUNNERS.keys())}"
-        )
+        raise ValueError(f"Unknown pipeline {name!r}. Valid: {sorted(_PIPELINE_RUNNERS.keys())}")
     return WatchPipeline(name=name, label=name.title(), run_fn=fn)
 
 
 # ---------------------------------------------------------------------------
 # Watch engine
 # ---------------------------------------------------------------------------
+
 
 def run_watch(
     paths: list[str],
@@ -132,12 +139,13 @@ def run_watch(
     """
     from rich.live import Live
     from rich.table import Table
-    from rich.text import Text
+
     from promptgenie.renderers.rich import console
 
     # Try watchfiles; fall back to polling
     try:
         from watchfiles import watch as _wf_watch
+
         _use_watchfiles = True
     except ImportError:
         _use_watchfiles = False
@@ -203,7 +211,9 @@ def run_watch(
             live.update(_build_dashboard())
 
             if _use_watchfiles:
-                from watchfiles import watch as _wf_watch, Change
+                from watchfiles import Change
+                from watchfiles import watch as _wf_watch
+
                 for changes in _wf_watch(*paths, debounce=debounce_ms):
                     for change_type, changed_path in changes:
                         if change_type in (Change.modified, Change.added):
@@ -212,8 +222,7 @@ def run_watch(
             else:
                 # Polling fallback
                 mtimes: dict[str, float] = {
-                    fp: Path(fp).stat().st_mtime for fp in resolved_paths
-                    if Path(fp).exists()
+                    fp: Path(fp).stat().st_mtime for fp in resolved_paths if Path(fp).exists()
                 }
                 while True:
                     time.sleep(poll_interval_s)

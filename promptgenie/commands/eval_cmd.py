@@ -78,8 +78,13 @@ cases:
 @eval_group.command("init")
 @click.argument("name")
 @click.option("--prompt", "prompt_path", default="", help="Path to the prompt file.")
-@click.option("--out", "out_dir", default="evals", show_default=True,
-              help="Directory to write the new suite file.")
+@click.option(
+    "--out",
+    "out_dir",
+    default="evals",
+    show_default=True,
+    help="Directory to write the new suite file.",
+)
 def eval_init_cmd(name: str, prompt_path: str, out_dir: str) -> None:
     """Scaffold a new eval suite YAML file.
 
@@ -89,6 +94,7 @@ def eval_init_cmd(name: str, prompt_path: str, out_dir: str) -> None:
       promptgenie eval init my-suite --out evals/
     """
     import re
+
     safe_name = re.sub(r"[^\w\-]", "-", name).lower()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -109,6 +115,7 @@ def eval_init_cmd(name: str, prompt_path: str, out_dir: str) -> None:
 # eval run
 # ---------------------------------------------------------------------------
 
+
 @eval_group.command("run")
 @click.argument("suite_file", type=click.Path(exists=True))
 @click.option("--provider", "-p", default=None, help="Override provider from suite file.")
@@ -116,19 +123,34 @@ def eval_init_cmd(name: str, prompt_path: str, out_dir: str) -> None:
 @click.option("--timeout", default=60, type=int, show_default=True)
 @click.option("--max-tokens", default=1024, type=int, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Skip provider calls; run offline assertions only.")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json", "sarif"], case_sensitive=False),
-              default="rich", show_default=True)
-@click.option("--compare", "compare_snapshot", is_flag=True,
-              help="Diff against saved snapshot and report regressions.")
-@click.option("--fail-on-regression", is_flag=True,
-              help="Exit 1 if snapshot comparison finds regressions.")
-@click.option("--approve", is_flag=True,
-              help="Save this run as the new approved snapshot after running.")
-@click.option("--snapshot-dir", default=None, type=click.Path(),
-              help="Directory for snapshot storage (default: evals/.snapshots/).")
-@click.option("--changed", is_flag=True,
-              help="Skip if the suite file (or its prompt) is not git-changed.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "sarif"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
+@click.option(
+    "--compare",
+    "compare_snapshot",
+    is_flag=True,
+    help="Diff against saved snapshot and report regressions.",
+)
+@click.option(
+    "--fail-on-regression", is_flag=True, help="Exit 1 if snapshot comparison finds regressions."
+)
+@click.option(
+    "--approve", is_flag=True, help="Save this run as the new approved snapshot after running."
+)
+@click.option(
+    "--snapshot-dir",
+    default=None,
+    type=click.Path(),
+    help="Directory for snapshot storage (default: evals/.snapshots/).",
+)
+@click.option(
+    "--changed", is_flag=True, help="Skip if the suite file (or its prompt) is not git-changed."
+)
 @click.option("--base-ref", default="origin/main", show_default=True)
 @click.option("--summary", "summary_path", default=None, envvar="GITHUB_STEP_SUMMARY")
 @click.option("--verbose", "-v", is_flag=True)
@@ -172,6 +194,7 @@ def eval_run_cmd(
     # ── --changed gate ───────────────────────────────────────────────────────
     if changed:
         from promptgenie.core.change_detector import detect_changed_prompts
+
         changed_set = detect_changed_prompts(base_ref)
         changed_resolved = {p.resolve() for p in changed_set.files}
         if Path(suite_file).resolve() not in changed_resolved:
@@ -185,19 +208,27 @@ def eval_run_cmd(
         suite = load_eval_suite(suite_file)
     except Exception as exc:
         diag_console.print(f"[red]Error loading suite:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     # ── Run ──────────────────────────────────────────────────────────────────
     if output_format == "rich":
         with console.status(f"[bold blue]Running eval suite {suite.name!r}…[/bold blue]"):
             result = run_eval_suite(
-                suite, provider=provider, model=model,
-                timeout=timeout, max_tokens=max_tokens, dry_run=dry_run,
+                suite,
+                provider=provider,
+                model=model,
+                timeout=timeout,
+                max_tokens=max_tokens,
+                dry_run=dry_run,
             )
     else:
         result = run_eval_suite(
-            suite, provider=provider, model=model,
-            timeout=timeout, max_tokens=max_tokens, dry_run=dry_run,
+            suite,
+            provider=provider,
+            model=model,
+            timeout=timeout,
+            max_tokens=max_tokens,
+            dry_run=dry_run,
         )
 
     # ── Snapshot compare ─────────────────────────────────────────────────────
@@ -227,7 +258,8 @@ def eval_run_cmd(
         _output_rich(result, diff, verbose=verbose)
 
     # ── GitHub Actions reporting ─────────────────────────────────────────────
-    from promptgenie.core.gh_reporter import GHReporter, eval_results_to_sarif, format_eval_summary
+    from promptgenie.core.gh_reporter import GHReporter, format_eval_summary
+
     reporter = GHReporter(summary_path=summary_path)
     if reporter.active or summary_path:
         md = format_eval_summary(result, prompt_file=suite_file)
@@ -246,12 +278,17 @@ def eval_run_cmd(
 # eval compare
 # ---------------------------------------------------------------------------
 
+
 @eval_group.command("compare")
 @click.argument("suite_file", type=click.Path(exists=True))
 @click.option("--snapshot-dir", default=None, type=click.Path())
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def eval_compare_cmd(suite_file: str, snapshot_dir: str | None, output_format: str) -> None:
     """Show diff between the last run and the saved snapshot.
 
@@ -264,7 +301,6 @@ def eval_compare_cmd(suite_file: str, snapshot_dir: str | None, output_format: s
         load_eval_suite,
         load_snapshot,
         run_eval_suite,
-        save_snapshot,
     )
 
     sdir = Path(snapshot_dir) if snapshot_dir else None
@@ -272,7 +308,7 @@ def eval_compare_cmd(suite_file: str, snapshot_dir: str | None, output_format: s
         suite = load_eval_suite(suite_file)
     except Exception as exc:
         diag_console.print(f"[red]Error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     old_snap = load_snapshot(suite.name, sdir)
     if old_snap is None:
@@ -288,13 +324,19 @@ def eval_compare_cmd(suite_file: str, snapshot_dir: str | None, output_format: s
     diff = compare_snapshots(old_snap, current)
 
     if output_format == "json":
-        sys.stdout.write(json.dumps({
-            "suite": suite.name,
-            "regressions": diff.regressions,
-            "improvements": diff.improvements,
-            "new_cases": diff.new_cases,
-            "removed_cases": diff.removed_cases,
-        }, indent=2) + "\n")
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "suite": suite.name,
+                    "regressions": diff.regressions,
+                    "improvements": diff.improvements,
+                    "new_cases": diff.new_cases,
+                    "removed_cases": diff.removed_cases,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
     else:
         _print_diff(diff)
 
@@ -304,6 +346,7 @@ def eval_compare_cmd(suite_file: str, snapshot_dir: str | None, output_format: s
 # ---------------------------------------------------------------------------
 # eval approve
 # ---------------------------------------------------------------------------
+
 
 @eval_group.command("approve")
 @click.argument("suite_file", type=click.Path(exists=True))
@@ -331,7 +374,7 @@ def eval_approve_cmd(
         suite = load_eval_suite(suite_file)
     except Exception as exc:
         diag_console.print(f"[red]Error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     with console.status(f"Running suite {suite.name!r}…"):
         result = run_eval_suite(suite, provider=provider, model=model, dry_run=dry_run)
@@ -345,6 +388,7 @@ def eval_approve_cmd(
 # ---------------------------------------------------------------------------
 # Output renderers
 # ---------------------------------------------------------------------------
+
 
 def _output_rich(result: object, diff: object | None, *, verbose: bool = False) -> None:
     from rich.table import Table
@@ -424,5 +468,6 @@ def _output_json(result: object, diff: object | None) -> None:
 
 def _output_sarif(result: object, file_path: str) -> None:
     from promptgenie.core.gh_reporter import eval_results_to_sarif
+
     doc = eval_results_to_sarif(result, file_path=file_path)
     sys.stdout.write(json.dumps(doc, indent=2) + "\n")

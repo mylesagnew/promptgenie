@@ -115,6 +115,7 @@ def _trim_trailing_ws(text: str) -> tuple[str, int]:
 
 def _collapse_blank_lines(text: str) -> tuple[str, int]:
     """Collapse runs of 3+ newlines (≥2 blank lines) down to one blank line."""
+
     def repl(m: re.Match[str]) -> str:
         return "\n\n"
 
@@ -131,6 +132,7 @@ def _strip_html_comments(text: str) -> tuple[str, int]:
 
 def _collapse_repeated_spaces(text: str) -> tuple[str, int]:
     """Collapse 2+ inline spaces to one — prose only, never indentation."""
+
     def fn(seg: str) -> tuple[str, int]:
         out_lines: list[str] = []
         count = 0
@@ -198,6 +200,7 @@ def _dedupe_log_lines(text: str) -> tuple[str, int]:
     Targets build logs and repeated stack frames. Operates on prose only and
     ignores blank lines so Markdown spacing is preserved.
     """
+
     def fn(seg: str) -> tuple[str, int]:
         lines = seg.splitlines(keepends=True)
         out: list[str] = []
@@ -216,7 +219,7 @@ def _dedupe_log_lines(text: str) -> tuple[str, int]:
             run = j - i
             if run >= 3:
                 body = line.rstrip("\r\n")
-                nl = line[len(body):]
+                nl = line[len(body) :]
                 out.append(f"{body}  (×{run}){nl}")
                 folded += 1
             else:
@@ -241,18 +244,39 @@ class Technique:
 
 
 _TECHNIQUE_LIST: list[Technique] = [
-    Technique("trim-trailing-ws", _trim_trailing_ws, False,
-              "Strip trailing whitespace at line ends."),
-    Technique("collapse-blank-lines", _collapse_blank_lines, False,
-              "Collapse 2+ consecutive blank lines into one."),
-    Technique("json-compact", _json_compact, False,
-              "Minify whole-document JSON and ```json fenced blocks."),
-    Technique("strip-html-comments", _strip_html_comments, True,
-              "Remove <!-- HTML comments --> from prose."),
-    Technique("collapse-spaces", _collapse_repeated_spaces, True,
-              "Collapse runs of inline spaces in prose (keeps indentation)."),
-    Technique("dedupe-log-lines", _dedupe_log_lines, True,
-              "Fold 3+ identical consecutive lines into 'line (×N)'."),
+    Technique(
+        "trim-trailing-ws", _trim_trailing_ws, False, "Strip trailing whitespace at line ends."
+    ),
+    Technique(
+        "collapse-blank-lines",
+        _collapse_blank_lines,
+        False,
+        "Collapse 2+ consecutive blank lines into one.",
+    ),
+    Technique(
+        "json-compact",
+        _json_compact,
+        False,
+        "Minify whole-document JSON and ```json fenced blocks.",
+    ),
+    Technique(
+        "strip-html-comments",
+        _strip_html_comments,
+        True,
+        "Remove <!-- HTML comments --> from prose.",
+    ),
+    Technique(
+        "collapse-spaces",
+        _collapse_repeated_spaces,
+        True,
+        "Collapse runs of inline spaces in prose (keeps indentation).",
+    ),
+    Technique(
+        "dedupe-log-lines",
+        _dedupe_log_lines,
+        True,
+        "Fold 3+ identical consecutive lines into 'line (×N)'.",
+    ),
 ]
 
 TECHNIQUES: dict[str, Technique] = {t.name: t for t in _TECHNIQUE_LIST}

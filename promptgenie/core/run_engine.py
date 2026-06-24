@@ -86,8 +86,7 @@ class RunResult:
     def redacted_vars(self) -> dict[str, Any]:
         """Return resolved_vars with secret values replaced by '***'."""
         return {
-            k: "***" if k in self.secret_var_names else v
-            for k, v in self.resolved_vars.items()
+            k: "***" if k in self.secret_var_names else v for k, v in self.resolved_vars.items()
         }
 
 
@@ -187,8 +186,7 @@ def _apply_secrets_gate(
     if block_secrets:
         detail = "; ".join(warnings[:3])
         raise PromptGenieError(
-            f"Pre-send gate blocked: {len(secret_findings)} secret(s)/PII detected. "
-            f"{detail}",
+            f"Pre-send gate blocked: {len(secret_findings)} secret(s)/PII detected. {detail}",
             code=EXIT_SECRETS,
             hint=(
                 "Use --redact-secrets to auto-redact instead of blocking, "
@@ -350,6 +348,7 @@ async def _run_spec_async(
             # circular dependencies in environments that don't use the bus)
             try:
                 from promptgenie.core.events import Event
+
                 event_bus.emit(Event.from_run_event(event))
             except Exception:
                 pass  # bus errors must never break the run
@@ -408,10 +407,7 @@ async def _run_spec_async(
 
     # Build a redacted copy safe to put in events/logs (secrets → "***")
     def _redact(vars_dict: dict[str, Any]) -> dict[str, Any]:
-        return {
-            k: "***" if k in secret_var_names else v
-            for k, v in vars_dict.items()
-        }
+        return {k: "***" if k in secret_var_names else v for k, v in vars_dict.items()}
 
     # ---- 3. build context ----
     context_manifest: ContextManifest | None = None

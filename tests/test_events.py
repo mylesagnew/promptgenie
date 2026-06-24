@@ -28,7 +28,6 @@ from promptgenie.core.event_formatters import (
 )
 from promptgenie.core.events import Event, EventKind
 
-
 # ---------------------------------------------------------------------------
 # EventKind
 # ---------------------------------------------------------------------------
@@ -37,8 +36,13 @@ from promptgenie.core.events import Event, EventKind
 class TestEventKind:
     def test_all_run_kinds_present(self):
         expected = {
-            "run.start", "run.token", "run.warning", "run.error",
-            "run.tool_call", "run.done", "run.dry",
+            "run.start",
+            "run.token",
+            "run.warning",
+            "run.error",
+            "run.tool_call",
+            "run.done",
+            "run.dry",
         }
         actual = {k.value for k in EventKind if k.value.startswith("run.")}
         assert expected <= actual
@@ -136,9 +140,7 @@ class TestEvent:
         assert set(d.keys()) == {"event", "run_id", "ts"}
 
     def test_multiple_data_fields_all_present(self):
-        e = Event(EventKind.LINT_FINDING, {
-            "code": "STRUCT_001", "severity": "MEDIUM", "line": 3
-        })
+        e = Event(EventKind.LINT_FINDING, {"code": "STRUCT_001", "severity": "MEDIUM", "line": 3})
         d = e.to_dict()
         assert d["code"] == "STRUCT_001"
         assert d["severity"] == "MEDIUM"
@@ -389,8 +391,12 @@ class TestTokenOnlyFormatter:
 
     def test_suppresses_non_token_events(self):
         for kind in [
-            EventKind.RUN_START, EventKind.RUN_DONE, EventKind.RUN_WARNING,
-            EventKind.LINT_FINDING, EventKind.SCAN_FINDING, EventKind.POLICY_VIOLATION,
+            EventKind.RUN_START,
+            EventKind.RUN_DONE,
+            EventKind.RUN_WARNING,
+            EventKind.LINT_FINDING,
+            EventKind.SCAN_FINDING,
+            EventKind.POLICY_VIOLATION,
         ]:
             assert self.fmt.format(Event(kind)) is None
 
@@ -445,25 +451,33 @@ class TestRichFormatter:
         assert "run.done" in result
 
     def test_lint_finding_includes_code_and_severity(self):
-        result = self.fmt.format(Event(EventKind.LINT_FINDING, {
-            "code": "STRUCT_001", "severity": "MEDIUM", "message": "no scope"
-        }))
+        result = self.fmt.format(
+            Event(
+                EventKind.LINT_FINDING,
+                {"code": "STRUCT_001", "severity": "MEDIUM", "message": "no scope"},
+            )
+        )
         assert result is not None
         assert "STRUCT_001" in result
         assert "MEDIUM" in result
 
     def test_scan_finding_includes_code_and_risk(self):
-        result = self.fmt.format(Event(EventKind.SCAN_FINDING, {
-            "code": "SEC_001", "risk": "HIGH", "message": "injection"
-        }))
+        result = self.fmt.format(
+            Event(
+                EventKind.SCAN_FINDING, {"code": "SEC_001", "risk": "HIGH", "message": "injection"}
+            )
+        )
         assert result is not None
         assert "SEC_001" in result
         assert "HIGH" in result
 
     def test_policy_violation_includes_rule_and_message(self):
-        result = self.fmt.format(Event(EventKind.POLICY_VIOLATION, {
-            "rule": "max_risk", "message": "1 finding at or above HIGH"
-        }))
+        result = self.fmt.format(
+            Event(
+                EventKind.POLICY_VIOLATION,
+                {"rule": "max_risk", "message": "1 finding at or above HIGH"},
+            )
+        )
         assert result is not None
         assert "max_risk" in result
 
@@ -478,9 +492,7 @@ class TestRichFormatter:
         assert "bash_exec" in result
 
     def test_eval_result_includes_model_and_score(self):
-        result = self.fmt.format(Event(EventKind.EVAL_RESULT, {
-            "model": "gpt-4", "score": 87
-        }))
+        result = self.fmt.format(Event(EventKind.EVAL_RESULT, {"model": "gpt-4", "score": 87}))
         assert result is not None
         assert "gpt-4" in result
         assert "87" in result
@@ -526,6 +538,7 @@ class TestRunEngineEventBusIntegration:
         # by checking that a bus is accepted without error and that
         # events are forwarded from a dry-run (which doesn't need a provider).
         from promptgenie.core.spec import PromptSpec
+
         spec = PromptSpec(
             version=1,
             name="test-bus",
@@ -535,6 +548,7 @@ class TestRunEngineEventBusIntegration:
 
         with patch("promptgenie.core.run_engine._git_is_clean", return_value=(True, "")):
             from promptgenie.core.run_engine import run_spec
+
             result = run_spec(spec, dry_run=True, event_bus=bus)
 
         assert result.status == "dry_run"
@@ -554,6 +568,7 @@ class TestRunEngineEventBusIntegration:
 
         with patch("promptgenie.core.run_engine._git_is_clean", return_value=(True, "")):
             from promptgenie.core.run_engine import run_spec
+
             # Should not raise
             result = run_spec(spec, dry_run=True, event_bus=bus)
 

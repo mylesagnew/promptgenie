@@ -18,7 +18,7 @@ from pathlib import Path
 import click
 import yaml
 
-from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
+from promptgenie.core.errors import EXIT_USAGE
 from promptgenie.renderers.rich import console, diag_console
 
 EXIT_INVALID = 1
@@ -45,9 +45,13 @@ def config_group() -> None:
 
 
 @config_group.command("show")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def config_show_cmd(output_format: str) -> None:
     """Show the current effective configuration.
 
@@ -56,11 +60,12 @@ def config_show_cmd(output_format: str) -> None:
       promptgenie config show --format json
     """
     from promptgenie.core.config import load_config
+
     try:
         cfg = load_config()
     except Exception as exc:
         diag_console.print(f"[red]Config error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     data = {
         "security": {
@@ -118,8 +123,7 @@ def config_set_cmd(key: str, value: str) -> None:
     """
     if key not in _KNOWN_KEYS:
         diag_console.print(
-            f"[red]Unknown key:[/red] {key!r}\n"
-            f"Supported: {', '.join(sorted(_KNOWN_KEYS))}"
+            f"[red]Unknown key:[/red] {key!r}\nSupported: {', '.join(sorted(_KNOWN_KEYS))}"
         )
         raise SystemExit(EXIT_USAGE)
 
@@ -131,8 +135,7 @@ def config_set_cmd(key: str, value: str) -> None:
             typed_value = False
         else:
             diag_console.print(
-                f"[red]Invalid value for boolean key {key!r}:[/red] {value!r}. "
-                "Use true or false."
+                f"[red]Invalid value for boolean key {key!r}:[/red] {value!r}. Use true or false."
             )
             raise SystemExit(EXIT_USAGE)
     else:
@@ -162,8 +165,7 @@ def config_set_cmd(key: str, value: str) -> None:
         encoding="utf-8",
     )
     console.print(
-        f"[green]✓[/green] Set [cyan]{key}[/cyan] = [bold]{typed_value}[/bold] "
-        f"in {_CONFIG_FILE}"
+        f"[green]✓[/green] Set [cyan]{key}[/cyan] = [bold]{typed_value}[/bold] in {_CONFIG_FILE}"
     )
 
     if key == "security.airgap" and typed_value:
@@ -187,11 +189,12 @@ def config_get_cmd(key: str) -> None:
       promptgenie config get security.airgap
     """
     from promptgenie.core.config import load_config
+
     try:
         cfg = load_config()
     except Exception as exc:
         diag_console.print(f"[red]Config error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     # Resolve nested attribute from cfg
     attr_map = {
@@ -215,11 +218,20 @@ _SCHEMA_URL = "https://promptgenie.dev/schemas/workspace.schema.json"
 
 
 @config_group.command("validate")
-@click.option("--config", "config_path", default=None, metavar="PATH",
-              help="Path to config file (default: auto-discover .promptgenie.yaml).")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--config",
+    "config_path",
+    default=None,
+    metavar="PATH",
+    help="Path to config file (default: auto-discover .promptgenie.yaml).",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def config_validate_cmd(config_path: str | None, output_format: str) -> None:
     """Validate .promptgenie.yaml against the workspace schema.
 
@@ -241,20 +253,35 @@ def config_validate_cmd(config_path: str | None, output_format: str) -> None:
         if not path.exists():
             if output_format == "json":
                 sys.stdout.write(
-                    json.dumps({"valid": False, "errors": [f"File not found: {config_path}"],
-                                "warnings": []}, indent=2) + "\n"
+                    json.dumps(
+                        {
+                            "valid": False,
+                            "errors": [f"File not found: {config_path}"],
+                            "warnings": [],
+                        },
+                        indent=2,
+                    )
+                    + "\n"
                 )
             else:
                 diag_console.print(f"[red]Error:[/red] File not found: {config_path}")
             raise SystemExit(EXIT_USAGE)
     else:
-        path = _find_config()
-        if path is None:
+        found = _find_config()
+        if found is None:
             if output_format == "json":
                 sys.stdout.write(
-                    json.dumps({"valid": False,
-                                "errors": ["No .promptgenie.yaml found in current directory or parents."],
-                                "warnings": []}, indent=2) + "\n"
+                    json.dumps(
+                        {
+                            "valid": False,
+                            "errors": [
+                                "No .promptgenie.yaml found in current directory or parents."
+                            ],
+                            "warnings": [],
+                        },
+                        indent=2,
+                    )
+                    + "\n"
                 )
             else:
                 diag_console.print(
@@ -262,18 +289,22 @@ def config_validate_cmd(config_path: str | None, output_format: str) -> None:
                     "Run [bold]promptgenie config init[/bold] to create one."
                 )
             raise SystemExit(EXIT_USAGE)
+        path = found
 
     try:
         raw = safe_read_yaml(path) or {}
     except Exception as exc:
         if output_format == "json":
             sys.stdout.write(
-                json.dumps({"valid": False, "errors": [f"YAML parse error: {exc}"],
-                            "warnings": []}, indent=2) + "\n"
+                json.dumps(
+                    {"valid": False, "errors": [f"YAML parse error: {exc}"], "warnings": []},
+                    indent=2,
+                )
+                + "\n"
             )
         else:
             diag_console.print(f"[red]YAML parse error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     errors, warnings = validate_workspace_config(raw)
     valid = len(errors) == 0
@@ -283,7 +314,8 @@ def config_validate_cmd(config_path: str | None, output_format: str) -> None:
             json.dumps(
                 {"valid": valid, "file": str(path), "errors": errors, "warnings": warnings},
                 indent=2,
-            ) + "\n"
+            )
+            + "\n"
         )
     else:
         console.print(f"[bold]Validating:[/bold] {path}")
@@ -295,7 +327,7 @@ def config_validate_cmd(config_path: str | None, output_format: str) -> None:
                 console.print(f"  [red]error:[/red]   {e}")
             console.print(f"\n[red]✗[/red] {len(errors)} error(s) found.")
         else:
-            console.print(f"[green]✓[/green] Config is valid.")
+            console.print("[green]✓[/green] Config is valid.")
             if warnings:
                 console.print(f"  {len(warnings)} warning(s) — review above.")
 
@@ -355,10 +387,15 @@ security:
 
 
 @config_group.command("init")
-@click.option("--name", default=None, metavar="NAME",
-              help="Workspace name written into the file (default: current directory name).")
-@click.option("--force", is_flag=True, default=False,
-              help="Overwrite an existing .promptgenie.yaml.")
+@click.option(
+    "--name",
+    default=None,
+    metavar="NAME",
+    help="Workspace name written into the file (default: current directory name).",
+)
+@click.option(
+    "--force", is_flag=True, default=False, help="Overwrite an existing .promptgenie.yaml."
+)
 def config_init_cmd(name: str | None, force: bool) -> None:
     """Scaffold a new .promptgenie.yaml with the workspace schema pointer.
 
@@ -374,8 +411,7 @@ def config_init_cmd(name: str | None, force: bool) -> None:
     dest = Path(".promptgenie.yaml")
     if dest.exists() and not force:
         diag_console.print(
-            f"[red]Error:[/red] {dest} already exists. "
-            "Use [bold]--force[/bold] to overwrite."
+            f"[red]Error:[/red] {dest} already exists. Use [bold]--force[/bold] to overwrite."
         )
         raise SystemExit(EXIT_USAGE)
 

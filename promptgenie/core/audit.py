@@ -113,9 +113,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 def _prev_hash(conn: sqlite3.Connection) -> str:
-    row = conn.execute(
-        "SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1"
-    ).fetchone()
+    row = conn.execute("SELECT row_hash FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()
     return row["row_hash"] if row else _GENESIS_HASH
 
 
@@ -151,21 +149,21 @@ def write_audit_event(
     cwd = str(Path.cwd())
     extra_json = json.dumps(extra or {}, default=str)
 
-    fields = dict(
-        timestamp=ts,
-        user=user,
-        cwd=cwd,
-        command=command,
-        provider=provider,
-        model=model,
-        spec_name=spec_name,
-        prompt_hash=prompt_hash,
-        response_hash=response_hash,
-        policy_decision=policy_decision,
-        external_send=int(external_send),
-        status=status,
-        extra_json=extra_json,
-    )
+    fields = {
+        "timestamp": ts,
+        "user": user,
+        "cwd": cwd,
+        "command": command,
+        "provider": provider,
+        "model": model,
+        "spec_name": spec_name,
+        "prompt_hash": prompt_hash,
+        "response_hash": response_hash,
+        "policy_decision": policy_decision,
+        "external_send": int(external_send),
+        "status": status,
+        "extra_json": extra_json,
+    }
 
     with _get_connection() as conn:
         prev = _prev_hash(conn)
@@ -176,14 +174,25 @@ def write_audit_event(
                 prompt_hash, response_hash, policy_decision, external_send, status, extra_json)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                row_hash, ts, user, cwd, command, provider, model, spec_name,
-                prompt_hash, response_hash, policy_decision, int(external_send),
-                status, extra_json,
+                row_hash,
+                ts,
+                user,
+                cwd,
+                command,
+                provider,
+                model,
+                spec_name,
+                prompt_hash,
+                response_hash,
+                policy_decision,
+                int(external_send),
+                status,
+                extra_json,
             ),
         )
         conn.commit()
         row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    return row_id
+    return int(row_id)
 
 
 # ---------------------------------------------------------------------------
@@ -236,9 +245,7 @@ def list_audit_events(limit: int = 20, command: str | None = None) -> list[Audit
 def load_audit_event(row_id: int) -> AuditEvent | None:
     try:
         with _get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM audit_log WHERE id=?", (row_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM audit_log WHERE id=?", (row_id,)).fetchone()
         return _row_to_event(row) if row else None
     except Exception:
         return None
@@ -253,9 +260,7 @@ def verify_chain() -> tuple[bool, int | None]:
     """Verify the tamper-evident hash chain. Returns (ok, first_broken_id)."""
     try:
         with _get_connection() as conn:
-            rows = conn.execute(
-                "SELECT * FROM audit_log ORDER BY id ASC"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM audit_log ORDER BY id ASC").fetchall()
     except Exception:
         return True, None  # empty or unreachable DB
 
@@ -301,43 +306,83 @@ def export_audit(
 
     if fmt == "csv":
         import csv
+
         with p.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=[
-                "id", "timestamp", "user", "command", "provider", "model",
-                "spec_name", "prompt_hash", "policy_decision", "external_send",
-                "status", "row_hash",
-            ])
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "id",
+                    "timestamp",
+                    "user",
+                    "command",
+                    "provider",
+                    "model",
+                    "spec_name",
+                    "prompt_hash",
+                    "policy_decision",
+                    "external_send",
+                    "status",
+                    "row_hash",
+                ],
+            )
             writer.writeheader()
             for e in events:
-                writer.writerow({
-                    "id": e.id, "timestamp": e.timestamp, "user": e.user,
-                    "command": e.command, "provider": e.provider, "model": e.model,
-                    "spec_name": e.spec_name, "prompt_hash": e.prompt_hash,
-                    "policy_decision": e.policy_decision,
-                    "external_send": e.external_send,
-                    "status": e.status, "row_hash": e.row_hash,
-                })
+                writer.writerow(
+                    {
+                        "id": e.id,
+                        "timestamp": e.timestamp,
+                        "user": e.user,
+                        "command": e.command,
+                        "provider": e.provider,
+                        "model": e.model,
+                        "spec_name": e.spec_name,
+                        "prompt_hash": e.prompt_hash,
+                        "policy_decision": e.policy_decision,
+                        "external_send": e.external_send,
+                        "status": e.status,
+                        "row_hash": e.row_hash,
+                    }
+                )
     elif fmt == "ndjson":
         with p.open("w", encoding="utf-8") as f:
             for e in events:
-                f.write(json.dumps({
-                    "id": e.id, "timestamp": e.timestamp, "user": e.user,
-                    "command": e.command, "provider": e.provider, "model": e.model,
-                    "spec_name": e.spec_name, "prompt_hash": e.prompt_hash,
-                    "policy_decision": e.policy_decision,
-                    "external_send": e.external_send,
-                    "status": e.status, "row_hash": e.row_hash,
-                }, default=str) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "id": e.id,
+                            "timestamp": e.timestamp,
+                            "user": e.user,
+                            "command": e.command,
+                            "provider": e.provider,
+                            "model": e.model,
+                            "spec_name": e.spec_name,
+                            "prompt_hash": e.prompt_hash,
+                            "policy_decision": e.policy_decision,
+                            "external_send": e.external_send,
+                            "status": e.status,
+                            "row_hash": e.row_hash,
+                        },
+                        default=str,
+                    )
+                    + "\n"
+                )
     else:
         data = [
             {
-                "id": e.id, "timestamp": e.timestamp, "user": e.user,
-                "cwd": e.cwd, "command": e.command, "provider": e.provider,
-                "model": e.model, "spec_name": e.spec_name,
-                "prompt_hash": e.prompt_hash, "response_hash": e.response_hash,
+                "id": e.id,
+                "timestamp": e.timestamp,
+                "user": e.user,
+                "cwd": e.cwd,
+                "command": e.command,
+                "provider": e.provider,
+                "model": e.model,
+                "spec_name": e.spec_name,
+                "prompt_hash": e.prompt_hash,
+                "response_hash": e.response_hash,
                 "policy_decision": e.policy_decision,
                 "external_send": e.external_send,
-                "status": e.status, "row_hash": e.row_hash,
+                "status": e.status,
+                "row_hash": e.row_hash,
             }
             for e in events
         ]

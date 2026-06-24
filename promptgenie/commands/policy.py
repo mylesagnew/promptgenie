@@ -40,36 +40,57 @@ def _risk_at_or_above(level: str, threshold: str) -> bool:
 @click.command("policy")
 @click.argument("file", type=click.Path(exists=True, readable=True))
 # Inline threshold overrides (backward-compat + common-case convenience)
-@click.option("--max-risk",
-              type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"], case_sensitive=False),
-              default=None,
-              help="Override max_risk from policy file. Fail if any finding is at or above this level.")
-@click.option("--max-findings", type=int, default=None,
-              help="Override max_findings from policy file.")
-@click.option("--min-score", type=int, default=None,
-              help="Override min_score from policy file.")
+@click.option(
+    "--max-risk",
+    type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"], case_sensitive=False),
+    default=None,
+    help="Override max_risk from policy file. Fail if any finding is at or above this level.",
+)
+@click.option(
+    "--max-findings", type=int, default=None, help="Override max_findings from policy file."
+)
+@click.option("--min-score", type=int, default=None, help="Override min_score from policy file.")
 # Policy source
-@click.option("--policy-file", "policy_path", default=None, type=click.Path(),
-              help="Explicit policy file path. Skips auto-discovery.")
-@click.option("--no-policy-file", is_flag=True,
-              help="Ignore any discovered/configured policy file; use inline flags only.")
+@click.option(
+    "--policy-file",
+    "policy_path",
+    default=None,
+    type=click.Path(),
+    help="Explicit policy file path. Skips auto-discovery.",
+)
+@click.option(
+    "--no-policy-file",
+    is_flag=True,
+    help="Ignore any discovered/configured policy file; use inline flags only.",
+)
 # Provider / classification gates
-@click.option("--provider", default=None,
-              help="Provider name to check against allowed_providers gate.")
-@click.option("--classification", default=None,
-              help="Content classification (public|internal|confidential|restricted) "
-                   "to check against external_model_send gate.")
+@click.option(
+    "--provider", default=None, help="Provider name to check against allowed_providers gate."
+)
+@click.option(
+    "--classification",
+    default=None,
+    help="Content classification (public|internal|confidential|restricted) "
+    "to check against external_model_send gate.",
+)
 # Explain / output
-@click.option("--explain", is_flag=True,
-              help="Print a per-rule evaluation trace (why each rule passed or failed).")
-@click.option("--format", "output_format",
-              type=click.Choice(["text", "json", "sarif"], case_sensitive=False),
-              default="text", show_default=True,
-              help="Output format.")
-@click.option("--config", "config_path", default=None,
-              help="Path to .promptgenie.yaml config file.")
-@click.option("--no-config", is_flag=True,
-              help="Ignore any .promptgenie.yaml config file.")
+@click.option(
+    "--explain",
+    is_flag=True,
+    help="Print a per-rule evaluation trace (why each rule passed or failed).",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json", "sarif"], case_sensitive=False),
+    default="text",
+    show_default=True,
+    help="Output format.",
+)
+@click.option(
+    "--config", "config_path", default=None, help="Path to .promptgenie.yaml config file."
+)
+@click.option("--no-config", is_flag=True, help="Ignore any .promptgenie.yaml config file.")
 def policy(
     file: str,
     max_risk: str | None,
@@ -116,10 +137,10 @@ def policy(
             pg_cfg = load_config(config_path)
         except (FileNotFoundError, OSError, ValueError) as exc:
             diag_console.print(f"[red]Error:[/red] Cannot load config {config_path!r}: {exc}")
-            raise SystemExit(EXIT_USAGE)
+            raise SystemExit(EXIT_USAGE) from None
         except Exception as exc:
             diag_console.print(f"[red]Error:[/red] Cannot load config {config_path!r}: {exc}")
-            raise SystemExit(EXIT_USAGE)
+            raise SystemExit(EXIT_USAGE) from None
     else:
         # Auto-discovery — fall back to defaults on error
         try:
@@ -132,7 +153,7 @@ def policy(
         prompt_text = safe_read_text(file)
     except (OSError, ValueError) as exc:
         diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     # ── Load policy ─────────────────────────────────────────────────────────
     policy_cfg: PolicyConfig
@@ -146,7 +167,7 @@ def policy(
             policy_source = str(policy_path)
         except PromptGenieError as exc:
             diag_console.print(f"[red]Error:[/red] {exc}")
-            raise SystemExit(EXIT_USAGE)
+            raise SystemExit(EXIT_USAGE) from None
     else:
         discovered = discover_policy_file()
         if discovered:
@@ -183,15 +204,17 @@ def policy(
 
     # ── Output ──────────────────────────────────────────────────────────────
     if output_format == "sarif":
-        sarif = _policy_sarif(result, file_path=file, evaluation=evaluation,
-                              policy_source=policy_source)
+        sarif = _policy_sarif(
+            result, file_path=file, evaluation=evaluation, policy_source=policy_source
+        )
         sys.stdout.write(json.dumps(sarif, indent=2) + "\n")
 
     elif output_format == "json":
         scan_findings = [f for f in result.findings if f.source == "scan"]
         lint_findings = [f for f in result.findings if f.source == "lint"]
         qualifying_count = sum(
-            1 for f in result.findings
+            1
+            for f in result.findings
             if f.source == "scan" and _risk_at_or_above(f.severity, policy_cfg.max_risk)
         )
 
@@ -231,9 +254,7 @@ def policy(
                 }
                 for f in scan_findings
             ],
-            "violations": [
-                f"{v.rule}: {v.message}" for v in evaluation.violations
-            ],
+            "violations": [f"{v.rule}: {v.message}" for v in evaluation.violations],
             "allowlist_warnings": allowlist_warnings,
             "warnings": evaluation.warnings,
             **({"explain": evaluation.explain_lines} if explain else {}),
@@ -244,10 +265,7 @@ def policy(
         # Rich text output
         status = "[green]PASSED[/green]" if evaluation.passed else "[red]FAILED[/red]"
         icon = "✅" if evaluation.passed else "❌"
-        console.print(
-            f"\n{icon}  [bold]PromptGenie Policy — {status}[/bold]  "
-            f"[dim]{file}[/dim]"
-        )
+        console.print(f"\n{icon}  [bold]PromptGenie Policy — {status}[/bold]  [dim]{file}[/dim]")
         console.print(f"[dim]Policy: {policy_source}[/dim]")
 
         # Lint score line (shown when min_score is active)
@@ -261,20 +279,31 @@ def policy(
         # Findings summary
         if result.findings:
             from rich.table import Table
+
             tbl = Table(show_header=True, header_style="bold", show_lines=False)
             tbl.add_column("Sev", width=7)
             tbl.add_column("Code", style="bold", no_wrap=True)
             tbl.add_column("Category")
             tbl.add_column("Finding")
-            _sev_colors = {"CRITICAL": "bold red", "HIGH": "red",
-                           "MEDIUM": "yellow", "LOW": "cyan", "INFO": "dim"}
-            for f in sorted(result.findings,
-                            key=lambda x: {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2,
-                                           "LOW": 3, "INFO": 4}.get(x.severity, 9)):
+            _sev_colors = {
+                "CRITICAL": "bold red",
+                "HIGH": "red",
+                "MEDIUM": "yellow",
+                "LOW": "cyan",
+                "INFO": "dim",
+            }
+            for f in sorted(
+                result.findings,
+                key=lambda x: {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}.get(
+                    x.severity, 9
+                ),
+            ):
                 color = _sev_colors.get(f.severity, "dim")
                 tbl.add_row(
                     f"[{color}]{f.severity[:4]}[/{color}]",
-                    f.code, f.category, f.title,
+                    f.code,
+                    f.category,
+                    f.title,
                 )
             console.print(tbl)
 
@@ -326,13 +355,15 @@ _SARIF_LEVEL_MAP = {
 _SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
 
 
-def _policy_sarif(result: object, *, file_path: str,
-                  evaluation: object, policy_source: str) -> dict:
+def _policy_sarif(
+    result: object, *, file_path: str, evaluation: object, policy_source: str
+) -> dict:
     """Build a SARIF 2.1.0 document with separate runs for scan and lint findings."""
     from promptgenie.core.analyze import AnalyzeResult
+    from promptgenie.core.policy_engine import PolicyEvaluation
 
     ar: AnalyzeResult = result  # type: ignore[assignment]
-    ev = evaluation  # type: ignore[assignment]
+    ev: PolicyEvaluation = evaluation  # type: ignore[assignment]
 
     def _run(driver_name: str, source_filter: str) -> dict:
         findings = [f for f in ar.findings if f.source == source_filter]
@@ -346,32 +377,37 @@ def _policy_sarif(result: object, *, file_path: str,
                     "shortDescription": {"text": f.title},
                     "fullDescription": {"text": f.remediation or f.title},
                 }
-            results.append({
-                "ruleId": f.code,
-                "level": _SARIF_LEVEL_MAP.get(f.severity, "note"),
-                "message": {"text": f.title},
-                "locations": [{
-                    "physicalLocation": {
-                        "artifactLocation": {"uri": file_path},
-                        "region": {
-                            "startLine": max(1, f.location.line or 1),
-                            "startColumn": max(1, f.location.col or 1),
-                        },
-                    }
-                }],
-            })
+            results.append(
+                {
+                    "ruleId": f.code,
+                    "level": _SARIF_LEVEL_MAP.get(f.severity, "note"),
+                    "message": {"text": f.title},
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {"uri": file_path},
+                                "region": {
+                                    "startLine": max(1, f.location.line or 1),
+                                    "startColumn": max(1, f.location.col or 1),
+                                },
+                            }
+                        }
+                    ],
+                }
+            )
         return {
-            "tool": {"driver": {
-                "name": driver_name,
-                "version": "1.0.0",
-                "rules": list(seen.values()),
-            }},
+            "tool": {
+                "driver": {
+                    "name": driver_name,
+                    "version": "1.0.0",
+                    "rules": list(seen.values()),
+                }
+            },
             "results": results,
             "properties": {
                 "policy_passed": ev.passed,
                 "policy_source": policy_source,
-                "violations": [{"rule": v.rule, "message": v.message}
-                                for v in ev.violations],
+                "violations": [{"rule": v.rule, "message": v.message} for v in ev.violations],
             },
         }
 

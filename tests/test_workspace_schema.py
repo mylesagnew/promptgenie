@@ -6,7 +6,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -17,7 +16,6 @@ from promptgenie.core.config import (
     WorkspaceConfig,
     validate_workspace_config,
 )
-
 
 # ---------------------------------------------------------------------------
 # WorkspaceConfig / DefaultsConfig dataclasses
@@ -34,8 +32,13 @@ class TestWorkspaceConfig:
         assert ws.policy == ""
 
     def test_fields_set_correctly(self):
-        ws = WorkspaceConfig(name="myproject", version="1.0", team="acme",
-                             description="A test project", policy=".policy.yaml")
+        ws = WorkspaceConfig(
+            name="myproject",
+            version="1.0",
+            team="acme",
+            description="A test project",
+            policy=".policy.yaml",
+        )
         assert ws.name == "myproject"
         assert ws.version == "1.0"
         assert ws.team == "acme"
@@ -140,8 +143,12 @@ class TestValidateWorkspaceConfigValid:
         raw = {
             "scanner": {
                 "allowlist": [
-                    {"phrase": "example-ci-token", "rules": ["PERM_001"],
-                     "expires": "2030-01-01", "reason": "CI placeholder"}
+                    {
+                        "phrase": "example-ci-token",
+                        "rules": ["PERM_001"],
+                        "expires": "2030-01-01",
+                        "reason": "CI placeholder",
+                    }
                 ]
             }
         }
@@ -152,8 +159,13 @@ class TestValidateWorkspaceConfigValid:
         raw = {
             "scanner": {
                 "custom_rules": [
-                    {"id": "CUSTOM_001", "pattern": r"\bsecret\b",
-                     "risk": "HIGH", "confidence": "MEDIUM", "message": "Found secret"}
+                    {
+                        "id": "CUSTOM_001",
+                        "pattern": r"\bsecret\b",
+                        "risk": "HIGH",
+                        "confidence": "MEDIUM",
+                        "message": "Found secret",
+                    }
                 ]
             }
         }
@@ -164,8 +176,13 @@ class TestValidateWorkspaceConfigValid:
         raw = {
             "linter": {
                 "custom_rules": [
-                    {"id": "CLINT_001", "pattern": r"\bhandle\b",
-                     "severity": "LOW", "confidence": "HIGH", "message": "Vague verb"}
+                    {
+                        "id": "CLINT_001",
+                        "pattern": r"\bhandle\b",
+                        "severity": "LOW",
+                        "confidence": "HIGH",
+                        "message": "Vague verb",
+                    }
                 ]
             }
         }
@@ -251,15 +268,11 @@ class TestValidateTypeErrors:
         assert any("routing.rules[0]" in e and "mapping" in e for e in errors)
 
     def test_routing_rule_missing_if(self):
-        errors, _ = validate_workspace_config(
-            {"routing": {"rules": [{"provider": "ollama"}]}}
-        )
+        errors, _ = validate_workspace_config({"routing": {"rules": [{"provider": "ollama"}]}})
         assert any("'if'" in e for e in errors)
 
     def test_routing_rule_missing_provider(self):
-        errors, _ = validate_workspace_config(
-            {"routing": {"rules": [{"if": "*"}]}}
-        )
+        errors, _ = validate_workspace_config({"routing": {"rules": [{"if": "*"}]}})
         assert any("'provider'" in e for e in errors)
 
     def test_top_level_not_dict(self):
@@ -287,38 +300,22 @@ class TestValidateEnumErrors:
             assert errors == [], f"Expected no errors for risk level {level!r}"
 
     def test_custom_scan_rule_invalid_risk(self):
-        raw = {
-            "scanner": {
-                "custom_rules": [{"id": "C001", "pattern": "x", "risk": "EXTREME"}]
-            }
-        }
+        raw = {"scanner": {"custom_rules": [{"id": "C001", "pattern": "x", "risk": "EXTREME"}]}}
         errors, _ = validate_workspace_config(raw)
         assert any("risk" in e and "EXTREME" in e for e in errors)
 
     def test_custom_scan_rule_invalid_confidence(self):
-        raw = {
-            "scanner": {
-                "custom_rules": [{"id": "C001", "pattern": "x", "confidence": "MAYBE"}]
-            }
-        }
+        raw = {"scanner": {"custom_rules": [{"id": "C001", "pattern": "x", "confidence": "MAYBE"}]}}
         errors, _ = validate_workspace_config(raw)
         assert any("confidence" in e and "MAYBE" in e for e in errors)
 
     def test_custom_lint_rule_invalid_severity(self):
-        raw = {
-            "linter": {
-                "custom_rules": [{"id": "L001", "pattern": "x", "severity": "WARN"}]
-            }
-        }
+        raw = {"linter": {"custom_rules": [{"id": "L001", "pattern": "x", "severity": "WARN"}]}}
         errors, _ = validate_workspace_config(raw)
         assert any("severity" in e and "WARN" in e for e in errors)
 
     def test_custom_lint_rule_valid_info_severity(self):
-        raw = {
-            "linter": {
-                "custom_rules": [{"id": "L001", "pattern": "x", "severity": "INFO"}]
-            }
-        }
+        raw = {"linter": {"custom_rules": [{"id": "L001", "pattern": "x", "severity": "INFO"}]}}
         errors, _ = validate_workspace_config(raw)
         assert errors == []
 
@@ -330,9 +327,7 @@ class TestValidateEnumErrors:
 
 class TestValidateAllowlist:
     def test_string_entry_valid(self):
-        errors, _ = validate_workspace_config(
-            {"scanner": {"allowlist": ["known-ci-token"]}}
-        )
+        errors, _ = validate_workspace_config({"scanner": {"allowlist": ["known-ci-token"]}})
         assert errors == []
 
     def test_object_entry_missing_phrase(self):
@@ -360,15 +355,11 @@ class TestValidateAllowlist:
         assert any("misspelled_reason" in e for e in errors)
 
     def test_allowlist_not_list(self):
-        errors, _ = validate_workspace_config(
-            {"scanner": {"allowlist": "known-token"}}
-        )
+        errors, _ = validate_workspace_config({"scanner": {"allowlist": "known-token"}})
         assert any("allowlist" in e for e in errors)
 
     def test_blank_string_entry_is_warning(self):
-        _, warnings = validate_workspace_config(
-            {"scanner": {"allowlist": ["  "]}}
-        )
+        _, warnings = validate_workspace_config({"scanner": {"allowlist": ["  "]}})
         assert any("blank" in w for w in warnings)
 
 
@@ -421,9 +412,7 @@ class TestConfigValidateCommand:
     def test_invalid_file_exits_1(self, tmp_path):
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            Path(".promptgenie.yaml").write_text(
-                "unknown_section:\n  foo: bar\n", encoding="utf-8"
-            )
+            Path(".promptgenie.yaml").write_text("unknown_section:\n  foo: bar\n", encoding="utf-8")
             result = runner.invoke(cli, ["config", "validate"])
         assert result.exit_code == 1
         assert "error" in result.output.lower() or "unknown" in result.output.lower()
@@ -451,9 +440,7 @@ class TestConfigValidateCommand:
     def test_json_output_valid(self, tmp_path):
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            Path(".promptgenie.yaml").write_text(
-                "workspace:\n  name: proj\n", encoding="utf-8"
-            )
+            Path(".promptgenie.yaml").write_text("workspace:\n  name: proj\n", encoding="utf-8")
             result = runner.invoke(cli, ["config", "validate", "--format", "json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -463,9 +450,7 @@ class TestConfigValidateCommand:
     def test_json_output_invalid(self, tmp_path):
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            Path(".promptgenie.yaml").write_text(
-                "bad_key: 123\n", encoding="utf-8"
-            )
+            Path(".promptgenie.yaml").write_text("bad_key: 123\n", encoding="utf-8")
             result = runner.invoke(cli, ["config", "validate", "--format", "json"])
         assert result.exit_code == 1
         data = json.loads(result.output)
@@ -475,9 +460,7 @@ class TestConfigValidateCommand:
     def test_json_output_includes_warnings(self, tmp_path):
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            Path(".promptgenie.yaml").write_text(
-                "workspace:\n  name: ''\n", encoding="utf-8"
-            )
+            Path(".promptgenie.yaml").write_text("workspace:\n  name: ''\n", encoding="utf-8")
             result = runner.invoke(cli, ["config", "validate", "--format", "json"])
         data = json.loads(result.output)
         assert len(data["warnings"]) > 0
@@ -485,9 +468,7 @@ class TestConfigValidateCommand:
     def test_type_error_shows_in_output(self, tmp_path):
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            Path(".promptgenie.yaml").write_text(
-                "security:\n  airgap: maybe\n", encoding="utf-8"
-            )
+            Path(".promptgenie.yaml").write_text("security:\n  airgap: maybe\n", encoding="utf-8")
             result = runner.invoke(cli, ["config", "validate"])
         assert result.exit_code == 1
         assert "airgap" in result.output
@@ -496,7 +477,7 @@ class TestConfigValidateCommand:
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path):
             Path(".promptgenie.yaml").write_text(
-                "routing:\n  rules:\n    - if: \"*\"\n", encoding="utf-8"
+                'routing:\n  rules:\n    - if: "*"\n', encoding="utf-8"
             )
             result = runner.invoke(cli, ["config", "validate"])
         assert result.exit_code == 1
@@ -580,8 +561,10 @@ class TestConfigInitCommand:
 
 class TestConfigShowUpdated:
     def test_show_includes_schema_file_path(self, tmp_path):
-        runner = CliRunner()
-        schema_file = Path(__file__).parent.parent / "promptgenie" / "schemas" / "workspace.schema.json"
+        CliRunner()
+        schema_file = (
+            Path(__file__).parent.parent / "promptgenie" / "schemas" / "workspace.schema.json"
+        )
         assert schema_file.exists(), f"Schema file not found: {schema_file}"
 
     def test_workspace_schema_file_is_valid_json(self):

@@ -30,7 +30,8 @@ from __future__ import annotations
 
 import sys
 from collections import defaultdict
-from typing import IO, Any, Callable
+from collections.abc import Callable
+from typing import IO, Any
 
 from promptgenie.core.events import Event, EventKind
 

@@ -23,15 +23,23 @@ from promptgenie.renderers.rich import console, diag_console
 
 @click.command("lock")
 @click.argument("spec_file", type=click.Path(exists=True))
-@click.option("--out", default=None, type=click.Path(),
-              help="Custom path for the lockfile (default: <spec>.lock).")
-@click.option("--check", is_flag=True,
-              help="Verify an existing lockfile rather than creating one.")
-@click.option("--strict", is_flag=True,
-              help="In --check mode: also fail on missing optional files.")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--out",
+    default=None,
+    type=click.Path(),
+    help="Custom path for the lockfile (default: <spec>.lock).",
+)
+@click.option("--check", is_flag=True, help="Verify an existing lockfile rather than creating one.")
+@click.option(
+    "--strict", is_flag=True, help="In --check mode: also fail on missing optional files."
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def lock_cmd(
     spec_file: str,
     out: str | None,
@@ -73,11 +81,18 @@ def lock_cmd(
         result = check_lockfile(record)
         if output_format == "json":
             import json
-            sys.stdout.write(json.dumps({
-                "passed": result.passed,
-                "stale": result.stale,
-                "missing": result.missing,
-            }, indent=2) + "\n")
+
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "passed": result.passed,
+                        "stale": result.stale,
+                        "missing": result.missing,
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
         else:
             if result.passed:
                 console.print(f"[green]✓[/green] Lockfile is up to date: [bold]{lock_path}[/bold]")
@@ -100,6 +115,7 @@ def lock_cmd(
 
     if output_format == "json":
         import json
+
         sys.stdout.write(json.dumps(record.to_dict(), indent=2) + "\n")
     else:
         console.print(f"[green]✓[/green] Lockfile created: [bold]{lock_path}[/bold]")

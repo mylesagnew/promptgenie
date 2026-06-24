@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import statistics
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -26,21 +25,21 @@ from typing import Any
 
 _COST_TABLE: dict[str, tuple[float, float]] = {
     # model-name-prefix → (input_per_1M, output_per_1M)
-    "claude-opus-4":        (15.00, 75.00),
-    "claude-sonnet-4":      (3.00,  15.00),
-    "claude-haiku-4":       (0.80,   4.00),
-    "claude-opus":          (15.00, 75.00),
-    "claude-sonnet":        (3.00,  15.00),
-    "claude-haiku":         (0.80,   4.00),
-    "gpt-4.1":              (2.00,   8.00),
-    "gpt-4o":               (5.00,  15.00),
-    "gpt-4":                (10.00, 30.00),
-    "gpt-3.5":              (0.50,   1.50),
-    "gemini-2.0":           (0.10,   0.40),
-    "gemini-1.5-pro":       (3.50,  10.50),
-    "gemini-1.5-flash":     (0.075,  0.30),
-    "ollama":               (0.00,   0.00),
-    "localai":              (0.00,   0.00),
+    "claude-opus-4": (15.00, 75.00),
+    "claude-sonnet-4": (3.00, 15.00),
+    "claude-haiku-4": (0.80, 4.00),
+    "claude-opus": (15.00, 75.00),
+    "claude-sonnet": (3.00, 15.00),
+    "claude-haiku": (0.80, 4.00),
+    "gpt-4.1": (2.00, 8.00),
+    "gpt-4o": (5.00, 15.00),
+    "gpt-4": (10.00, 30.00),
+    "gpt-3.5": (0.50, 1.50),
+    "gemini-2.0": (0.10, 0.40),
+    "gemini-1.5-pro": (3.50, 10.50),
+    "gemini-1.5-flash": (0.075, 0.30),
+    "ollama": (0.00, 0.00),
+    "localai": (0.00, 0.00),
 }
 
 
@@ -65,9 +64,9 @@ class EvalMetrics:
     output_tokens: int = 0
     total_tokens: int = 0
     cost_usd: float = 0.0
-    rubric_score: float | None = None   # 0–100 from judge rubric
-    safety_score: float | None = None   # 0–100 (100 = fully safe)
-    determinism: float | None = None    # 0–1 (1 = identical across runs)
+    rubric_score: float | None = None  # 0–100 from judge rubric
+    safety_score: float | None = None  # 0–100 (100 = fully safe)
+    determinism: float | None = None  # 0–1 (1 = identical across runs)
 
 
 @dataclass
@@ -145,12 +144,26 @@ def _safety_score(response: str) -> float:
 # ---------------------------------------------------------------------------
 
 _RUBRIC_POSITIVE: list[str] = [
-    "certainly", "here is", "here's", "i can", "i will", "of course",
-    "step 1", "step 2", "first,", "second,", "in summary",
+    "certainly",
+    "here is",
+    "here's",
+    "i can",
+    "i will",
+    "of course",
+    "step 1",
+    "step 2",
+    "first,",
+    "second,",
+    "in summary",
 ]
 _RUBRIC_NEGATIVE: list[str] = [
-    "i cannot", "i'm unable", "i am unable", "i don't know",
-    "as an ai", "i apologize", "unfortunately",
+    "i cannot",
+    "i'm unable",
+    "i am unable",
+    "i don't know",
+    "as an ai",
+    "i apologize",
+    "unfortunately",
 ]
 
 
@@ -276,6 +289,7 @@ def _estimate_tokens(text: str) -> int:
 # Matrix evaluator
 # ---------------------------------------------------------------------------
 
+
 def _parse_model_spec(spec: str) -> tuple[str, str | None]:
     """Parse 'provider' or 'provider/model' → (provider, model|None)."""
     if "/" in spec:
@@ -305,8 +319,11 @@ async def _matrix_evaluate_async(
         provider_name, model = _parse_model_spec(spec)
         async with sem:
             return await _run_one(
-                provider_name, model, messages,
-                timeout=timeout, max_tokens=max_tokens,
+                provider_name,
+                model,
+                messages,
+                timeout=timeout,
+                max_tokens=max_tokens,
                 determinism_runs=determinism_runs,
             )
 
@@ -328,7 +345,8 @@ def matrix_evaluate(
     """Synchronous wrapper around the async matrix evaluator."""
     return asyncio.run(
         _matrix_evaluate_async(
-            prompt, models,
+            prompt,
+            models,
             system=system,
             timeout=timeout,
             max_tokens=max_tokens,

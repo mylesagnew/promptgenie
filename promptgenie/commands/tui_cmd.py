@@ -27,21 +27,18 @@ core.linter, core.scanner, core.run_engine, core.eval_suite etc.
 
 from __future__ import annotations
 
-import sys
-
 import click
 
 from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
-
+from promptgenie.renderers.rich import diag_console
 
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+
 @click.command("tui")
-@click.argument("file", default=None, required=False,
-                metavar="[FILE]", type=click.Path())
+@click.argument("file", default=None, required=False, metavar="[FILE]", type=click.Path())
 @click.option("--provider", "-p", default=None, help="Provider to use for --run.")
 @click.option("--model", default=None, help="Model override.")
 @click.option("--read-only", is_flag=True, help="Open in read-only mode (no save/run).")
@@ -63,7 +60,7 @@ def tui_cmd(file: str | None, provider: str | None, model: str | None, read_only
             "[red]Error:[/red] Textual is not installed.\n"
             "Install the TUI extra with: [bold]pip install 'promptgenie[tui]'[/bold]"
         )
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     _run_tui(file=file, provider=provider, model=model, read_only=read_only)
     raise SystemExit(EXIT_OK)
@@ -72,6 +69,7 @@ def tui_cmd(file: str | None, provider: str | None, model: str | None, read_only
 # ---------------------------------------------------------------------------
 # Textual application
 # ---------------------------------------------------------------------------
+
 
 def _run_tui(
     *,
@@ -82,20 +80,19 @@ def _run_tui(
 ) -> None:
     """Build and run the Textual app (only called when textual is available)."""
     from pathlib import Path
+
     from textual.app import App, ComposeResult
     from textual.binding import Binding
     from textual.containers import Horizontal, Vertical
+    from textual.reactive import reactive
     from textual.widgets import (
         Footer,
         Header,
-        Label,
         RichLog,
         Static,
         TextArea,
         Tree,
     )
-    from textual import on, work
-    from textual.reactive import reactive
 
     class PromptGenieApp(App):
         """PromptGenie full-screen TUI."""
@@ -190,9 +187,7 @@ def _run_tui(
             status = self.query_one("#status-bar", Static)
             fname = self.current_file or "(unsaved)"
             prov = f"{self._provider or 'no provider'}/{self._model or 'default'}"
-            status.update(
-                f" {fname}  |  ~{words} tokens  |  score: {self.score}  |  {prov}"
-            )
+            status.update(f" {fname}  |  ~{words} tokens  |  score: {self.score}  |  {prov}")
 
         def on_text_area_changed(self) -> None:
             self._update_status()
@@ -217,6 +212,7 @@ def _run_tui(
             log = self.query_one("#findings-panel", RichLog)
             log.clear()
             from promptgenie.core.linter import lint
+
             result = lint(editor.text)
             self.score = result.score
             self._update_status()
@@ -245,12 +241,15 @@ def _run_tui(
                 log.write("[green]No changes since last save.[/green]")
                 return
             import difflib
-            diff = list(difflib.unified_diff(
-                self._last_saved.splitlines(keepends=True),
-                current.splitlines(keepends=True),
-                fromfile="saved",
-                tofile="current",
-            ))
+
+            diff = list(
+                difflib.unified_diff(
+                    self._last_saved.splitlines(keepends=True),
+                    current.splitlines(keepends=True),
+                    fromfile="saved",
+                    tofile="current",
+                )
+            )
             log.clear()
             for line in diff[:40]:
                 if line.startswith("+"):
@@ -267,11 +266,10 @@ def _run_tui(
                 suite_path = self._file.with_suffix(".eval.yaml")
                 if suite_path.exists():
                     from promptgenie.core.eval_suite import load_eval_suite, run_eval_suite
+
                     suite = load_eval_suite(suite_path)
                     result = run_eval_suite(suite, dry_run=True)
-                    log.write(
-                        f"[bold]Eval:[/bold] {result.pass_count}/{result.total} passed"
-                    )
+                    log.write(f"[bold]Eval:[/bold] {result.pass_count}/{result.total} passed")
                     return
             log.write("[dim]No adjacent .eval.yaml found. Create one to enable Ctrl+T.[/dim]")
 

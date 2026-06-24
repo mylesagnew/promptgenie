@@ -22,11 +22,8 @@ Public API
 
 from __future__ import annotations
 
-import json
 import os
 import sys
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 
@@ -38,6 +35,7 @@ def is_github_actions() -> bool:
 # ---------------------------------------------------------------------------
 # Annotation helpers
 # ---------------------------------------------------------------------------
+
 
 def _escape_annotation(value: str) -> str:
     """Escape special chars for a GHA workflow command value."""
@@ -128,6 +126,7 @@ class GHReporter:
 # Step summary formatters
 # ---------------------------------------------------------------------------
 
+
 def format_analyze_summary(
     findings: list,
     file_path: str,
@@ -141,8 +140,8 @@ def format_analyze_summary(
     lines = [
         f"## PromptGenie Analyze — {status}",
         "",
-        f"| File | Risk | Lint Score | Findings |",
-        f"|------|------|-----------|----------|",
+        "| File | Risk | Lint Score | Findings |",
+        "|------|------|-----------|----------|",
         f"| `{file_path}` | **{overall_risk}** | {lint_score}/100 | {len(findings)} |",
         "",
     ]
@@ -178,8 +177,8 @@ def format_eval_summary(
         f"**Suite:** {suite_result.suite_name}",
         (f"**Prompt:** `{prompt_file}`" if prompt_file else ""),
         "",
-        f"| Total | Passed | Failed | Skipped |",
-        f"|-------|--------|--------|---------|",
+        "| Total | Passed | Failed | Skipped |",
+        "|-------|--------|--------|---------|",
         f"| {suite_result.total} | {suite_result.pass_count} | "
         f"{suite_result.fail_count} | {suite_result.skip_count} |",
         "",
@@ -198,7 +197,7 @@ def format_eval_summary(
         for r in regression_report.regressions:
             lines.append(f"- **{r.model}** `{r.metric}`: {r.message}")
         lines.append("")
-    return "\n".join(l for l in lines if l is not None)
+    return "\n".join(ln for ln in lines if ln is not None)
 
 
 def format_matrix_summary(
@@ -240,6 +239,7 @@ def format_matrix_summary(
 # SARIF helpers for CI upload
 # ---------------------------------------------------------------------------
 
+
 def eval_results_to_sarif(suite_result: Any, *, file_path: str = "") -> dict:
     """Convert an EvalSuiteResult to a minimal SARIF 2.1.0 document."""
     rules = []
@@ -248,37 +248,43 @@ def eval_results_to_sarif(suite_result: Any, *, file_path: str = "") -> dict:
         if case.skipped or case.passed:
             continue
         rule_id = f"EVAL_{case.case_name.upper().replace(' ', '_')}"
-        rules.append({
-            "id": rule_id,
-            "shortDescription": {"text": f"Eval case failed: {case.case_name}"},
-        })
+        rules.append(
+            {
+                "id": rule_id,
+                "shortDescription": {"text": f"Eval case failed: {case.case_name}"},
+            }
+        )
         for ar in case.assertion_results:
             if not ar.passed:
                 loc: dict = {}
                 if file_path:
                     loc = {"physicalLocation": {"artifactLocation": {"uri": file_path}}}
-                results.append({
-                    "ruleId": rule_id,
-                    "level": "error",
-                    "message": {"text": ar.message},
-                    "locations": [loc] if loc else [],
-                })
+                results.append(
+                    {
+                        "ruleId": rule_id,
+                        "level": "error",
+                        "message": {"text": ar.message},
+                        "locations": [loc] if loc else [],
+                    }
+                )
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{
-            "tool": {
-                "driver": {
-                    "name": "PromptGenie Eval",
-                    "version": "1.0",
-                    "rules": rules,
-                }
-            },
-            "results": results,
-            "properties": {
-                "suite_name": suite_result.suite_name,
-                "passed": suite_result.passed,
-                "total": suite_result.total,
-            },
-        }],
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "PromptGenie Eval",
+                        "version": "1.0",
+                        "rules": rules,
+                    }
+                },
+                "results": results,
+                "properties": {
+                    "suite_name": suite_result.suite_name,
+                    "passed": suite_result.passed,
+                    "total": suite_result.total,
+                },
+            }
+        ],
     }

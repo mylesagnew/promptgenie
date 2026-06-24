@@ -106,20 +106,20 @@ _SEVERITY_COLORS: dict[str, str] = {
 }
 
 _KIND_ICONS: dict[EventKind, str] = {
-    EventKind.RUN_START:        "▶",
-    EventKind.RUN_DONE:         "✓",
-    EventKind.RUN_DRY:          "◌",
-    EventKind.RUN_WARNING:      "⚠",
-    EventKind.RUN_ERROR:        "✗",
-    EventKind.RUN_TOOL_CALL:    "⚙",
-    EventKind.LINT_FINDING:     "●",
-    EventKind.SCAN_FINDING:     "⬤",
-    EventKind.POLICY_PASS:      "✅",
+    EventKind.RUN_START: "▶",
+    EventKind.RUN_DONE: "✓",
+    EventKind.RUN_DRY: "◌",
+    EventKind.RUN_WARNING: "⚠",
+    EventKind.RUN_ERROR: "✗",
+    EventKind.RUN_TOOL_CALL: "⚙",
+    EventKind.LINT_FINDING: "●",
+    EventKind.SCAN_FINDING: "⬤",
+    EventKind.POLICY_PASS: "✅",
     EventKind.POLICY_VIOLATION: "❌",
-    EventKind.DIFF_COMPUTED:    "⟷",
-    EventKind.EVAL_RESULT:      "📊",
-    EventKind.CI_CHECK:         "🔄",
-    EventKind.AUDIT_WRITE:      "📝",
+    EventKind.DIFF_COMPUTED: "⟷",
+    EventKind.EVAL_RESULT: "📊",
+    EventKind.CI_CHECK: "🔄",
+    EventKind.AUDIT_WRITE: "📝",
 }
 
 

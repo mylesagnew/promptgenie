@@ -42,11 +42,12 @@ import io
 import json
 import sqlite3
 import uuid
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 _DB_PATH = Path("~/.local/share/promptgenie/history.db").expanduser()
 
@@ -82,6 +83,7 @@ def _hash(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class HistoryRecord:
@@ -122,7 +124,7 @@ class HistoryRecord:
         }
 
     @staticmethod
-    def _from_row(row: sqlite3.Row) -> "HistoryRecord":
+    def _from_row(row: sqlite3.Row) -> HistoryRecord:
         return HistoryRecord(
             id=row["id"],
             spec_name=row["spec_name"],
@@ -148,6 +150,7 @@ class HistoryRecord:
 # HistoryDB class
 # ---------------------------------------------------------------------------
 
+
 class HistoryDB:
     """Thin SQLite wrapper around the history database."""
 
@@ -162,7 +165,7 @@ class HistoryDB:
     def close(self) -> None:
         self._conn.close()
 
-    def __enter__(self) -> "HistoryDB":
+    def __enter__(self) -> HistoryDB:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -200,12 +203,23 @@ class HistoryDB:
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
-                rid, spec_name, provider, model,
-                _hash(prompt_text), _hash(response_text),
-                prompt_text, response_text, status,
-                started_at or now, finished_at or now,
-                duration_s, input_tokens, output_tokens, cost_usd,
-                json.dumps(tags or []), json.dumps(extra or {}),
+                rid,
+                spec_name,
+                provider,
+                model,
+                _hash(prompt_text),
+                _hash(response_text),
+                prompt_text,
+                response_text,
+                status,
+                started_at or now,
+                finished_at or now,
+                duration_s,
+                input_tokens,
+                output_tokens,
+                cost_usd,
+                json.dumps(tags or []),
+                json.dumps(extra or {}),
             ),
         )
         self._conn.commit()
@@ -214,9 +228,7 @@ class HistoryDB:
     # ── Read ─────────────────────────────────────────────────────────────────
 
     def get_run(self, run_id: str) -> HistoryRecord | None:
-        row = self._conn.execute(
-            "SELECT * FROM runs WHERE id = ?", (run_id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
         return HistoryRecord._from_row(row) if row else None
 
     def list_runs(
@@ -241,7 +253,8 @@ class HistoryDB:
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.append(limit)
         rows = self._conn.execute(
-            f"SELECT * FROM runs {where} ORDER BY started_at DESC LIMIT ?", params
+            f"SELECT * FROM runs {where} ORDER BY started_at DESC LIMIT ?",  # nosec B608 - hardcoded predicates; values bound via ? params
+            params,
         ).fetchall()
         return [HistoryRecord._from_row(r) for r in rows]
 
@@ -271,7 +284,7 @@ class HistoryDB:
         return cur.rowcount > 0
 
     def total_count(self) -> int:
-        return self._conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+        return int(self._conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0])
 
     # ── Export ───────────────────────────────────────────────────────────────
 
@@ -295,6 +308,7 @@ class HistoryDB:
 # ---------------------------------------------------------------------------
 # Context manager shortcut
 # ---------------------------------------------------------------------------
+
 
 @contextmanager
 def open_history_db(db_path: Path | None = None) -> Generator[HistoryDB, None, None]:

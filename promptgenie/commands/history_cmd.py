@@ -39,16 +39,22 @@ def history_group() -> None:
 # history list
 # ---------------------------------------------------------------------------
 
+
 @history_group.command("list")
 @click.option("--limit", "-n", default=20, type=int, show_default=True)
 @click.option("--provider", default=None, help="Filter by provider name.")
-@click.option("--status", default=None,
-              type=click.Choice(["ok", "error", "dry_run"], case_sensitive=False))
+@click.option(
+    "--status", default=None, type=click.Choice(["ok", "error", "dry_run"], case_sensitive=False)
+)
 @click.option("--spec", "spec_name", default=None, help="Filter by spec name (partial match).")
 @click.option("--search", default=None, help="Full-text search across prompt/spec/provider.")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 @click.option("--db", "db_path", default=None, type=click.Path(), help="Custom DB path.")
 def history_list_cmd(
     limit: int,
@@ -68,6 +74,7 @@ def history_list_cmd(
       promptgenie history list --search "auth prompt"
     """
     from pathlib import Path
+
     from promptgenie.core.history_db import open_history_db
 
     with open_history_db(Path(db_path) if db_path else None) as db:
@@ -84,10 +91,12 @@ def history_list_cmd(
 
     if output_format == "json":
         import json
+
         sys.stdout.write(json.dumps([r.to_dict() for r in records], indent=2) + "\n")
         return
 
     from rich.table import Table
+
     table = Table(title="Run History", show_header=True, header_style="bold")
     table.add_column("ID", style="dim", width=8)
     table.add_column("Spec")
@@ -120,11 +129,16 @@ def history_list_cmd(
 # history show
 # ---------------------------------------------------------------------------
 
+
 @history_group.command("show")
 @click.argument("run_id")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json", "raw"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "raw"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 @click.option("--db", "db_path", default=None, type=click.Path())
 def history_show_cmd(run_id: str, output_format: str, db_path: str | None) -> None:
     """Show full details of a run.
@@ -134,8 +148,10 @@ def history_show_cmd(run_id: str, output_format: str, db_path: str | None) -> No
       promptgenie history show abc12345
     """
     from pathlib import Path
-    from promptgenie.core.history_db import open_history_db
+
     from rich.panel import Panel
+
+    from promptgenie.core.history_db import open_history_db
 
     with open_history_db(Path(db_path) if db_path else None) as db:
         # Support prefix matching
@@ -152,6 +168,7 @@ def history_show_cmd(run_id: str, output_format: str, db_path: str | None) -> No
 
     if output_format == "json":
         import json
+
         d = record.to_dict()
         d["prompt_text"] = record.prompt_text
         d["response_text"] = record.response_text
@@ -162,19 +179,21 @@ def history_show_cmd(run_id: str, output_format: str, db_path: str | None) -> No
         sys.stdout.write(record.response_text + "\n")
         return
 
-    console.print(Panel(
-        f"[bold]ID:[/bold] {record.id}\n"
-        f"[bold]Spec:[/bold] {record.spec_name or '—'}\n"
-        f"[bold]Provider:[/bold] {record.provider} / {record.model}\n"
-        f"[bold]Status:[/bold] {record.status}\n"
-        f"[bold]Started:[/bold] {record.started_at}\n"
-        f"[bold]Duration:[/bold] {record.duration_s:.2f}s\n"
-        f"[bold]Tokens:[/bold] {record.input_tokens} in / {record.output_tokens} out\n"
-        f"[bold]Cost:[/bold] ${record.cost_usd:.6f}\n"
-        f"[bold]Prompt hash:[/bold] [dim]{record.prompt_hash[:16]}…[/dim]",
-        title=f"Run Detail  [dim]{record.id[:8]}[/dim]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold]ID:[/bold] {record.id}\n"
+            f"[bold]Spec:[/bold] {record.spec_name or '—'}\n"
+            f"[bold]Provider:[/bold] {record.provider} / {record.model}\n"
+            f"[bold]Status:[/bold] {record.status}\n"
+            f"[bold]Started:[/bold] {record.started_at}\n"
+            f"[bold]Duration:[/bold] {record.duration_s:.2f}s\n"
+            f"[bold]Tokens:[/bold] {record.input_tokens} in / {record.output_tokens} out\n"
+            f"[bold]Cost:[/bold] ${record.cost_usd:.6f}\n"
+            f"[bold]Prompt hash:[/bold] [dim]{record.prompt_hash[:16]}…[/dim]",
+            title=f"Run Detail  [dim]{record.id[:8]}[/dim]",
+            border_style="cyan",
+        )
+    )
     console.print("\n[bold]Prompt:[/bold]")
     console.print(record.prompt_text[:2000] + ("…" if len(record.prompt_text) > 2000 else ""))
     console.print("\n[bold]Response:[/bold]")
@@ -184,6 +203,7 @@ def history_show_cmd(run_id: str, output_format: str, db_path: str | None) -> No
 # ---------------------------------------------------------------------------
 # history diff
 # ---------------------------------------------------------------------------
+
 
 @history_group.command("diff")
 @click.argument("run_id_a")
@@ -198,6 +218,7 @@ def history_diff_cmd(run_id_a: str, run_id_b: str, db_path: str | None) -> None:
     """
     import difflib
     from pathlib import Path
+
     from promptgenie.core.history_db import open_history_db
 
     with open_history_db(Path(db_path) if db_path else None) as db:
@@ -211,24 +232,28 @@ def history_diff_cmd(run_id_a: str, run_id_b: str, db_path: str | None) -> None:
         diag_console.print(f"[red]Error:[/red] Run {run_id_b!r} not found.")
         raise SystemExit(EXIT_USAGE)
 
-    diff = list(difflib.unified_diff(
-        ra.response_text.splitlines(keepends=True),
-        rb.response_text.splitlines(keepends=True),
-        fromfile=f"run/{run_id_a[:8]}",
-        tofile=f"run/{run_id_b[:8]}",
-    ))
+    diff = list(
+        difflib.unified_diff(
+            ra.response_text.splitlines(keepends=True),
+            rb.response_text.splitlines(keepends=True),
+            fromfile=f"run/{run_id_a[:8]}",
+            tofile=f"run/{run_id_b[:8]}",
+        )
+    )
 
     if not diff:
         console.print("[green]Responses are identical.[/green]")
         raise SystemExit(EXIT_OK)
 
     from rich.syntax import Syntax
+
     console.print(Syntax("".join(diff), "diff", theme="monokai"))
 
 
 # ---------------------------------------------------------------------------
 # history replay
 # ---------------------------------------------------------------------------
+
 
 @history_group.command("replay")
 @click.argument("run_id")
@@ -252,6 +277,7 @@ def history_replay_cmd(
     """
     import asyncio
     from pathlib import Path
+
     from promptgenie.core.history_db import open_history_db
 
     with open_history_db(Path(db_path) if db_path else None) as db:
@@ -264,7 +290,9 @@ def history_replay_cmd(
     effective_provider = provider or record.provider
     effective_model = model or record.model
 
-    console.print(f"[dim]Replaying run {run_id[:8]} via {effective_provider}/{effective_model}[/dim]")
+    console.print(
+        f"[dim]Replaying run {run_id[:8]} via {effective_provider}/{effective_model}[/dim]"
+    )
     console.print(f"\n[bold]Prompt:[/bold]\n{record.prompt_text[:500]}")
 
     if dry_run:
@@ -273,25 +301,31 @@ def history_replay_cmd(
 
     try:
         from promptgenie.core.providers import get_provider
+
         prov = get_provider(effective_provider, model_override=effective_model)
         messages = [{"role": "user", "content": record.prompt_text}]
-        response = asyncio.run(prov.complete(
-            messages, model=effective_model, max_tokens=1024, timeout=60
-        ))
+        response = asyncio.run(
+            prov.complete(messages, model=effective_model, max_tokens=1024, timeout=60)
+        )
         console.print(f"\n[bold]Response:[/bold]\n{response}")
     except Exception as exc:
         diag_console.print(f"[red]Provider error:[/red] {exc}")
-        raise SystemExit(EXIT_FAILURE)
+        raise SystemExit(EXIT_FAILURE) from None
 
 
 # ---------------------------------------------------------------------------
 # history export
 # ---------------------------------------------------------------------------
 
+
 @history_group.command("export")
-@click.option("--format", "fmt",
-              type=click.Choice(["json", "csv", "ndjson"], case_sensitive=False),
-              default="json", show_default=True)
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["json", "csv", "ndjson"], case_sensitive=False),
+    default="json",
+    show_default=True,
+)
 @click.option("--limit", "-n", default=1000, type=int, show_default=True)
 @click.option("--out", default=None, help="Write to file instead of stdout.")
 @click.option("--db", "db_path", default=None, type=click.Path())
@@ -304,6 +338,7 @@ def history_export_cmd(fmt: str, limit: int, out: str | None, db_path: str | Non
       promptgenie history export --format ndjson --out history.ndjson
     """
     from pathlib import Path
+
     from promptgenie.core.history_db import open_history_db
 
     with open_history_db(Path(db_path) if db_path else None) as db:
@@ -320,6 +355,7 @@ def history_export_cmd(fmt: str, limit: int, out: str | None, db_path: str | Non
 # history clear
 # ---------------------------------------------------------------------------
 
+
 @history_group.command("clear")
 @click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
 @click.option("--db", "db_path", default=None, type=click.Path())
@@ -331,7 +367,8 @@ def history_clear_cmd(yes: bool, db_path: str | None) -> None:
       promptgenie history clear --yes
     """
     from pathlib import Path
-    from promptgenie.core.history_db import HistoryDB, open_history_db
+
+    from promptgenie.core.history_db import open_history_db
 
     if not yes:
         click.confirm("Delete ALL history? This cannot be undone.", abort=True)

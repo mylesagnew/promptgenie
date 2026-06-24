@@ -28,14 +28,12 @@ Examples
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import click
 
 from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
 from promptgenie.renderers.rich import console, diag_console
-
 
 _PROMPT_TEMPLATE = """\
 # Prompt: {objective}
@@ -143,12 +141,13 @@ def wizard_cmd(
     console.rule("[dim]Step 7: Target Profile[/dim]")
     target_choices = ["code-review", "refactor", "documentation", "security", "testing", "custom"]
     console.print("Options: " + ", ".join(target_choices))
-    target = click.prompt("Target profile", default="code-review").strip()
+    click.prompt("Target profile", default="code-review").strip()
 
     # ── Step 8: Context packs ─────────────────────────────────────────────
     console.rule("[dim]Step 8: Context Packs[/dim]")
     try:
         from promptgenie.core.context_packs import list_packs
+
         packs = list_packs()
         pack_ids = [p["id"] for p in packs]
     except Exception:
@@ -182,6 +181,7 @@ def wizard_cmd(
 
     # ── Write prompt file ─────────────────────────────────────────────────
     import re
+
     safe_name = re.sub(r"[^\w\-]", "-", objective[:40].lower()).strip("-")
     if out_file is None:
         out_file = f"prompts/{safe_name}.md"
@@ -206,7 +206,7 @@ def wizard_cmd(
         spec_path.write_text(spec_content, encoding="utf-8")
         console.print(f"[green]✓[/green] PromptSpec saved to [bold]{spec_path}[/bold]")
 
-    console.print(f"\n[dim]Next steps:[/dim]")
+    console.print("\n[dim]Next steps:[/dim]")
     console.print(f"  promptgenie lint {prompt_path}")
     console.print(f"  promptgenie scan {prompt_path}")
     if not no_spec:

@@ -23,8 +23,13 @@ import sys
 
 import click
 
-from promptgenie.core.plugin import PLUGIN_GROUPS, check_plugin_compat, list_plugins, scaffold_plugin
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.core.plugin import (
+    PLUGIN_GROUPS,
+    check_plugin_compat,
+    list_plugins,
+    scaffold_plugin,
+)
+from promptgenie.renderers.rich import console
 
 
 @click.group("plugin", help="Manage PromptGenie plugins.")
@@ -36,13 +41,22 @@ def plugin_group() -> None:
 # plugin list
 # ---------------------------------------------------------------------------
 
+
 @plugin_group.command("list")
-@click.option("--group", "filter_group", default=None,
-              type=click.Choice(list(PLUGIN_GROUPS), case_sensitive=False),
-              help="Filter by entry-point group.")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--group",
+    "filter_group",
+    default=None,
+    type=click.Choice(list(PLUGIN_GROUPS), case_sensitive=False),
+    help="Filter by entry-point group.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def plugin_list_cmd(filter_group: str | None, output_format: str) -> None:
     """List all installed PromptGenie plugins.
 
@@ -53,19 +67,19 @@ def plugin_list_cmd(filter_group: str | None, output_format: str) -> None:
       promptgenie plugin list --format json
     """
     from promptgenie.core.errors import EXIT_OK
+
     groups = (filter_group,) if filter_group else None
     plugins = list_plugins(groups)
 
     if not plugins:
         console.print("[dim]No plugins installed.[/dim]")
-        console.print(
-            "[dim]Install a plugin with: [bold]pip install <plugin-package>[/bold][/dim]"
-        )
+        console.print("[dim]Install a plugin with: [bold]pip install <plugin-package>[/bold][/dim]")
         raise SystemExit(EXIT_OK)
 
     if output_format == "json":
         import json
         import sys
+
         data = [
             {
                 "name": p.name,
@@ -81,6 +95,7 @@ def plugin_list_cmd(filter_group: str | None, output_format: str) -> None:
         return
 
     from rich.table import Table
+
     table = Table(title="Installed Plugins", show_header=True, header_style="bold")
     table.add_column("Name", style="cyan", no_wrap=True)
     table.add_column("Type", no_wrap=True)
@@ -107,9 +122,14 @@ def plugin_list_cmd(filter_group: str | None, output_format: str) -> None:
 # plugin doctor
 # ---------------------------------------------------------------------------
 
+
 @plugin_group.command("doctor")
-@click.option("--group", "filter_group", default=None,
-              type=click.Choice(list(PLUGIN_GROUPS), case_sensitive=False))
+@click.option(
+    "--group",
+    "filter_group",
+    default=None,
+    type=click.Choice(list(PLUGIN_GROUPS), case_sensitive=False),
+)
 def plugin_doctor_cmd(filter_group: str | None) -> None:
     """Check compatibility of all installed plugins.
 
@@ -118,6 +138,7 @@ def plugin_doctor_cmd(filter_group: str | None) -> None:
       promptgenie plugin doctor
     """
     from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK
+
     groups = (filter_group,) if filter_group else None
     plugins = list_plugins(groups)
 
@@ -143,14 +164,19 @@ def plugin_doctor_cmd(filter_group: str | None) -> None:
 # plugin scaffold
 # ---------------------------------------------------------------------------
 
+
 @plugin_group.command("scaffold")
 @click.argument("name")
-@click.option("--group", "group",
-              type=click.Choice(list(PLUGIN_GROUPS), case_sensitive=False),
-              required=True,
-              help="Entry-point group for the new plugin.")
-@click.option("--out", "out_dir", default=".", show_default=True,
-              help="Directory to write the stub file.")
+@click.option(
+    "--group",
+    "group",
+    type=click.Choice(list(PLUGIN_GROUPS), case_sensitive=False),
+    required=True,
+    help="Entry-point group for the new plugin.",
+)
+@click.option(
+    "--out", "out_dir", default=".", show_default=True, help="Directory to write the stub file."
+)
 def plugin_scaffold_cmd(name: str, group: str, out_dir: str) -> None:
     """Generate a stub plugin file.
 
@@ -160,11 +186,11 @@ def plugin_scaffold_cmd(name: str, group: str, out_dir: str) -> None:
       promptgenie plugin scaffold my-provider --group promptgenie.providers --out src/
     """
     from promptgenie.core.errors import EXIT_OK
+
     path = scaffold_plugin(name, group, output_dir=out_dir)
     console.print(f"[green]✓[/green] Plugin stub created: [bold]{path}[/bold]")
     console.print(
-        f"[dim]Register it in pyproject.toml under "
-        f"[project.entry-points.\"{group}\"][/dim]"
+        f'[dim]Register it in pyproject.toml under [project.entry-points."{group}"][/dim]'
     )
     raise SystemExit(EXIT_OK)
 
@@ -172,6 +198,7 @@ def plugin_scaffold_cmd(name: str, group: str, out_dir: str) -> None:
 # ---------------------------------------------------------------------------
 # plugin install
 # ---------------------------------------------------------------------------
+
 
 @plugin_group.command("install")
 @click.argument("packages", nargs=-1, required=True)
@@ -184,7 +211,6 @@ def plugin_install_cmd(packages: tuple[str, ...], upgrade: bool) -> None:
       promptgenie plugin install promptgenie-myplugin
       promptgenie plugin install ./local-plugin/ --upgrade
     """
-    from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK
     cmd = [sys.executable, "-m", "pip", "install"]
     if upgrade:
         cmd.append("--upgrade")

@@ -21,28 +21,45 @@ from pathlib import Path
 import click
 import yaml
 
-from promptgenie.core.errors import EXIT_OK, EXIT_USAGE, PromptGenieError
+from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import safe_read_text
 from promptgenie.core.redactor import redact
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers.rich import diag_console, is_structured_mode
 
 _ALL_CATEGORIES = {"secret", "data-leakage"}
 
 
 @click.command("redact")
 @click.argument("file", default="-", metavar="FILE|-")
-@click.option("--out", "-o", default=None, type=click.Path(),
-              help="Write redacted output to FILE instead of stdout.")
-@click.option("--categories", default=None, metavar="CAT[,CAT...]",
-              help="Comma-separated categories to redact: secret, data-leakage. "
-                   "Default: all redactable categories.")
-@click.option("--diff", is_flag=True,
-              help="Show a side-by-side summary of what was redacted instead of full output.")
-@click.option("--format", "output_format",
-              type=click.Choice(["text", "json", "yaml"], case_sensitive=False),
-              default="text", show_default=True)
-@click.option("--dry-run", "dry_run", is_flag=True,
-              help="Show what would be redacted without writing output.")
+@click.option(
+    "--out",
+    "-o",
+    default=None,
+    type=click.Path(),
+    help="Write redacted output to FILE instead of stdout.",
+)
+@click.option(
+    "--categories",
+    default=None,
+    metavar="CAT[,CAT...]",
+    help="Comma-separated categories to redact: secret, data-leakage. "
+    "Default: all redactable categories.",
+)
+@click.option(
+    "--diff",
+    is_flag=True,
+    help="Show a side-by-side summary of what was redacted instead of full output.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json", "yaml"], case_sensitive=False),
+    default="text",
+    show_default=True,
+)
+@click.option(
+    "--dry-run", "dry_run", is_flag=True, help="Show what would be redacted without writing output."
+)
 def redact_cmd(
     file: str,
     out: str | None,
@@ -68,7 +85,7 @@ def redact_cmd(
         text = safe_read_text(file)
     except (OSError, ValueError) as exc:
         diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from None
 
     effective_cats: set[str] | None = None
     if categories:
@@ -134,9 +151,7 @@ def redact_cmd(
     if out:
         Path(out).parent.mkdir(parents=True, exist_ok=True)
         Path(out).write_text(text_out, encoding="utf-8")
-        diag_console.print(
-            f"[green]✓[/green] Redacted {result.count} item(s) → [bold]{out}[/bold]"
-        )
+        diag_console.print(f"[green]✓[/green] Redacted {result.count} item(s) → [bold]{out}[/bold]")
     else:
         sys.stdout.write(text_out)
         if not text_out.endswith("\n"):

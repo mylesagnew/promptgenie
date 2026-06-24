@@ -51,6 +51,7 @@ class BaselineThresholds:
 # Stored record
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class BaselineModelEntry:
     provider: str
@@ -68,7 +69,7 @@ class BaselineRecord:
     name: str
     timestamp: str
     entries: list[BaselineModelEntry] = field(default_factory=list)
-    scan_risk: str = "NONE"         # highest risk from prompt scan at baseline time
+    scan_risk: str = "NONE"  # highest risk from prompt scan at baseline time
     meta: dict[str, Any] = field(default_factory=dict)
 
     def by_display_name(self, display_name: str) -> BaselineModelEntry | None:
@@ -103,6 +104,7 @@ class BaselineRecord:
 # ---------------------------------------------------------------------------
 # Regression report
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Regression:
@@ -149,15 +151,17 @@ class RegressionReport:
 # Persistence
 # ---------------------------------------------------------------------------
 
+
 def _baseline_path(name: str, baseline_dir: Path) -> Path:
     import re
+
     safe = re.sub(r"[^\w\-]", "_", name)
     return baseline_dir / f"{safe}.json"
 
 
 def save_baseline(
     name: str,
-    result: "Any",  # MatrixEvalResult from evaluator
+    result: Any,  # MatrixEvalResult from evaluator
     baseline_dir: Path | None = None,
     *,
     scan_risk: str = "NONE",
@@ -165,21 +169,24 @@ def save_baseline(
 ) -> Path:
     """Save *result* (MatrixEvalResult) as a named baseline artifact."""
     from datetime import datetime, timezone
+
     bdir = baseline_dir or _DEFAULT_BASELINE_DIR
     bdir.mkdir(parents=True, exist_ok=True)
 
     entries = []
     for r in result.results:
-        entries.append(BaselineModelEntry(
-            provider=r.provider,
-            model=r.model,
-            rubric_score=r.metrics.rubric_score,
-            safety_score=r.metrics.safety_score,
-            latency_ms=r.metrics.latency_ms,
-            cost_usd=r.metrics.cost_usd,
-            total_tokens=r.metrics.total_tokens,
-            error=r.error,
-        ))
+        entries.append(
+            BaselineModelEntry(
+                provider=r.provider,
+                model=r.model,
+                rubric_score=r.metrics.rubric_score,
+                safety_score=r.metrics.safety_score,
+                latency_ms=r.metrics.latency_ms,
+                cost_usd=r.metrics.cost_usd,
+                total_tokens=r.metrics.total_tokens,
+                error=r.error,
+            )
+        )
 
     record = BaselineRecord(
         name=name,
@@ -238,7 +245,7 @@ _RISK_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "NONE": 0}
 
 
 def compare_to_baseline(
-    new_result: "Any",          # MatrixEvalResult
+    new_result: Any,  # MatrixEvalResult
     baseline: BaselineRecord,
     thresholds: BaselineThresholds | None = None,
     *,
@@ -253,14 +260,16 @@ def compare_to_baseline(
         baseline_risk_order = _RISK_ORDER.get(baseline.scan_risk.upper(), 0)
         current_risk_order = _RISK_ORDER.get(current_scan_risk.upper(), 0)
         if current_risk_order >= 3 and current_risk_order > baseline_risk_order:
-            report.regressions.append(Regression(
-                model="(all)",
-                metric="scan_risk",
-                baseline_value=baseline.scan_risk,
-                current_value=current_scan_risk,
-                delta=f"+{current_scan_risk}",
-                message=f"New {current_scan_risk} security risk detected (baseline: {baseline.scan_risk})",
-            ))
+            report.regressions.append(
+                Regression(
+                    model="(all)",
+                    metric="scan_risk",
+                    baseline_value=baseline.scan_risk,
+                    current_value=current_scan_risk,
+                    delta=f"+{current_scan_risk}",
+                    message=f"New {current_scan_risk} security risk detected (baseline: {baseline.scan_risk})",
+                )
+            )
 
     for r in new_result.results:
         if not r.ok:
@@ -280,64 +289,65 @@ def compare_to_baseline(
         ):
             drop = baseline_entry.rubric_score - r.metrics.rubric_score
             if drop > t.fail_if_score_drops_by:
-                report.regressions.append(Regression(
-                    model=r.display_name,
-                    metric="rubric_score",
-                    baseline_value=baseline_entry.rubric_score,
-                    current_value=r.metrics.rubric_score,
-                    delta=f"-{drop:.1f}",
-                    message=(
-                        f"Rubric score dropped by {drop:.1f} pts "
-                        f"({baseline_entry.rubric_score:.0f} → {r.metrics.rubric_score:.0f}), "
-                        f"threshold is {t.fail_if_score_drops_by}"
-                    ),
-                ))
+                report.regressions.append(
+                    Regression(
+                        model=r.display_name,
+                        metric="rubric_score",
+                        baseline_value=baseline_entry.rubric_score,
+                        current_value=r.metrics.rubric_score,
+                        delta=f"-{drop:.1f}",
+                        message=(
+                            f"Rubric score dropped by {drop:.1f} pts "
+                            f"({baseline_entry.rubric_score:.0f} → {r.metrics.rubric_score:.0f}), "
+                            f"threshold is {t.fail_if_score_drops_by}"
+                        ),
+                    )
+                )
             elif r.metrics.rubric_score > baseline_entry.rubric_score:
                 report.improvements.append(
                     f"{r.display_name}: rubric +{r.metrics.rubric_score - baseline_entry.rubric_score:.1f}"
                 )
 
         # Cost regression
-        if (
-            t.fail_if_cost_increases_by_pct is not None
-            and baseline_entry.cost_usd > 0
-        ):
-            pct_increase = (r.metrics.cost_usd - baseline_entry.cost_usd) / baseline_entry.cost_usd * 100
+        if t.fail_if_cost_increases_by_pct is not None and baseline_entry.cost_usd > 0:
+            pct_increase = (
+                (r.metrics.cost_usd - baseline_entry.cost_usd) / baseline_entry.cost_usd * 100
+            )
             if pct_increase > t.fail_if_cost_increases_by_pct:
-                report.regressions.append(Regression(
-                    model=r.display_name,
-                    metric="cost_usd",
-                    baseline_value=baseline_entry.cost_usd,
-                    current_value=r.metrics.cost_usd,
-                    delta=f"+{pct_increase:.0f}%",
-                    message=(
-                        f"Cost increased by {pct_increase:.0f}% "
-                        f"(${baseline_entry.cost_usd:.6f} → ${r.metrics.cost_usd:.6f}), "
-                        f"threshold is {t.fail_if_cost_increases_by_pct}%"
-                    ),
-                ))
+                report.regressions.append(
+                    Regression(
+                        model=r.display_name,
+                        metric="cost_usd",
+                        baseline_value=baseline_entry.cost_usd,
+                        current_value=r.metrics.cost_usd,
+                        delta=f"+{pct_increase:.0f}%",
+                        message=(
+                            f"Cost increased by {pct_increase:.0f}% "
+                            f"(${baseline_entry.cost_usd:.6f} → ${r.metrics.cost_usd:.6f}), "
+                            f"threshold is {t.fail_if_cost_increases_by_pct}%"
+                        ),
+                    )
+                )
 
         # Latency regression (optional)
-        if (
-            t.fail_if_latency_increases_by_pct is not None
-            and baseline_entry.latency_ms > 0
-        ):
+        if t.fail_if_latency_increases_by_pct is not None and baseline_entry.latency_ms > 0:
             pct_increase = (
-                (r.metrics.latency_ms - baseline_entry.latency_ms)
-                / baseline_entry.latency_ms * 100
+                (r.metrics.latency_ms - baseline_entry.latency_ms) / baseline_entry.latency_ms * 100
             )
             if pct_increase > t.fail_if_latency_increases_by_pct:
-                report.regressions.append(Regression(
-                    model=r.display_name,
-                    metric="latency_ms",
-                    baseline_value=baseline_entry.latency_ms,
-                    current_value=r.metrics.latency_ms,
-                    delta=f"+{pct_increase:.0f}%",
-                    message=(
-                        f"Latency increased by {pct_increase:.0f}% "
-                        f"({baseline_entry.latency_ms:.0f}ms → {r.metrics.latency_ms:.0f}ms), "
-                        f"threshold is {t.fail_if_latency_increases_by_pct}%"
-                    ),
-                ))
+                report.regressions.append(
+                    Regression(
+                        model=r.display_name,
+                        metric="latency_ms",
+                        baseline_value=baseline_entry.latency_ms,
+                        current_value=r.metrics.latency_ms,
+                        delta=f"+{pct_increase:.0f}%",
+                        message=(
+                            f"Latency increased by {pct_increase:.0f}% "
+                            f"({baseline_entry.latency_ms:.0f}ms → {r.metrics.latency_ms:.0f}ms), "
+                            f"threshold is {t.fail_if_latency_increases_by_pct}%"
+                        ),
+                    )
+                )
 
     return report

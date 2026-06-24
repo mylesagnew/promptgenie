@@ -47,7 +47,6 @@ Public API
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -143,6 +142,7 @@ def load_policy(path: str | Path | None = None) -> PolicyConfig:
     p = Path(path)
     if not p.exists():
         from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
+
         raise PromptGenieError(f"Policy file not found: {p}", code=EXIT_USAGE)
 
     raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
@@ -164,8 +164,9 @@ def _build_policy(raw: dict[str, Any], source_path: Path | None = None) -> Polic
         allowed_providers=[str(p) for p in raw.get("allowed_providers", [])],
         external_model_send=ext,
         rule_packs=list(raw.get("rule_packs") or []),
-        severity_overrides={str(k): str(v).upper()
-                             for k, v in (raw.get("severity_overrides") or {}).items()},
+        severity_overrides={
+            str(k): str(v).upper() for k, v in (raw.get("severity_overrides") or {}).items()
+        },
         source_path=source_path,
     )
 
@@ -211,14 +212,13 @@ def evaluate_policy(
     # Lint quality findings are governed by min_score, not max_risk.
     max_order = _RISK_ORDER.get(policy.max_risk, 1)
     qualifying = [
-        f for f in analyze_result.findings
-        if getattr(f, "source", "scan") == "scan"
-        and _RISK_ORDER.get(f.severity, 99) <= max_order
+        f
+        for f in analyze_result.findings
+        if getattr(f, "source", "scan") == "scan" and _RISK_ORDER.get(f.severity, 99) <= max_order
     ]
     _explain(
         f"[max_risk={policy.max_risk}] "
-        f"{len(qualifying)} finding(s) at or above threshold"
-        + (" ✓" if not qualifying else " ✗")
+        f"{len(qualifying)} finding(s) at or above threshold" + (" ✓" if not qualifying else " ✗")
     )
     if qualifying and (policy.max_findings == 0 or len(qualifying) > policy.max_findings):
         threshold_str = "any" if policy.max_findings == 0 else str(policy.max_findings)

@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from promptgenie.core.scanner import SCAN_RULES, ScanRule
+from promptgenie.core.scanner import SCAN_RULES
 
 _REDACTABLE_CATEGORIES = {"secret", "data-leakage"}
 
@@ -96,7 +96,7 @@ def redact(
             spans.append((m.start(), m.end(), f"[REDACTED:{label}]", m.group(0), rule.id))
 
     # Extra patterns
-    for pattern, label in (extra_patterns or []):
+    for pattern, label in extra_patterns or []:
         for m in re.finditer(pattern, text):
             spans.append((m.start(), m.end(), f"[REDACTED:{label}]", m.group(0), "custom"))
 
@@ -118,13 +118,15 @@ def redact(
     for start, end, placeholder, original, rule_id in merged:
         result_parts.append(text[prev:start])
         result_parts.append(placeholder)
-        redactions.append(Redaction(
-            rule_id=rule_id,
-            original=original,
-            placeholder=placeholder,
-            start=start,
-            end=end,
-        ))
+        redactions.append(
+            Redaction(
+                rule_id=rule_id,
+                original=original,
+                placeholder=placeholder,
+                start=start,
+                end=end,
+            )
+        )
         prev = end
     result_parts.append(text[prev:])
 

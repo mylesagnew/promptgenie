@@ -18,18 +18,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import yaml
 
+from promptgenie.core.run_engine import RunEvent, RunResult, run_spec
 from promptgenie.core.spec import (
     SecretVarBinding,
     load_spec,
-    render_spec,
 )
-from promptgenie.core.run_engine import RunResult, RunEvent, run_spec
-from promptgenie.core.providers import ProviderCapabilities, ProviderConfig
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_spec_file(tmp_path: Path, content: dict) -> Path:
     p = tmp_path / "test.prompt.yaml"
@@ -44,21 +42,31 @@ def _make_spec_file(tmp_path: Path, content: dict) -> Path:
 
 class TestSecretVarLoading:
     def test_plain_var_stays_in_vars(self, tmp_path):
-        p = _make_spec_file(tmp_path, {
-            "version": 1, "name": "t", "target": "claude-code",
-            "vars": {"env": "prod"},
-        })
+        p = _make_spec_file(
+            tmp_path,
+            {
+                "version": 1,
+                "name": "t",
+                "target": "claude-code",
+                "vars": {"env": "prod"},
+            },
+        )
         spec = load_spec(p)
         assert spec.vars == {"env": "prod"}
         assert spec.secret_vars == {}
 
     def test_from_env_binding_goes_to_secret_vars(self, tmp_path):
-        p = _make_spec_file(tmp_path, {
-            "version": 1, "name": "t", "target": "claude-code",
-            "vars": {
-                "api_token": {"from_env": "GITHUB_TOKEN", "secret": True},
+        p = _make_spec_file(
+            tmp_path,
+            {
+                "version": 1,
+                "name": "t",
+                "target": "claude-code",
+                "vars": {
+                    "api_token": {"from_env": "GITHUB_TOKEN", "secret": True},
+                },
             },
-        })
+        )
         spec = load_spec(p)
         assert "api_token" not in spec.vars
         assert "api_token" in spec.secret_vars
@@ -67,34 +75,49 @@ class TestSecretVarLoading:
         assert binding.secret is True
 
     def test_from_env_default_secret_true(self, tmp_path):
-        p = _make_spec_file(tmp_path, {
-            "version": 1, "name": "t", "target": "claude-code",
-            "vars": {
-                "token": {"from_env": "MY_TOKEN"},
+        p = _make_spec_file(
+            tmp_path,
+            {
+                "version": 1,
+                "name": "t",
+                "target": "claude-code",
+                "vars": {
+                    "token": {"from_env": "MY_TOKEN"},
+                },
             },
-        })
+        )
         spec = load_spec(p)
         assert spec.secret_vars["token"].secret is True
 
     def test_from_env_with_fallback_default(self, tmp_path):
-        p = _make_spec_file(tmp_path, {
-            "version": 1, "name": "t", "target": "claude-code",
-            "vars": {
-                "token": {"from_env": "MY_TOKEN", "default": "fallback-val"},
+        p = _make_spec_file(
+            tmp_path,
+            {
+                "version": 1,
+                "name": "t",
+                "target": "claude-code",
+                "vars": {
+                    "token": {"from_env": "MY_TOKEN", "default": "fallback-val"},
+                },
             },
-        })
+        )
         spec = load_spec(p)
         assert spec.secret_vars["token"].default == "fallback-val"
 
     def test_mixed_plain_and_secret_vars(self, tmp_path):
-        p = _make_spec_file(tmp_path, {
-            "version": 1, "name": "t", "target": "claude-code",
-            "vars": {
-                "env": "prod",
-                "token": {"from_env": "API_TOKEN", "secret": True},
-                "count": 3,
+        p = _make_spec_file(
+            tmp_path,
+            {
+                "version": 1,
+                "name": "t",
+                "target": "claude-code",
+                "vars": {
+                    "env": "prod",
+                    "token": {"from_env": "API_TOKEN", "secret": True},
+                    "count": 3,
+                },
             },
-        })
+        )
         spec = load_spec(p)
         assert set(spec.vars.keys()) == {"env", "count"}
         assert set(spec.secret_vars.keys()) == {"token"}
@@ -108,7 +131,9 @@ class TestSecretVarLoading:
 class TestSecretVarResolution:
     def _minimal_spec(self, tmp_path: Path, extra: dict | None = None) -> Path:
         content: dict = {
-            "version": 1, "name": "t", "target": "claude-code",
+            "version": 1,
+            "name": "t",
+            "target": "claude-code",
             "prompt": "Token is {{api_token}}",
             "vars": {
                 "api_token": {"from_env": "TEST_API_TOKEN", "secret": True},
@@ -142,20 +167,24 @@ class TestSecretVarResolution:
 
     def test_missing_env_var_raises_without_default(self, tmp_path):
         from promptgenie.core.errors import PromptGenieError
+
         p = self._minimal_spec(tmp_path)
         spec = load_spec(p)
         env = {k: v for k, v in os.environ.items() if k != "TEST_API_TOKEN"}
-        with patch.dict(os.environ, env, clear=True):
-            with pytest.raises(PromptGenieError, match="TEST_API_TOKEN"):
-                run_spec(spec, dry_run=True, no_input=True)
+        with (
+            patch.dict(os.environ, env, clear=True),
+            pytest.raises(PromptGenieError, match="TEST_API_TOKEN"),
+        ):
+            run_spec(spec, dry_run=True, no_input=True)
 
     def test_missing_env_var_uses_default(self, tmp_path):
         content = {
-            "version": 1, "name": "t", "target": "claude-code",
+            "version": 1,
+            "name": "t",
+            "target": "claude-code",
             "prompt": "Token is {{api_token}}",
             "vars": {
-                "api_token": {"from_env": "UNSET_TOKEN_XYZ", "secret": True,
-                              "default": "fallback"},
+                "api_token": {"from_env": "UNSET_TOKEN_XYZ", "secret": True, "default": "fallback"},
             },
         }
         p = _make_spec_file(tmp_path, content)
@@ -169,7 +198,9 @@ class TestSecretVarResolution:
         p = self._minimal_spec(tmp_path)
         spec = load_spec(p)
         result = run_spec(
-            spec, dry_run=True, no_input=True,
+            spec,
+            dry_run=True,
+            no_input=True,
             cli_vars=["api_token=cli-override"],
         )
         assert result.resolved_vars["api_token"] == "cli-override"
@@ -183,8 +214,11 @@ class TestSecretVarResolution:
 class TestRunResultRedactedVars:
     def test_non_secret_vars_pass_through(self):
         result = RunResult(
-            run_id="x", spec_name="t", status="ok",
-            response="", dry_run=False,
+            run_id="x",
+            spec_name="t",
+            status="ok",
+            response="",
+            dry_run=False,
             resolved_vars={"env": "prod", "count": 3},
             secret_var_names=set(),
         )
@@ -192,8 +226,11 @@ class TestRunResultRedactedVars:
 
     def test_secret_vars_replaced_with_stars(self):
         result = RunResult(
-            run_id="x", spec_name="t", status="ok",
-            response="", dry_run=False,
+            run_id="x",
+            spec_name="t",
+            status="ok",
+            response="",
+            dry_run=False,
             resolved_vars={"env": "prod", "token": "abc123"},
             secret_var_names={"token"},
         )
@@ -203,8 +240,11 @@ class TestRunResultRedactedVars:
 
     def test_multiple_secrets_all_redacted(self):
         result = RunResult(
-            run_id="x", spec_name="t", status="ok",
-            response="", dry_run=False,
+            run_id="x",
+            spec_name="t",
+            status="ok",
+            response="",
+            dry_run=False,
             resolved_vars={"a": "1", "b": "2", "c": "3"},
             secret_var_names={"a", "c"},
         )
@@ -220,6 +260,7 @@ class TestRunResultRedactedVars:
 class TestProviderDoctorCapabilities:
     def test_doctor_json_includes_capabilities(self):
         from click.testing import CliRunner
+
         from promptgenie.cli import cli
 
         runner = CliRunner()
@@ -238,6 +279,7 @@ class TestProviderDoctorCapabilities:
 
     def test_doctor_json_local_true_for_ollama(self):
         from click.testing import CliRunner
+
         from promptgenie.cli import cli
 
         runner = CliRunner()
@@ -250,6 +292,7 @@ class TestProviderDoctorCapabilities:
 
     def test_doctor_anthropic_max_context_tokens(self):
         from click.testing import CliRunner
+
         from promptgenie.cli import cli
 
         runner = CliRunner()
@@ -276,6 +319,7 @@ class TestTTYStreamingCallback:
 
     def _make_mock_provider(self, tokens: list[str]):
         """Return a mock BaseProvider that streams the given tokens."""
+
         async def _stream(*a, **kw):
             for t in tokens:
                 yield t
@@ -287,47 +331,59 @@ class TestTTYStreamingCallback:
         return provider
 
     def test_non_tty_on_token_receives_each_token(self, tmp_path):
-        p = _make_spec_file(tmp_path, {
-            "version": 1, "name": "t", "target": "claude-code",
-            "prompt": "Hello",
-        })
+        p = _make_spec_file(
+            tmp_path,
+            {
+                "version": 1,
+                "name": "t",
+                "target": "claude-code",
+                "prompt": "Hello",
+            },
+        )
         spec = load_spec(p)
         received: list[str] = []
 
         provider = self._make_mock_provider(["Hello", " ", "World"])
         with patch("promptgenie.core.run_engine.get_provider", return_value=provider):
-            run_spec(spec, on_token=received.append, stream=True,
-                     no_input=True, no_history=True)
+            run_spec(spec, on_token=received.append, stream=True, no_input=True, no_history=True)
 
         assert received == ["Hello", " ", "World"]
 
     def test_non_streaming_on_token_receives_full_response(self, tmp_path):
-        p = _make_spec_file(tmp_path, {
-            "version": 1, "name": "t", "target": "claude-code",
-            "prompt": "Hello",
-        })
+        p = _make_spec_file(
+            tmp_path,
+            {
+                "version": 1,
+                "name": "t",
+                "target": "claude-code",
+                "prompt": "Hello",
+            },
+        )
         spec = load_spec(p)
         received: list[str] = []
 
         provider = self._make_mock_provider(["Full response text"])
         with patch("promptgenie.core.run_engine.get_provider", return_value=provider):
-            run_spec(spec, on_token=received.append, stream=False,
-                     no_input=True, no_history=True)
+            run_spec(spec, on_token=received.append, stream=False, no_input=True, no_history=True)
 
         assert "".join(received) == "Full response text"
 
     def test_ndjson_events_contain_all_token_events(self, tmp_path):
-        p = _make_spec_file(tmp_path, {
-            "version": 1, "name": "t", "target": "claude-code",
-            "prompt": "Hello",
-        })
+        p = _make_spec_file(
+            tmp_path,
+            {
+                "version": 1,
+                "name": "t",
+                "target": "claude-code",
+                "prompt": "Hello",
+            },
+        )
         spec = load_spec(p)
         events: list[RunEvent] = []
 
         provider = self._make_mock_provider(["tok1", "tok2"])
         with patch("promptgenie.core.run_engine.get_provider", return_value=provider):
-            run_spec(spec, on_event=events.append, stream=True,
-                     no_input=True, no_history=True)
+            run_spec(spec, on_event=events.append, stream=True, no_input=True, no_history=True)
 
         token_events = [e for e in events if e.event == "token"]
         assert len(token_events) == 2

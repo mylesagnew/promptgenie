@@ -247,6 +247,7 @@ def get_provider(name: str, model_override: str | None = None) -> BaseProvider:
     # ── Air-gap check ─────────────────────────────────────────────────────────
     try:
         from promptgenie.core.config import load_config
+
         cfg_pg = load_config()
         if cfg_pg.security.airgap:
             _local_names = {"ollama", "localai", "lm-studio", "lmstudio", "vllm", "llamafile"}

@@ -23,9 +23,9 @@ from __future__ import annotations
 
 import re
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
 
 # ---------------------------------------------------------------------------
 # Patterns
@@ -40,17 +40,14 @@ _POLICY_NAMES = {
 _VARS_EXTS = {".yaml", ".yml", ".env", ".vars"}
 
 # Regex to detect references inside a PromptSpec to template/vars files
-_TEMPLATE_REF_RE = re.compile(
-    r"template\s*:\s*['\"]?([^\s'\"]+)['\"]?", re.IGNORECASE
-)
-_VARS_REF_RE = re.compile(
-    r"vars_file\s*:\s*['\"]?([^\s'\"]+)['\"]?", re.IGNORECASE
-)
+_TEMPLATE_REF_RE = re.compile(r"template\s*:\s*['\"]?([^\s'\"]+)['\"]?", re.IGNORECASE)
+_VARS_REF_RE = re.compile(r"vars_file\s*:\s*['\"]?([^\s'\"]+)['\"]?", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ChangedSet:
@@ -75,21 +72,26 @@ class ChangedSet:
 # Git helpers
 # ---------------------------------------------------------------------------
 
+
 def _git_changed_files(base_ref: str = "origin/main") -> list[Path]:
     """Return list of files changed relative to *base_ref* (git diff)."""
     try:
         result = subprocess.run(
             ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         if result.returncode != 0:
             # Fallback: diff working tree vs HEAD
             result = subprocess.run(
                 ["git", "diff", "--name-only", "HEAD"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
-        lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
-        return [Path(l) for l in lines]
+        lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        return [Path(ln) for ln in lines]
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return []
 
@@ -99,10 +101,12 @@ def _git_staged_files() -> list[Path]:
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
-        lines = [l.strip() for l in result.stdout.splitlines() if l.strip()]
-        return [Path(l) for l in lines]
+        lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        return [Path(ln) for ln in lines]
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return []
 
@@ -111,7 +115,9 @@ def _is_in_git_repo() -> bool:
     try:
         r = subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return r.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -121,6 +127,7 @@ def _is_in_git_repo() -> bool:
 # ---------------------------------------------------------------------------
 # Spec dependency graph
 # ---------------------------------------------------------------------------
+
 
 def _build_dependency_graph(
     root: Path,
@@ -160,6 +167,7 @@ def _all_spec_files(root: Path) -> list[Path]:
 # ---------------------------------------------------------------------------
 # Main detector
 # ---------------------------------------------------------------------------
+
 
 def detect_changed_prompts(
     base_ref: str = "origin/main",
@@ -205,9 +213,7 @@ def detect_changed_prompts(
 
     # Direct spec/prompt changes
     for p in raw_changed:
-        if p.suffix in _SPEC_EXTS:
-            changed_set.add(p, "directly modified")
-        elif p.suffix in _PROMPT_EXTS:
+        if p.suffix in _SPEC_EXTS or p.suffix in _PROMPT_EXTS:
             changed_set.add(p, "directly modified")
 
     if not expand_deps:
@@ -235,6 +241,7 @@ def detect_changed_prompts(
 # Filter helpers for CLI commands
 # ---------------------------------------------------------------------------
 
+
 def filter_to_changed(
     file_paths: Iterable[str | Path],
     base_ref: str = "origin/main",
@@ -248,11 +255,6 @@ def filter_to_changed(
 
     Useful for: ``promptgenie lint --changed``, ``promptgenie test --changed``
     """
-    changed = detect_changed_prompts(
-        base_ref, include_staged=include_staged, root=root
-    )
+    changed = detect_changed_prompts(base_ref, include_staged=include_staged, root=root)
     changed_resolved = {p.resolve() for p in changed.files}
-    return [
-        Path(f) for f in file_paths
-        if Path(f).resolve() in changed_resolved
-    ]
+    return [Path(f) for f in file_paths if Path(f).resolve() in changed_resolved]

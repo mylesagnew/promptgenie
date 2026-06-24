@@ -85,8 +85,9 @@ class RunOptions:
 @dataclass
 class SecretVarBinding:
     """A variable whose value is sourced from an environment variable at runtime."""
-    from_env: str           # env var name to read from
-    secret: bool = True     # always redact in logs/history
+
+    from_env: str  # env var name to read from
+    secret: bool = True  # always redact in logs/history
     default: str | None = None  # fallback if env var is unset
 
 

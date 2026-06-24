@@ -145,8 +145,12 @@ def pack_search(query: str):
         "that does not yet publish checksums.  Not recommended for production."
     ),
 )
-@click.option("--sha256", "expected_sha256", default=None,
-              help="Expected SHA-256 of the local tarball (optional integrity check).")
+@click.option(
+    "--sha256",
+    "expected_sha256",
+    default=None,
+    help="Expected SHA-256 of the local tarball (optional integrity check).",
+)
 def pack_install(pack_id: str, timeout: int, allow_unverified: bool, expected_sha256: str | None):
     """Download and install a pack from the registry, or install a local pack.
 
@@ -168,6 +172,7 @@ def pack_install(pack_id: str, timeout: int, allow_unverified: bool, expected_sh
 
     if is_local:
         from promptgenie.core.registry import install_from_local
+
         console.print(f"Installing local pack from [bold]{pack_id}[/bold]…")
         try:
             path = install_from_local(
@@ -301,12 +306,17 @@ def pack_init(pack_id, name, description):
 # pack diff
 # ---------------------------------------------------------------------------
 
+
 @pack_group.command(name="diff")
 @click.argument("pack_a")
 @click.argument("pack_b")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def pack_diff(pack_a: str, pack_b: str, output_format: str):
     """Show rule-level diff between two pack versions.
 
@@ -317,7 +327,6 @@ def pack_diff(pack_a: str, pack_b: str, output_format: str):
       promptgenie pack diff security-v1.yaml security-v2.yaml
       promptgenie pack diff old.yaml new.yaml --format json
     """
-    from pathlib import Path
     from promptgenie.core.pack_signing import diff_packs
 
     try:
@@ -328,13 +337,19 @@ def pack_diff(pack_a: str, pack_b: str, output_format: str):
 
     if output_format == "json":
         import json
-        print(json.dumps({
-            "old_version": diff.old_version,
-            "new_version": diff.new_version,
-            "added": diff.added_rules,
-            "removed": diff.removed_rules,
-            "modified": diff.modified_rules,
-        }, indent=2))
+
+        print(
+            json.dumps(
+                {
+                    "old_version": diff.old_version,
+                    "new_version": diff.new_version,
+                    "added": diff.added_rules,
+                    "removed": diff.removed_rules,
+                    "modified": diff.modified_rules,
+                },
+                indent=2,
+            )
+        )
         return
 
     console.print(f"Pack diff: [dim]{pack_a}[/dim] → [dim]{pack_b}[/dim]")
@@ -355,12 +370,14 @@ def pack_diff(pack_a: str, pack_b: str, output_format: str):
 # pack promote
 # ---------------------------------------------------------------------------
 
+
 @pack_group.command(name="promote")
 @click.argument("pack_name")
 @click.option("--from", "from_env", required=True, help="Source environment (e.g. dev).")
 @click.option("--to", "to_env", required=True, help="Target environment (e.g. prod).")
-@click.option("--base-dir", default=None, type=click.Path(),
-              help="Base directory for pack environment slots.")
+@click.option(
+    "--base-dir", default=None, type=click.Path(), help="Base directory for pack environment slots."
+)
 def pack_promote(pack_name: str, from_env: str, to_env: str, base_dir):
     """Promote a pack from one environment to another.
 
@@ -372,6 +389,7 @@ def pack_promote(pack_name: str, from_env: str, to_env: str, base_dir):
       promptgenie pack promote security-baseline --from staging --to prod
     """
     from pathlib import Path
+
     from promptgenie.core.pack_signing import promote_pack
 
     bdir = Path(base_dir) if base_dir else None
@@ -390,12 +408,17 @@ def pack_promote(pack_name: str, from_env: str, to_env: str, base_dir):
 # pack test
 # ---------------------------------------------------------------------------
 
+
 @pack_group.command(name="test")
 @click.argument("pack_file", type=click.Path(exists=True))
 @click.argument("test_file", type=click.Path(exists=True))
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def pack_test(pack_file: str, test_file: str, output_format: str):
     """Run a pack's unit test suite against its rules.
 
@@ -414,29 +437,31 @@ def pack_test(pack_file: str, test_file: str, output_format: str):
 
     if output_format == "json":
         import json
-        print(json.dumps({
-            "passed": result.passed,
-            "total": result.total,
-            "pass_count": result.pass_count,
-            "fail_count": result.fail_count,
-            "cases": result.cases,
-        }, indent=2))
+
+        print(
+            json.dumps(
+                {
+                    "passed": result.passed,
+                    "total": result.total,
+                    "pass_count": result.pass_count,
+                    "fail_count": result.fail_count,
+                    "cases": result.cases,
+                },
+                indent=2,
+            )
+        )
         sys.exit(0 if result.passed else 1)
 
     status = "PASSED" if result.passed else "FAILED"
     color = "green" if result.passed else "red"
     console.print(
-        f"[bold {color}]{status}[/bold {color}]  "
-        f"{result.pass_count}/{result.total} cases"
+        f"[bold {color}]{status}[/bold {color}]  {result.pass_count}/{result.total} cases"
     )
     for c in result.cases:
         icon = "[green]✓[/green]" if c["passed"] else "[red]✗[/red]"
         console.print(f"  {icon} {c['name']}")
         if not c["passed"]:
-            console.print(
-                f"    Expected: {c['expected_rules']}  "
-                f"Found: {c['found_rules']}"
-            )
+            console.print(f"    Expected: {c['expected_rules']}  Found: {c['found_rules']}")
     sys.exit(0 if result.passed else 1)
 
 
@@ -444,12 +469,16 @@ def pack_test(pack_file: str, test_file: str, output_format: str):
 # pack verify (signature)
 # ---------------------------------------------------------------------------
 
+
 @pack_group.command(name="verify")
 @click.argument("pack_file", type=click.Path(exists=True))
 @click.option("--pubkey", required=True, help="Path to public key file.")
-@click.option("--method",
-              type=click.Choice(["minisign", "cosign"], case_sensitive=False),
-              default="minisign", show_default=True)
+@click.option(
+    "--method",
+    type=click.Choice(["minisign", "cosign"], case_sensitive=False),
+    default="minisign",
+    show_default=True,
+)
 def pack_verify(pack_file: str, pubkey: str, method: str):
     """Verify a pack's cryptographic signature.
 

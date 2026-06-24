@@ -22,6 +22,7 @@ from promptgenie.core.compressor import (
 # Engine — default (safe) techniques
 # ---------------------------------------------------------------------------
 
+
 class TestDefaultTechniques:
     def test_trailing_whitespace_trimmed(self):
         result = compress("hello   \nworld\t\n")
@@ -70,9 +71,12 @@ class TestDefaultTechniques:
 # Engine — fence safety
 # ---------------------------------------------------------------------------
 
+
 class TestFenceSafety:
     def test_code_indentation_preserved(self):
-        text = "Some prose   with   spaces\n\n```python\ndef f():\n    x  =  1\n    return  x\n```\n"
+        text = (
+            "Some prose   with   spaces\n\n```python\ndef f():\n    x  =  1\n    return  x\n```\n"
+        )
         result = compress(text, techniques=["collapse-spaces"])
         # Prose spaces squeezed, code block left intact.
         assert "Some prose with spaces" in result.compressed_text
@@ -87,6 +91,7 @@ class TestFenceSafety:
 # ---------------------------------------------------------------------------
 # Engine — aggressive techniques
 # ---------------------------------------------------------------------------
+
 
 class TestAggressiveTechniques:
     def test_html_comments_stripped(self):
@@ -118,6 +123,7 @@ class TestAggressiveTechniques:
 # Engine — budget + selection
 # ---------------------------------------------------------------------------
 
+
 class TestBudgetAndSelection:
     def test_max_tokens_enables_all_techniques(self):
         text = "a     b <!-- c -->   \n\n\n\nd\n"
@@ -139,7 +145,9 @@ class TestBudgetAndSelection:
             compress("x", techniques=["does-not-exist"])
 
     def test_explicit_selection_respects_canonical_order(self):
-        result = compress("a   \n\n\n\nb\n", techniques=["collapse-blank-lines", "trim-trailing-ws"])
+        result = compress(
+            "a   \n\n\n\nb\n", techniques=["collapse-blank-lines", "trim-trailing-ws"]
+        )
         names = [t.name for t in result.applied]
         assert names == [n for n in ALL_TECHNIQUES if n in names]
 
@@ -151,6 +159,7 @@ class TestBudgetAndSelection:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 class TestCompressCommand:
     def setup_method(self):

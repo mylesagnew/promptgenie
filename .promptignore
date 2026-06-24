@@ -4,3 +4,5 @@ README.md
 CHANGELOG.md
 LICENSE
 docs/**
+tests/**
+examples/**

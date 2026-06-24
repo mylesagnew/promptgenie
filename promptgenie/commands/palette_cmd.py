@@ -26,19 +26,19 @@ from dataclasses import dataclass
 
 import click
 
-from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
+from promptgenie.core.errors import EXIT_OK
 from promptgenie.renderers.rich import console, diag_console
-
 
 # ---------------------------------------------------------------------------
 # Palette item catalogue
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PaletteItem:
-    label: str          # shown in the list
-    kind: str           # command | template | profile | pack | history | eval
-    command: str        # CLI command to emit on selection
+    label: str  # shown in the list
+    kind: str  # command | template | profile | pack | history | eval
+    command: str  # CLI command to emit on selection
     description: str = ""
 
 
@@ -47,36 +47,36 @@ def _build_catalogue() -> list[PaletteItem]:
 
     # ── Built-in commands ─────────────────────────────────────────────────
     _COMMANDS = [
-        ("lint <file>",    "command", "promptgenie lint",    "Lint a prompt file"),
-        ("scan <file>",    "command", "promptgenie scan",    "Scan for security issues"),
-        ("run <spec>",     "command", "promptgenie run",     "Run a PromptSpec"),
+        ("lint <file>", "command", "promptgenie lint", "Lint a prompt file"),
+        ("scan <file>", "command", "promptgenie scan", "Scan for security issues"),
+        ("run <spec>", "command", "promptgenie run", "Run a PromptSpec"),
         ("analyze <file>", "command", "promptgenie analyze", "Deep analysis of a prompt"),
-        ("evaluate <file>","command", "promptgenie evaluate","Multi-model evaluation"),
-        ("eval init",      "command", "promptgenie eval init","Scaffold an eval suite"),
-        ("eval run",       "command", "promptgenie eval run", "Run an eval suite"),
-        ("eval compare",   "command", "promptgenie eval compare","Compare to snapshot"),
-        ("eval approve",   "command", "promptgenie eval approve","Approve snapshot"),
-        ("history list",   "command", "promptgenie history list","List run history"),
-        ("history show",   "command", "promptgenie history show","Show a history entry"),
-        ("history diff",   "command", "promptgenie history diff","Diff two history entries"),
-        ("history export", "command", "promptgenie history export","Export history"),
-        ("template list",  "command", "promptgenie template list","List templates"),
-        ("template new",   "command", "promptgenie template new","Create a template"),
-        ("template render","command", "promptgenie template render","Render a template"),
-        ("lock <spec>",    "command", "promptgenie lock",    "Create a prompt lockfile"),
-        ("lock --check",   "command", "promptgenie lock --check","Verify a lockfile"),
-        ("watch <dir>",    "command", "promptgenie watch",   "Watch for prompt changes"),
-        ("plugin list",    "command", "promptgenie plugin list","List installed plugins"),
-        ("plugin scaffold","command", "promptgenie plugin scaffold","Scaffold a plugin stub"),
-        ("pack list",      "command", "promptgenie pack list","List packs"),
-        ("pack install",   "command", "promptgenie pack install","Install a pack"),
-        ("pack diff",      "command", "promptgenie pack diff","Diff two pack versions"),
-        ("pack promote",   "command", "promptgenie pack promote","Promote a pack env"),
-        ("pack test",      "command", "promptgenie pack test","Run pack unit tests"),
-        ("wizard",         "command", "promptgenie wizard",  "Guided prompt builder"),
-        ("tui",            "command", "promptgenie tui",     "Open full-screen TUI"),
-        ("auth login",     "command", "promptgenie auth login","Configure API key"),
-        ("auth status",    "command", "promptgenie auth status","Show auth status"),
+        ("evaluate <file>", "command", "promptgenie evaluate", "Multi-model evaluation"),
+        ("eval init", "command", "promptgenie eval init", "Scaffold an eval suite"),
+        ("eval run", "command", "promptgenie eval run", "Run an eval suite"),
+        ("eval compare", "command", "promptgenie eval compare", "Compare to snapshot"),
+        ("eval approve", "command", "promptgenie eval approve", "Approve snapshot"),
+        ("history list", "command", "promptgenie history list", "List run history"),
+        ("history show", "command", "promptgenie history show", "Show a history entry"),
+        ("history diff", "command", "promptgenie history diff", "Diff two history entries"),
+        ("history export", "command", "promptgenie history export", "Export history"),
+        ("template list", "command", "promptgenie template list", "List templates"),
+        ("template new", "command", "promptgenie template new", "Create a template"),
+        ("template render", "command", "promptgenie template render", "Render a template"),
+        ("lock <spec>", "command", "promptgenie lock", "Create a prompt lockfile"),
+        ("lock --check", "command", "promptgenie lock --check", "Verify a lockfile"),
+        ("watch <dir>", "command", "promptgenie watch", "Watch for prompt changes"),
+        ("plugin list", "command", "promptgenie plugin list", "List installed plugins"),
+        ("plugin scaffold", "command", "promptgenie plugin scaffold", "Scaffold a plugin stub"),
+        ("pack list", "command", "promptgenie pack list", "List packs"),
+        ("pack install", "command", "promptgenie pack install", "Install a pack"),
+        ("pack diff", "command", "promptgenie pack diff", "Diff two pack versions"),
+        ("pack promote", "command", "promptgenie pack promote", "Promote a pack env"),
+        ("pack test", "command", "promptgenie pack test", "Run pack unit tests"),
+        ("wizard", "command", "promptgenie wizard", "Guided prompt builder"),
+        ("tui", "command", "promptgenie tui", "Open full-screen TUI"),
+        ("auth login", "command", "promptgenie auth login", "Configure API key"),
+        ("auth status", "command", "promptgenie auth status", "Show auth status"),
     ]
     for label, kind, cmd, desc in _COMMANDS:
         items.append(PaletteItem(label=label, kind=kind, command=cmd, description=desc))
@@ -84,42 +84,51 @@ def _build_catalogue() -> list[PaletteItem]:
     # ── Templates ─────────────────────────────────────────────────────────
     try:
         from promptgenie.core.template_store import list_all_templates
+
         for tmpl in list_all_templates():
-            items.append(PaletteItem(
-                label=f"template: {tmpl.name}",
-                kind="template",
-                command=f"promptgenie template render {tmpl.id}",
-                description=tmpl.description or "",
-            ))
+            items.append(
+                PaletteItem(
+                    label=f"template: {tmpl.name}",
+                    kind="template",
+                    command=f"promptgenie template render {tmpl.id}",
+                    description=tmpl.description or "",
+                )
+            )
     except Exception:
         pass
 
     # ── Packs ─────────────────────────────────────────────────────────────
     try:
         from promptgenie.core.context_packs import list_packs
+
         for pack in list_packs():
             pid = pack.get("id", "")
-            items.append(PaletteItem(
-                label=f"pack: {pid}",
-                kind="pack",
-                command=f"promptgenie pack install {pid}",
-                description=pack.get("description", ""),
-            ))
+            items.append(
+                PaletteItem(
+                    label=f"pack: {pid}",
+                    kind="pack",
+                    command=f"promptgenie pack install {pid}",
+                    description=pack.get("description", ""),
+                )
+            )
     except Exception:
         pass
 
     # ── Recent history ────────────────────────────────────────────────────
     try:
         from promptgenie.core.history_db import open_history_db
+
         with open_history_db() as db:
             for record in db.list_runs(limit=20):
                 short_id = record.id[:8]
-                items.append(PaletteItem(
-                    label=f"history: {short_id} {record.spec_name or record.provider}",
-                    kind="history",
-                    command=f"promptgenie history show {short_id}",
-                    description=f"{record.provider}/{record.model}  {record.started_at[:10]}",
-                ))
+                items.append(
+                    PaletteItem(
+                        label=f"history: {short_id} {record.spec_name or record.provider}",
+                        kind="history",
+                        command=f"promptgenie history show {short_id}",
+                        description=f"{record.provider}/{record.model}  {record.started_at[:10]}",
+                    )
+                )
     except Exception:
         pass
 
@@ -129,6 +138,7 @@ def _build_catalogue() -> list[PaletteItem]:
 # ---------------------------------------------------------------------------
 # Fuzzy filtering (no dependency)
 # ---------------------------------------------------------------------------
+
 
 def _fuzzy_match(query: str, text: str) -> bool:
     """True if every character of *query* appears in order in *text*."""
@@ -147,8 +157,7 @@ def _fuzzy_match(query: str, text: str) -> bool:
 
 def _filter_items(items: list[PaletteItem], query: str) -> list[PaletteItem]:
     return [
-        it for it in items
-        if _fuzzy_match(query, it.label) or _fuzzy_match(query, it.description)
+        it for it in items if _fuzzy_match(query, it.label) or _fuzzy_match(query, it.description)
     ]
 
 
@@ -156,12 +165,13 @@ def _filter_items(items: list[PaletteItem], query: str) -> list[PaletteItem]:
 # Textual TUI implementation
 # ---------------------------------------------------------------------------
 
+
 def _run_palette_tui(items: list[PaletteItem]) -> str | None:
     """Return the selected command string, or None if cancelled."""
     from textual.app import App, ComposeResult
     from textual.binding import Binding
-    from textual.widgets import Footer, Header, Input, Label, ListView, ListItem
     from textual.reactive import reactive
+    from textual.widgets import Footer, Header, Input, Label, ListItem, ListView
 
     selected_command: list[str | None] = [None]  # mutable container for closure
 
@@ -182,7 +192,7 @@ def _run_palette_tui(items: list[PaletteItem]) -> str | None:
 
         BINDINGS = [
             Binding("escape", "quit_no_select", "Quit", show=True),
-            Binding("enter",  "confirm", "Select", show=True),
+            Binding("enter", "confirm", "Select", show=True),
         ]
 
         query: reactive[str] = reactive("")
@@ -243,6 +253,7 @@ def _run_palette_tui(items: list[PaletteItem]) -> str | None:
 # Fallback: simple readline-style picker (no Textual)
 # ---------------------------------------------------------------------------
 
+
 def _run_palette_readline(items: list[PaletteItem]) -> str | None:
     """Simple terminal picker used when Textual is not installed."""
     console.print("[bold cyan]PromptGenie Palette[/bold cyan]  — type to filter, Enter to select\n")
@@ -256,12 +267,13 @@ def _run_palette_readline(items: list[PaletteItem]) -> str | None:
     choice = click.prompt("Select number (0 to cancel)", default=0)
     if choice == 0 or choice > len(filtered):
         return None
-    return filtered[choice - 1].command
+    return filtered[choice - 1].command  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
 # CLI command
 # ---------------------------------------------------------------------------
+
 
 @click.command("palette")
 @click.option("--no-tui", is_flag=True, help="Use readline fallback instead of Textual TUI.")
@@ -286,6 +298,7 @@ def palette_cmd(no_tui: bool, print_only: bool) -> None:
     else:
         try:
             from textual.app import App  # noqa: F401
+
             selected = _run_palette_tui(catalogue)
         except ImportError:
             diag_console.print(

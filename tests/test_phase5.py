@@ -15,22 +15,18 @@ Covers:
 from __future__ import annotations
 
 import json
-import sqlite3
 import textwrap
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from promptgenie.cli import cli
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def invoke(*args: str, **kw):
     runner = CliRunner()
@@ -41,6 +37,7 @@ def invoke(*args: str, **kw):
 # TUI command
 # ===========================================================================
 
+
 class TestTuiCmd:
     def test_help(self):
         result = invoke("tui", "--help")
@@ -49,6 +46,7 @@ class TestTuiCmd:
 
     def test_no_textual_shows_error(self, monkeypatch):
         import builtins
+
         real_import = builtins.__import__
 
         def fake_import(name, *args, **kwargs):
@@ -68,6 +66,7 @@ class TestTuiCmd:
 # Wizard command
 # ===========================================================================
 
+
 class TestWizardCmd:
     def test_help(self):
         result = invoke("wizard", "--help")
@@ -78,19 +77,26 @@ class TestWizardCmd:
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         # Simulate full wizard interaction
-        inputs = "\n".join([
-            "Review all PRs for security issues",  # objective
-            "All code in the pull request",          # scope
-            "Infrastructure code",                  # out_of_scope
-            "Never expose secrets",                 # forbidden
-            "markdown",                             # output_format
-            "CI passes and reviewer approves",      # verification
-            "code-review",                          # target
-            "",                                     # no packs
-        ]) + "\n"
+        inputs = (
+            "\n".join(
+                [
+                    "Review all PRs for security issues",  # objective
+                    "All code in the pull request",  # scope
+                    "Infrastructure code",  # out_of_scope
+                    "Never expose secrets",  # forbidden
+                    "markdown",  # output_format
+                    "CI passes and reviewer approves",  # verification
+                    "code-review",  # target
+                    "",  # no packs
+                ]
+            )
+            + "\n"
+        )
         result = runner.invoke(
-            cli, ["wizard", "--no-spec"],
-            input=inputs, catch_exceptions=False,
+            cli,
+            ["wizard", "--no-spec"],
+            input=inputs,
+            catch_exceptions=False,
         )
         assert result.exit_code == 0
         # A .md file should have been written
@@ -100,19 +106,26 @@ class TestWizardCmd:
     def test_wizard_with_spec(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        inputs = "\n".join([
-            "Generate docstrings for Python functions",
-            "src/ directory only",
-            "Tests and CI config",
-            "Do not modify tests",
-            "code",
-            "Output compiles and tests pass",
-            "documentation",
-            "",
-        ]) + "\n"
+        inputs = (
+            "\n".join(
+                [
+                    "Generate docstrings for Python functions",
+                    "src/ directory only",
+                    "Tests and CI config",
+                    "Do not modify tests",
+                    "code",
+                    "Output compiles and tests pass",
+                    "documentation",
+                    "",
+                ]
+            )
+            + "\n"
+        )
         result = runner.invoke(
-            cli, ["wizard"],
-            input=inputs, catch_exceptions=False,
+            cli,
+            ["wizard"],
+            input=inputs,
+            catch_exceptions=False,
         )
         assert result.exit_code == 0
         yaml_files = list(tmp_path.rglob("*.yaml"))
@@ -122,7 +135,8 @@ class TestWizardCmd:
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["wizard"],
+            cli,
+            ["wizard"],
             input="\n",  # blank objective
             catch_exceptions=False,
         )
@@ -132,19 +146,26 @@ class TestWizardCmd:
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         out_file = str(tmp_path / "my-prompt.md")
-        inputs = "\n".join([
-            "Summarize code changes",
-            "Changed files only",
-            "Unrelated files",
-            "Never rewrite tests",
-            "markdown",
-            "Human reads and approves",
-            "documentation",
-            "",
-        ]) + "\n"
+        inputs = (
+            "\n".join(
+                [
+                    "Summarize code changes",
+                    "Changed files only",
+                    "Unrelated files",
+                    "Never rewrite tests",
+                    "markdown",
+                    "Human reads and approves",
+                    "documentation",
+                    "",
+                ]
+            )
+            + "\n"
+        )
         result = runner.invoke(
-            cli, ["wizard", "--no-spec", "--out", out_file],
-            input=inputs, catch_exceptions=False,
+            cli,
+            ["wizard", "--no-spec", "--out", out_file],
+            input=inputs,
+            catch_exceptions=False,
         )
         assert result.exit_code == 0
         assert Path(out_file).exists()
@@ -154,6 +175,7 @@ class TestWizardCmd:
 # Palette command
 # ===========================================================================
 
+
 class TestPaletteCmd:
     def test_help(self):
         result = invoke("palette", "--help")
@@ -161,6 +183,7 @@ class TestPaletteCmd:
 
     def test_fuzzy_match(self):
         from promptgenie.commands.palette_cmd import _fuzzy_match
+
         assert _fuzzy_match("lint", "lint a file") is True
         assert _fuzzy_match("sca", "scan for issues") is True
         assert _fuzzy_match("xyz", "run the prompt") is False
@@ -168,6 +191,7 @@ class TestPaletteCmd:
 
     def test_filter_items(self):
         from promptgenie.commands.palette_cmd import PaletteItem, _filter_items
+
         items = [
             PaletteItem("lint file", "command", "promptgenie lint", "Lint a prompt"),
             PaletteItem("scan file", "command", "promptgenie scan", "Scan for secrets"),
@@ -179,18 +203,20 @@ class TestPaletteCmd:
 
     def test_build_catalogue_returns_items(self):
         from promptgenie.commands.palette_cmd import _build_catalogue
+
         items = _build_catalogue()
         assert len(items) > 10
         labels = [it.label for it in items]
-        assert any("lint" in l for l in labels)
-        assert any("scan" in l for l in labels)
-        assert any("wizard" in l for l in labels)
+        assert any("lint" in lbl for lbl in labels)
+        assert any("scan" in lbl for lbl in labels)
+        assert any("wizard" in lbl for lbl in labels)
 
     def test_palette_no_tui_cancel(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["palette", "--no-tui"],
+            cli,
+            ["palette", "--no-tui"],
             input="lint\n0\n",  # filter then cancel
             catch_exceptions=False,
         )
@@ -200,7 +226,8 @@ class TestPaletteCmd:
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["palette", "--no-tui", "--print-only"],
+            cli,
+            ["palette", "--no-tui", "--print-only"],
             input="lint\n1\n",  # filter=lint, select first
             catch_exceptions=False,
         )
@@ -212,14 +239,17 @@ class TestPaletteCmd:
 # History DB
 # ===========================================================================
 
+
 class TestHistoryDb:
     def _make_db(self, tmp_path: Path):
         from promptgenie.core.history_db import HistoryDB
+
         db_path = tmp_path / "history.db"
         return HistoryDB(db_path), db_path
 
     def test_write_and_get(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
         run_id = db.write_run(
             spec_name="test-spec",
@@ -238,6 +268,7 @@ class TestHistoryDb:
 
     def test_list_runs(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
         for i in range(5):
             db.write_run(
@@ -253,6 +284,7 @@ class TestHistoryDb:
 
     def test_search_runs(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
         db.write_run(
             spec_name="auth-spec",
@@ -276,15 +308,16 @@ class TestHistoryDb:
 
     def test_content_hash_deduplication(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
-        id1 = db.write_run(
+        db.write_run(
             provider="claude",
             model="claude-haiku-4-5",
             prompt_text="same prompt",
             response_text="same response",
             status="ok",
         )
-        id2 = db.write_run(
+        db.write_run(
             provider="claude",
             model="claude-haiku-4-5",
             prompt_text="same prompt",
@@ -296,6 +329,7 @@ class TestHistoryDb:
 
     def test_delete_run(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
         run_id = db.write_run(
             provider="claude",
@@ -309,6 +343,7 @@ class TestHistoryDb:
 
     def test_total_count(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
         for _ in range(4):
             db.write_run(
@@ -322,6 +357,7 @@ class TestHistoryDb:
 
     def test_export_json(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
         db.write_run(
             provider="claude",
@@ -337,6 +373,7 @@ class TestHistoryDb:
 
     def test_export_csv(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
         db.write_run(
             provider="claude",
@@ -351,6 +388,7 @@ class TestHistoryDb:
 
     def test_export_ndjson(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db = HistoryDB(tmp_path / "h.db")
         db.write_run(
             provider="claude",
@@ -360,7 +398,7 @@ class TestHistoryDb:
             status="ok",
         )
         output = db.export("ndjson")
-        lines = [l for l in output.strip().splitlines() if l]
+        lines = [ln for ln in output.strip().splitlines() if ln]
         assert len(lines) == 1
         json.loads(lines[0])  # valid JSON
 
@@ -374,13 +412,15 @@ class TestHistoryCli:
         runner = CliRunner()
         db_path = str(tmp_path / "h.db")
         result = runner.invoke(
-            cli, ["history", "list", "--db", db_path],
+            cli,
+            ["history", "list", "--db", db_path],
             catch_exceptions=False,
         )
         assert result.exit_code == 0
 
     def test_history_export_json(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db_path = tmp_path / "h.db"
         db = HistoryDB(db_path)
         db.write_run(
@@ -392,7 +432,8 @@ class TestHistoryCli:
         )
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["history", "export", "--format", "json", "--db", str(db_path)],
+            cli,
+            ["history", "export", "--format", "json", "--db", str(db_path)],
             catch_exceptions=False,
         )
         assert result.exit_code == 0
@@ -401,6 +442,7 @@ class TestHistoryCli:
 
     def test_history_clear_confirmed(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db_path = tmp_path / "h.db"
         db = HistoryDB(db_path)
         db.write_run(
@@ -412,7 +454,8 @@ class TestHistoryCli:
         )
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["history", "clear", "--db", str(db_path)],
+            cli,
+            ["history", "clear", "--db", str(db_path)],
             input="y\n",
             catch_exceptions=False,
         )
@@ -421,6 +464,7 @@ class TestHistoryCli:
 
     def test_history_diff_two_runs(self, tmp_path):
         from promptgenie.core.history_db import HistoryDB
+
         db_path = tmp_path / "h.db"
         db = HistoryDB(db_path)
         id1 = db.write_run(
@@ -439,7 +483,8 @@ class TestHistoryCli:
         )
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["history", "diff", id1, id2, "--db", str(db_path)],
+            cli,
+            ["history", "diff", id1, id2, "--db", str(db_path)],
             catch_exceptions=False,
         )
         assert result.exit_code == 0
@@ -449,6 +494,7 @@ class TestHistoryCli:
 # Watch mode
 # ===========================================================================
 
+
 class TestWatcher:
     def test_help(self):
         result = invoke("watch", "--help")
@@ -456,22 +502,26 @@ class TestWatcher:
 
     def test_make_pipeline_lint(self):
         from promptgenie.core.watcher import make_pipeline
+
         pipeline = make_pipeline("lint")
         assert pipeline.name == "lint"
         assert callable(pipeline.run_fn)
 
     def test_make_pipeline_scan(self):
         from promptgenie.core.watcher import make_pipeline
+
         pipeline = make_pipeline("scan")
         assert pipeline.name == "scan"
 
     def test_make_pipeline_policy(self):
         from promptgenie.core.watcher import make_pipeline
+
         pipeline = make_pipeline("policy")
         assert pipeline.name == "policy"
 
     def test_watch_result_dataclass(self):
         from promptgenie.core.watcher import WatchResult
+
         r = WatchResult(
             file_path=Path("test.md"),
             pipeline_name="lint",
@@ -487,19 +537,27 @@ class TestWatcher:
 # Template command group
 # ===========================================================================
 
+
 class TestTemplateStore:
     def test_list_all_templates(self):
         from promptgenie.core.template_store import list_all_templates
+
         templates = list_all_templates()
         assert isinstance(templates, list)
 
     def test_resolve_nonexistent_returns_none(self):
         from promptgenie.core.template_store import resolve_template
+
         result = resolve_template("does-not-exist-xyz-123")
         assert result is None
 
     def test_render_template_substitution(self):
-        from promptgenie.core.template_store import TemplateRecord, TemplateVariable, render_template
+        from promptgenie.core.template_store import (
+            TemplateRecord,
+            TemplateVariable,
+            render_template,
+        )
+
         record = TemplateRecord(
             id="test-render",
             name="Test",
@@ -518,6 +576,7 @@ class TestTemplateStore:
 
     def test_validate_template_missing_name(self):
         from promptgenie.core.template_store import TemplateRecord, validate_template
+
         record = TemplateRecord(
             id="valid-id",
             name="",  # missing
@@ -532,6 +591,7 @@ class TestTemplateStore:
 
     def test_validate_template_missing_prompt(self):
         from promptgenie.core.template_store import TemplateRecord, validate_template
+
         record = TemplateRecord(
             id="valid-id",
             name="Valid Name",
@@ -545,7 +605,11 @@ class TestTemplateStore:
         assert any("prompt" in e.lower() for e in errors)
 
     def test_validate_template_undeclared_var(self):
-        from promptgenie.core.template_store import TemplateRecord, TemplateVariable, validate_template
+        from promptgenie.core.template_store import (
+            TemplateRecord,
+            validate_template,
+        )
+
         record = TemplateRecord(
             id="test-id",
             name="Test",
@@ -560,10 +624,16 @@ class TestTemplateStore:
 
     def test_save_and_load_user_template(self, tmp_path, monkeypatch):
         import promptgenie.core.template_store as ts
+
         user_dir = tmp_path / "user-templates"
         monkeypatch.setattr(ts, "_USER_DIR", user_dir)
         monkeypatch.setattr(ts, "TEMPLATE_SEARCH_ORDER", (user_dir,))
-        from promptgenie.core.template_store import TemplateRecord, save_user_template, resolve_template
+        from promptgenie.core.template_store import (
+            TemplateRecord,
+            resolve_template,
+            save_user_template,
+        )
+
         record = TemplateRecord(
             id="my-custom-template",
             name="My Custom",
@@ -597,12 +667,16 @@ class TestTemplateCli:
 
     def test_template_show_nonexistent(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["template", "show", "does-not-exist-xyz"], catch_exceptions=False)
+        result = runner.invoke(
+            cli, ["template", "show", "does-not-exist-xyz"], catch_exceptions=False
+        )
         assert result.exit_code != 0
 
     def test_template_validate_nonexistent(self):
         runner = CliRunner()
-        result = runner.invoke(cli, ["template", "validate", "does-not-exist-xyz"], catch_exceptions=False)
+        result = runner.invoke(
+            cli, ["template", "validate", "does-not-exist-xyz"], catch_exceptions=False
+        )
         assert result.exit_code != 0
 
 
@@ -610,9 +684,11 @@ class TestTemplateCli:
 # Lockfile
 # ===========================================================================
 
+
 class TestLockfile:
     def test_create_and_write_lockfile(self, tmp_path):
-        from promptgenie.core.lockfile import create_lockfile, write_lockfile, load_lockfile
+        from promptgenie.core.lockfile import create_lockfile, load_lockfile, write_lockfile
+
         spec = tmp_path / "prompt.yaml"
         spec.write_text("name: test\nprovider: claude\nmodel: claude-haiku-4-5\n")
         record = create_lockfile(spec)
@@ -625,7 +701,13 @@ class TestLockfile:
         assert loaded.spec == str(spec)
 
     def test_check_lockfile_passes_when_unchanged(self, tmp_path):
-        from promptgenie.core.lockfile import create_lockfile, write_lockfile, check_lockfile, load_lockfile
+        from promptgenie.core.lockfile import (
+            check_lockfile,
+            create_lockfile,
+            load_lockfile,
+            write_lockfile,
+        )
+
         spec = tmp_path / "prompt.yaml"
         spec.write_text("name: test\nprovider: claude\n")
         record = create_lockfile(spec)
@@ -635,7 +717,13 @@ class TestLockfile:
         assert result.passed
 
     def test_check_lockfile_detects_drift(self, tmp_path):
-        from promptgenie.core.lockfile import create_lockfile, write_lockfile, check_lockfile, load_lockfile
+        from promptgenie.core.lockfile import (
+            check_lockfile,
+            create_lockfile,
+            load_lockfile,
+            write_lockfile,
+        )
+
         spec = tmp_path / "prompt.yaml"
         spec.write_text("name: test\nprovider: claude\n")
         record = create_lockfile(spec)
@@ -649,10 +737,11 @@ class TestLockfile:
 
     def test_lockfile_with_template_ref(self, tmp_path):
         from promptgenie.core.lockfile import create_lockfile
+
         tmpl = tmp_path / "my-template.yaml"
         tmpl.write_text("id: my-template\nprompt: Hello\n")
         spec = tmp_path / "prompt.yaml"
-        spec.write_text(f"name: test\ntemplate: my-template.yaml\nprovider: claude\n")
+        spec.write_text("name: test\ntemplate: my-template.yaml\nprovider: claude\n")
         record = create_lockfile(spec)
         template_entries = [e for e in record.entries if e.kind == "template"]
         assert len(template_entries) == 1
@@ -676,6 +765,7 @@ class TestLockCli:
     def test_lock_check_passes(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         from promptgenie.core.lockfile import create_lockfile, write_lockfile
+
         spec = tmp_path / "prompt.yaml"
         spec.write_text("name: test\nprovider: claude\n")
         record = create_lockfile(spec)
@@ -686,6 +776,7 @@ class TestLockCli:
     def test_lock_check_fails_on_drift(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         from promptgenie.core.lockfile import create_lockfile, write_lockfile
+
         spec = tmp_path / "prompt.yaml"
         spec.write_text("name: test\nprovider: claude\n")
         record = create_lockfile(spec)
@@ -708,6 +799,7 @@ class TestLockCli:
 # ===========================================================================
 # Plugin SDK
 # ===========================================================================
+
 
 class TestPluginSdk:
     def test_plugin_list_help(self):
@@ -736,8 +828,15 @@ class TestPluginSdk:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["plugin", "scaffold", "my-plugin",
-             "--group", "promptgenie.rules", "--out", str(tmp_path)],
+            [
+                "plugin",
+                "scaffold",
+                "my-plugin",
+                "--group",
+                "promptgenie.rules",
+                "--out",
+                str(tmp_path),
+            ],
             catch_exceptions=False,
         )
         assert result.exit_code == 0
@@ -746,11 +845,13 @@ class TestPluginSdk:
 
     def test_list_plugins_returns_list(self):
         from promptgenie.core.plugin import list_plugins
+
         plugins = list_plugins()
         assert isinstance(plugins, list)
 
     def test_check_plugin_compat_unknown_group(self):
         from promptgenie.core.plugin import PluginManifest, check_plugin_compat
+
         manifest = PluginManifest(
             name="test",
             group="promptgenie.renderers",
@@ -768,18 +869,23 @@ class TestPluginSdk:
 
     def test_scaffold_plugin_content(self, tmp_path):
         from promptgenie.core.plugin import scaffold_plugin
+
         path = scaffold_plugin("my-provider", "promptgenie.providers", output_dir=tmp_path)
         content = Path(path).read_text()
-        assert "promptgenie.providers" in content or "TODO" in content or "plugin" in content.lower()
+        assert (
+            "promptgenie.providers" in content or "TODO" in content or "plugin" in content.lower()
+        )
 
 
 # ===========================================================================
 # Signed enterprise packs
 # ===========================================================================
 
+
 class TestPackSigning:
     def test_verify_minisign_missing_sig_file(self, tmp_path):
         from promptgenie.core.pack_signing import verify_pack_signature
+
         pack = tmp_path / "pack.yaml"
         pack.write_text("name: test\nrules: []\n")
         with pytest.raises(FileNotFoundError):
@@ -787,6 +893,7 @@ class TestPackSigning:
 
     def test_verify_cosign_missing_sig_file(self, tmp_path):
         from promptgenie.core.pack_signing import verify_pack_signature
+
         pack = tmp_path / "pack.yaml"
         pack.write_text("name: test\nrules: []\n")
         with pytest.raises(FileNotFoundError):
@@ -794,6 +901,7 @@ class TestPackSigning:
 
     def test_verify_unknown_method(self, tmp_path):
         from promptgenie.core.pack_signing import verify_pack_signature
+
         pack = tmp_path / "pack.yaml"
         pack.write_text("name: test\nrules: []\n")
         with pytest.raises(ValueError):
@@ -801,6 +909,7 @@ class TestPackSigning:
 
     def test_diff_packs_no_changes(self, tmp_path):
         from promptgenie.core.pack_signing import diff_packs
+
         content = "version: '1.0'\nname: TestPack\nrules:\n  - id: RULE_001\n    pattern: foo\n"
         old = tmp_path / "old.yaml"
         new = tmp_path / "new.yaml"
@@ -812,25 +921,32 @@ class TestPackSigning:
 
     def test_diff_packs_added_rule(self, tmp_path):
         from promptgenie.core.pack_signing import diff_packs
+
         old = tmp_path / "old.yaml"
         new = tmp_path / "new.yaml"
         old.write_text("version: '1.0'\nrules:\n  - id: RULE_001\n    pattern: foo\n")
-        new.write_text("version: '1.1'\nrules:\n  - id: RULE_001\n    pattern: foo\n  - id: RULE_002\n    pattern: bar\n")
+        new.write_text(
+            "version: '1.1'\nrules:\n  - id: RULE_001\n    pattern: foo\n  - id: RULE_002\n    pattern: bar\n"
+        )
         diff = diff_packs(old, new)
         assert "RULE_002" in diff.added_rules
         assert diff.has_changes
 
     def test_diff_packs_removed_rule(self, tmp_path):
         from promptgenie.core.pack_signing import diff_packs
+
         old = tmp_path / "old.yaml"
         new = tmp_path / "new.yaml"
-        old.write_text("version: '1.0'\nrules:\n  - id: RULE_001\n    pattern: foo\n  - id: RULE_002\n    pattern: bar\n")
+        old.write_text(
+            "version: '1.0'\nrules:\n  - id: RULE_001\n    pattern: foo\n  - id: RULE_002\n    pattern: bar\n"
+        )
         new.write_text("version: '1.1'\nrules:\n  - id: RULE_001\n    pattern: foo\n")
         diff = diff_packs(old, new)
         assert "RULE_002" in diff.removed_rules
 
     def test_diff_packs_modified_rule(self, tmp_path):
         from promptgenie.core.pack_signing import diff_packs
+
         old = tmp_path / "old.yaml"
         new = tmp_path / "new.yaml"
         old.write_text("version: '1.0'\nrules:\n  - id: RULE_001\n    pattern: old-pattern\n")
@@ -840,6 +956,7 @@ class TestPackSigning:
 
     def test_promote_pack(self, tmp_path):
         from promptgenie.core.pack_signing import promote_pack
+
         dev_dir = tmp_path / "dev"
         dev_dir.mkdir(parents=True)
         pack_file = dev_dir / "my-pack.yaml"
@@ -851,13 +968,16 @@ class TestPackSigning:
 
     def test_promote_pack_missing_raises(self, tmp_path):
         from promptgenie.core.pack_signing import promote_pack
+
         with pytest.raises(FileNotFoundError):
             promote_pack("nonexistent", "dev", "prod", base_dir=tmp_path)
 
     def test_pack_unit_test_pass(self, tmp_path):
         from promptgenie.core.pack_signing import run_pack_unit_test
+
         pack = tmp_path / "pack.yaml"
-        pack.write_text(textwrap.dedent("""\
+        pack.write_text(
+            textwrap.dedent("""\
             name: test-pack
             version: "1.0"
             rules:
@@ -868,9 +988,11 @@ class TestPackSigning:
                 confidence: HIGH
                 message: "API key found"
                 recommendation: "Remove key"
-        """))
+        """)
+        )
         tests = tmp_path / "tests.yaml"
-        tests.write_text(textwrap.dedent("""\
+        tests.write_text(
+            textwrap.dedent("""\
             cases:
               - name: detects key
                 input: "use this key: sk-abcdefghijklmnopqrstuvwxyz123"
@@ -879,7 +1001,8 @@ class TestPackSigning:
               - name: no match
                 input: "hello world"
                 expected_rules: []
-        """))
+        """)
+        )
         result = run_pack_unit_test(pack, tests)
         assert result.total == 2
 
@@ -887,13 +1010,17 @@ class TestPackSigning:
         old = tmp_path / "old.yaml"
         new = tmp_path / "new.yaml"
         old.write_text("version: '1.0'\nrules:\n  - id: RULE_001\n    pattern: foo\n")
-        new.write_text("version: '1.1'\nrules:\n  - id: RULE_001\n    pattern: foo\n  - id: RULE_002\n    pattern: bar\n")
+        new.write_text(
+            "version: '1.1'\nrules:\n  - id: RULE_001\n    pattern: foo\n  - id: RULE_002\n    pattern: bar\n"
+        )
         result = invoke("pack", "diff", str(old), str(new))
         assert result.exit_code == 0
 
     def test_pack_test_cli(self, tmp_path):
         pack = tmp_path / "pack.yaml"
-        pack.write_text("name: p\nrules:\n  - id: R1\n    pattern: secret\n    category: secrets\n    risk: HIGH\n    confidence: HIGH\n    message: m\n    recommendation: r\n")
+        pack.write_text(
+            "name: p\nrules:\n  - id: R1\n    pattern: secret\n    category: secrets\n    risk: HIGH\n    confidence: HIGH\n    message: m\n    recommendation: r\n"
+        )
         tests = tmp_path / "tests.yaml"
         tests.write_text("cases:\n  - name: clean\n    input: hello\n    expected_rules: []\n")
         result = invoke("pack", "test", str(pack), str(tests))
@@ -903,6 +1030,7 @@ class TestPackSigning:
 # ===========================================================================
 # CLI wiring smoke tests (Phase 5 commands are registered)
 # ===========================================================================
+
 
 class TestCliWiring:
     def test_plugin_in_cli(self):

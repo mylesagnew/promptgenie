@@ -89,17 +89,28 @@ _RISK_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "NONE": 0}
 
 # Phrases that indicate a refusal
 _REFUSAL_PHRASES = [
-    "i can't", "i cannot", "i am unable", "i'm unable",
-    "i won't", "i will not", "that's not something i",
-    "i'm not able", "i don't", "i'm not going to",
-    "as an ai", "i apologize", "sorry, i can",
-    "unable to assist", "not able to help with",
+    "i can't",
+    "i cannot",
+    "i am unable",
+    "i'm unable",
+    "i won't",
+    "i will not",
+    "that's not something i",
+    "i'm not able",
+    "i don't",
+    "i'm not going to",
+    "as an ai",
+    "i apologize",
+    "sorry, i can",
+    "unable to assist",
+    "not able to help with",
 ]
 
 
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class EvalAssertion:
@@ -118,8 +129,8 @@ class EvalAssertion:
 class EvalCase:
     name: str
     assertions: list[EvalAssertion] = field(default_factory=list)
-    input: str | None = None        # override prompt for this case
-    system: str | None = None       # override system for this case
+    input: str | None = None  # override prompt for this case
+    system: str | None = None  # override system for this case
     tags: list[str] = field(default_factory=list)
     skip: bool = False
 
@@ -128,7 +139,7 @@ class EvalCase:
 class EvalSuite:
     name: str
     description: str = ""
-    prompt: str = ""                # path or inline text
+    prompt: str = ""  # path or inline text
     system: str | None = None
     provider: str | None = None
     model: str | None = None
@@ -208,7 +219,7 @@ class EvalSuiteResult:
 @dataclass
 class SnapshotDiff:
     suite_name: str
-    regressions: list[str] = field(default_factory=list)   # case names that newly fail
+    regressions: list[str] = field(default_factory=list)  # case names that newly fail
     improvements: list[str] = field(default_factory=list)  # case names that newly pass
     unchanged: list[str] = field(default_factory=list)
     new_cases: list[str] = field(default_factory=list)
@@ -222,6 +233,7 @@ class SnapshotDiff:
 # ---------------------------------------------------------------------------
 # Loader
 # ---------------------------------------------------------------------------
+
 
 def load_eval_suite(path: str | Path) -> EvalSuite:
     """Load an eval suite from a YAML file."""
@@ -238,31 +250,51 @@ def load_eval_suite(path: str | Path) -> EvalSuite:
                     f"Unknown assertion type {atype!r} in case {raw_case.get('name')!r}. "
                     f"Valid types: {sorted(ASSERTION_TYPES)}"
                 )
-            assertions.append(EvalAssertion(
-                type=atype,
-                value=raw_a.get("value"),
-                path=raw_a.get("path", ""),
-                exists=raw_a.get("exists", True),
-                reference=raw_a.get("reference", ""),
-                threshold=float(raw_a.get("threshold", 0.8)),
-                criteria=raw_a.get("criteria", ""),
-                min_score=float(raw_a.get("min_score", 60.0)),
-                extra={k: v for k, v in raw_a.items()
-                       if k not in {"type", "value", "path", "exists",
-                                    "reference", "threshold", "criteria", "min_score"}},
-            ))
-        cases.append(EvalCase(
-            name=raw_case.get("name", "unnamed"),
-            assertions=assertions,
-            input=raw_case.get("input"),
-            system=raw_case.get("system"),
-            tags=raw_case.get("tags", []),
-            skip=bool(raw_case.get("skip", False)),
-        ))
+            assertions.append(
+                EvalAssertion(
+                    type=atype,
+                    value=raw_a.get("value"),
+                    path=raw_a.get("path", ""),
+                    exists=raw_a.get("exists", True),
+                    reference=raw_a.get("reference", ""),
+                    threshold=float(raw_a.get("threshold", 0.8)),
+                    criteria=raw_a.get("criteria", ""),
+                    min_score=float(raw_a.get("min_score", 60.0)),
+                    extra={
+                        k: v
+                        for k, v in raw_a.items()
+                        if k
+                        not in {
+                            "type",
+                            "value",
+                            "path",
+                            "exists",
+                            "reference",
+                            "threshold",
+                            "criteria",
+                            "min_score",
+                        }
+                    },
+                )
+            )
+        cases.append(
+            EvalCase(
+                name=raw_case.get("name", "unnamed"),
+                assertions=assertions,
+                input=raw_case.get("input"),
+                system=raw_case.get("system"),
+                tags=raw_case.get("tags", []),
+                skip=bool(raw_case.get("skip", False)),
+            )
+        )
 
     # Resolve prompt path relative to suite file
     prompt_field = raw.get("prompt", "")
-    if prompt_field and not prompt_field.strip().startswith(("\n", " ")) and len(prompt_field) < 300:
+    if (
+        prompt_field
+        and not prompt_field.strip().startswith(("\n", " "))
+        and len(prompt_field) < 300
+    ):
         candidate = p.parent / prompt_field
         if candidate.exists():
             prompt_field = candidate.read_text(encoding="utf-8")
@@ -283,6 +315,7 @@ def load_eval_suite(path: str | Path) -> EvalSuite:
 # Assertion evaluators
 # ---------------------------------------------------------------------------
 
+
 def _eval_assertion(assertion: EvalAssertion, response: str, prompt_text: str) -> AssertionResult:
     atype = assertion.type
 
@@ -290,7 +323,8 @@ def _eval_assertion(assertion: EvalAssertion, response: str, prompt_text: str) -
         needle = str(assertion.value or "")
         passed = needle in response
         return AssertionResult(
-            assertion_type=atype, passed=passed,
+            assertion_type=atype,
+            passed=passed,
             message=f"Response {'contains' if passed else 'missing'} {needle!r}",
             value=needle,
         )
@@ -299,7 +333,8 @@ def _eval_assertion(assertion: EvalAssertion, response: str, prompt_text: str) -
         needle = str(assertion.value or "")
         passed = needle not in response
         return AssertionResult(
-            assertion_type=atype, passed=passed,
+            assertion_type=atype,
+            passed=passed,
             message=f"Response {'does not contain' if passed else 'unexpectedly contains'} {needle!r}",
             value=needle,
         )
@@ -322,7 +357,8 @@ def _eval_assertion(assertion: EvalAssertion, response: str, prompt_text: str) -
         pattern = r"^#{1,6}\s+" + re.escape(heading) + r"\s*$"
         passed = bool(re.search(pattern, response, re.MULTILINE | re.IGNORECASE))
         return AssertionResult(
-            assertion_type=atype, passed=passed,
+            assertion_type=atype,
+            passed=passed,
             message=f"Markdown heading {'found' if passed else 'missing'}: {heading!r}",
         )
 
@@ -331,32 +367,37 @@ def _eval_assertion(assertion: EvalAssertion, response: str, prompt_text: str) -
         count = max(1, len(response.split()))
         passed = count <= limit
         return AssertionResult(
-            assertion_type=atype, passed=passed,
+            assertion_type=atype,
+            passed=passed,
             message=f"Token count {count} {'≤' if passed else '>'} limit {limit}",
             value=count,
         )
 
     if atype == "min_score":
         from promptgenie.core.generator import score_prompt
-        score_result = score_prompt(prompt_text)
-        score = getattr(score_result, "total", None) or getattr(score_result, "score", 0)
+
+        score_result = score_prompt(prompt_text, {})
+        score = float(score_result.get("total", 0))
         threshold = float(assertion.value or 0)
         passed = score >= threshold
         return AssertionResult(
-            assertion_type=atype, passed=passed,
+            assertion_type=atype,
+            passed=passed,
             message=f"Prompt score {score:.0f} {'≥' if passed else '<'} {threshold:.0f}",
             value=score,
         )
 
     if atype == "max_risk":
         from promptgenie.core.scanner import scan
+
         result = scan(response)
         actual_risk = result.risk_level
         limit_order = _RISK_ORDER.get(str(assertion.value or "HIGH").upper(), 3)
         actual_order = _RISK_ORDER.get(actual_risk, 0)
         passed = actual_order <= limit_order
         return AssertionResult(
-            assertion_type=atype, passed=passed,
+            assertion_type=atype,
+            passed=passed,
             message=f"Risk {actual_risk} {'≤' if passed else '>'} limit {assertion.value}",
             value=actual_risk,
         )
@@ -365,7 +406,8 @@ def _eval_assertion(assertion: EvalAssertion, response: str, prompt_text: str) -
         lower = response.lower()
         passed = any(phrase in lower for phrase in _REFUSAL_PHRASES)
         return AssertionResult(
-            assertion_type=atype, passed=passed,
+            assertion_type=atype,
+            passed=passed,
             message="Response {} refuse instruction override".format(
                 "does" if passed else "does not"
             ),
@@ -386,13 +428,14 @@ def _eval_json_path(assertion: EvalAssertion, response: str) -> AssertionResult:
     json_text = response.strip()
     if json_text.startswith("```"):
         lines = json_text.split("\n")
-        inner = [l for l in lines[1:] if not l.startswith("```")]
+        inner = [ln for ln in lines[1:] if not ln.startswith("```")]
         json_text = "\n".join(inner).strip()
     try:
         data = json.loads(json_text)
     except json.JSONDecodeError:
         return AssertionResult(
-            assertion_type="json_path", passed=False,
+            assertion_type="json_path",
+            passed=False,
             message="Response is not valid JSON",
         )
     # Simple path resolver: $.a.b.c or $[0].a
@@ -402,10 +445,7 @@ def _eval_json_path(assertion: EvalAssertion, response: str) -> AssertionResult:
     current = data
     try:
         for part in parts:
-            if isinstance(current, list):
-                current = current[int(part)]
-            else:
-                current = current[part]
+            current = current[int(part)] if isinstance(current, list) else current[part]
         exists = True
     except (KeyError, IndexError, TypeError, ValueError):
         exists = False
@@ -440,20 +480,21 @@ def _eval_semantic_similarity(assertion: EvalAssertion, response: str) -> Assert
     resp_bow = _bow(response)
     all_words = set(ref_bow) | set(resp_bow)
     if not all_words:
-        return AssertionResult(assertion_type="semantic_similarity", passed=False,
-                               message="Empty reference or response")
+        return AssertionResult(
+            assertion_type="semantic_similarity",
+            passed=False,
+            message="Empty reference or response",
+        )
 
     dot = sum(ref_bow.get(w, 0) * resp_bow.get(w, 0) for w in all_words)
     mag_ref = math.sqrt(sum(v * v for v in ref_bow.values()))
     mag_resp = math.sqrt(sum(v * v for v in resp_bow.values()))
-    if mag_ref == 0 or mag_resp == 0:
-        similarity = 0.0
-    else:
-        similarity = dot / (mag_ref * mag_resp)
+    similarity = 0.0 if mag_ref == 0 or mag_resp == 0 else dot / (mag_ref * mag_resp)
 
     passed = similarity >= assertion.threshold
     return AssertionResult(
-        assertion_type="semantic_similarity", passed=passed,
+        assertion_type="semantic_similarity",
+        passed=passed,
         message=f"Similarity {similarity:.3f} {'≥' if passed else '<'} threshold {assertion.threshold:.2f}",
         value=round(similarity, 3),
     )
@@ -462,10 +503,12 @@ def _eval_semantic_similarity(assertion: EvalAssertion, response: str) -> Assert
 def _eval_judge_rubric(assertion: EvalAssertion, response: str) -> AssertionResult:
     """Offline rubric judge — heuristic score against stated criteria."""
     from promptgenie.core.evaluator import _rubric_score
+
     score = _rubric_score(response)
     passed = score >= assertion.min_score
     return AssertionResult(
-        assertion_type="judge_rubric", passed=passed,
+        assertion_type="judge_rubric",
+        passed=passed,
         message=(
             f"Rubric score {score:.0f} {'≥' if passed else '<'} min {assertion.min_score:.0f}"
             + (f" (criteria: {assertion.criteria[:60]})" if assertion.criteria else "")
@@ -478,6 +521,7 @@ def _eval_judge_rubric(assertion: EvalAssertion, response: str) -> AssertionResu
 # Suite runner
 # ---------------------------------------------------------------------------
 
+
 def run_eval_suite(
     suite: EvalSuite,
     *,
@@ -488,8 +532,8 @@ def run_eval_suite(
     dry_run: bool = False,
 ) -> EvalSuiteResult:
     """Run all cases in *suite* and return an EvalSuiteResult."""
-    from datetime import datetime, timezone
     import asyncio
+    from datetime import datetime, timezone
 
     from promptgenie.core.providers import get_provider as _get_provider
 
@@ -500,12 +544,14 @@ def run_eval_suite(
 
     for case in suite.cases:
         if case.skip:
-            case_results.append(CaseResult(
-                case_name=case.name,
-                passed=True,
-                response="",
-                skipped=True,
-            ))
+            case_results.append(
+                CaseResult(
+                    case_name=case.name,
+                    passed=True,
+                    response="",
+                    skipped=True,
+                )
+            )
             continue
 
         prompt_text = case.input or suite.prompt
@@ -523,12 +569,14 @@ def run_eval_suite(
                     messages.append({"role": "system", "content": system_text})
                 messages.append({"role": "user", "content": prompt_text})
                 t0 = time.perf_counter()
-                response = asyncio.run(prov.complete(
-                    messages,
-                    model=effective_model or prov.model,
-                    max_tokens=max_tokens,
-                    timeout=timeout,
-                ))
+                response = asyncio.run(
+                    prov.complete(
+                        messages,
+                        model=effective_model or prov.model,
+                        max_tokens=max_tokens,
+                        timeout=timeout,
+                    )
+                )
                 latency_ms = (time.perf_counter() - t0) * 1000
                 err = None
             except Exception as exc:
@@ -541,19 +589,18 @@ def run_eval_suite(
             latency_ms = 0.0
             err = None
 
-        assertion_results = [
-            _eval_assertion(a, response, prompt_text)
-            for a in case.assertions
-        ]
+        assertion_results = [_eval_assertion(a, response, prompt_text) for a in case.assertions]
         passed = err is None and all(a.passed for a in assertion_results)
-        case_results.append(CaseResult(
-            case_name=case.name,
-            passed=passed,
-            response=response,
-            assertion_results=assertion_results,
-            latency_ms=round(latency_ms, 1),
-            error=err,
-        ))
+        case_results.append(
+            CaseResult(
+                case_name=case.name,
+                passed=passed,
+                response=response,
+                assertion_results=assertion_results,
+                latency_ms=round(latency_ms, 1),
+                error=err,
+            )
+        )
 
     total = len(suite.cases)
     skip_count = sum(1 for c in case_results if c.skipped)

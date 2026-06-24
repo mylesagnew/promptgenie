@@ -38,14 +38,13 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import yaml
-
 
 # ---------------------------------------------------------------------------
 # Signature verification
 # ---------------------------------------------------------------------------
+
 
 def verify_pack_signature(
     pack_path: str | Path,
@@ -71,14 +70,15 @@ def verify_pack_signature(
         try:
             result = subprocess.run(
                 ["minisign", "-V", "-p", pubkey, "-m", str(pack_path)],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             return result.returncode == 0
         except FileNotFoundError:
             raise RuntimeError(
-                "minisign not found in PATH. "
-                "Install from https://jedisct1.github.io/minisign/"
-            )
+                "minisign not found in PATH. Install from https://jedisct1.github.io/minisign/"
+            ) from None
 
     if method == "cosign":
         sig_path = Path(str(pack_path) + ".cosig")
@@ -87,19 +87,24 @@ def verify_pack_signature(
         try:
             result = subprocess.run(
                 [
-                    "cosign", "verify-blob",
-                    "--key", pubkey,
-                    "--signature", str(sig_path),
+                    "cosign",
+                    "verify-blob",
+                    "--key",
+                    pubkey,
+                    "--signature",
+                    str(sig_path),
                     str(pack_path),
                 ],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             return result.returncode == 0
         except FileNotFoundError:
             raise RuntimeError(
                 "cosign not found in PATH. "
                 "Install from https://docs.sigstore.dev/cosign/installation/"
-            )
+            ) from None
 
     raise ValueError(f"Unknown signing method {method!r}. Use 'minisign' or 'cosign'.")
 
@@ -108,10 +113,11 @@ def verify_pack_signature(
 # Pack diff
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RuleDelta:
     rule_id: str
-    change: str     # "added" | "removed" | "modified"
+    change: str  # "added" | "removed" | "modified"
     detail: str = ""
 
 
@@ -128,8 +134,11 @@ class PackDiff:
     @property
     def has_changes(self) -> bool:
         return bool(
-            self.added_rules or self.removed_rules or self.modified_rules
-            or self.pack_name_changed or self.description_changed
+            self.added_rules
+            or self.removed_rules
+            or self.modified_rules
+            or self.pack_name_changed
+            or self.description_changed
         )
 
     def summary(self) -> str:
@@ -178,10 +187,7 @@ def diff_packs(old_path: str | Path, new_path: str | Path) -> PackDiff:
     added = sorted(new_ids - old_ids)
     removed = sorted(old_ids - new_ids)
     common = old_ids & new_ids
-    modified = sorted(
-        rid for rid in common
-        if old_rules[rid] != new_rules[rid]
-    )
+    modified = sorted(rid for rid in common if old_rules[rid] != new_rules[rid])
 
     return PackDiff(
         old_version=str(old_data.get("version", "?")),
@@ -198,6 +204,7 @@ def diff_packs(old_path: str | Path, new_path: str | Path) -> PackDiff:
 # Pack promotion
 # ---------------------------------------------------------------------------
 
+
 def promote_pack(
     pack_name: str,
     from_env: str,
@@ -211,6 +218,7 @@ def promote_pack(
     Default base_dir: ``.promptgenie/pack-envs/``
     """
     import shutil
+
     bdir = base_dir or (Path(".promptgenie") / "pack-envs")
     src = bdir / from_env / f"{pack_name}.yaml"
     dst_dir = bdir / to_env
@@ -228,6 +236,7 @@ def promote_pack(
 # ---------------------------------------------------------------------------
 # Pack unit test
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PackTestCase:
@@ -263,8 +272,8 @@ def run_pack_unit_test(pack_path: str | Path, test_path: str | Path) -> PackTest
             input: "Hello, how can I help?"
             expected_rules: []
     """
-    from promptgenie.core.scanner import ScanRule, scan
     from promptgenie.core.config import ScannerConfig
+    from promptgenie.core.scanner import ScanRule, scan
 
     pack_path = Path(pack_path)
     test_path = Path(test_path)
@@ -277,15 +286,17 @@ def run_pack_unit_test(pack_path: str | Path, test_path: str | Path) -> PackTest
     for r in pack_data.get("rules", []):
         if not isinstance(r, dict):
             continue
-        pack_rules.append(ScanRule(
-            id=str(r.get("id", "PACK_RULE")),
-            category=str(r.get("category", "custom")),
-            pattern=str(r.get("pattern", "")),
-            risk=str(r.get("risk", "MEDIUM")),
-            confidence=str(r.get("confidence", "MEDIUM")),
-            message=str(r.get("message", "")),
-            recommendation=str(r.get("recommendation", "")),
-        ))
+        pack_rules.append(
+            ScanRule(
+                id=str(r.get("id", "PACK_RULE")),
+                category=str(r.get("category", "custom")),
+                pattern=str(r.get("pattern", "")),
+                risk=str(r.get("risk", "MEDIUM")),  # type: ignore[arg-type]
+                confidence=str(r.get("confidence", "MEDIUM")),  # type: ignore[arg-type]
+                message=str(r.get("message", "")),
+                recommendation=str(r.get("recommendation", "")),
+            )
+        )
 
     cfg = ScannerConfig(custom_scan_rules=pack_rules, enabled_rules=[r.id for r in pack_rules])
     cases_raw = test_data.get("cases", [])
@@ -314,12 +325,14 @@ def run_pack_unit_test(pack_path: str | Path, test_path: str | Path) -> PackTest
         if case_pass:
             pass_count += 1
 
-        results.append({
-            "name": name,
-            "passed": case_pass,
-            "expected_rules": expected_rules,
-            "found_rules": sorted(found_ids),
-        })
+        results.append(
+            {
+                "name": name,
+                "passed": case_pass,
+                "expected_rules": expected_rules,
+                "found_rules": sorted(found_ids),
+            }
+        )
 
     total = len(results)
     return PackTestResult(

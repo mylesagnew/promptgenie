@@ -68,18 +68,18 @@ class EventKind(str, Enum):
     UNKNOWN = "unknown"
 
     @classmethod
-    def _missing_(cls, value: object) -> "EventKind":
+    def _missing_(cls, value: object) -> EventKind:
         return cls.UNKNOWN
 
 
 # Mapping from legacy RunEvent.event strings → EventKind
 _LEGACY_KIND_MAP: dict[str, EventKind] = {
-    "start":     EventKind.RUN_START,
-    "token":     EventKind.RUN_TOKEN,
-    "warning":   EventKind.RUN_WARNING,
-    "error":     EventKind.RUN_ERROR,
+    "start": EventKind.RUN_START,
+    "token": EventKind.RUN_TOKEN,
+    "warning": EventKind.RUN_WARNING,
+    "error": EventKind.RUN_ERROR,
     "tool_call": EventKind.RUN_TOOL_CALL,
-    "done":      EventKind.RUN_DONE,
+    "done": EventKind.RUN_DONE,
 }
 
 
@@ -124,7 +124,7 @@ class Event:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_run_event(cls, run_event: Any, run_id: str = "") -> "Event":
+    def from_run_event(cls, run_event: Any, run_id: str = "") -> Event:
         """Coerce a legacy ``RunEvent`` (from run_engine) into a unified Event.
 
         This bridge method lets existing code that produces ``RunEvent`` objects

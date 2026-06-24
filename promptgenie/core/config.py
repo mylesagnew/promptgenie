@@ -87,7 +87,8 @@ class LinterConfig:
 @dataclass
 class RoutingRule:
     """A single provider routing rule."""
-    condition: str   # "contains_secrets" | "classification == X" | "*"
+
+    condition: str  # "contains_secrets" | "classification == X" | "*"
     provider: str
 
 
@@ -107,7 +108,8 @@ class RoutingConfig:
             - if: "*"
               provider: anthropic
     """
-    default: str = ""               # default provider name (empty = use spec/CLI)
+
+    default: str = ""  # default provider name (empty = use spec/CLI)
     rules: list[RoutingRule] = field(default_factory=list)
 
     def resolve(
@@ -144,6 +146,7 @@ class SecurityConfig:
           block_secrets: true  # abort run if secrets detected in prompt
           redact_secrets: false # auto-redact instead of blocking
     """
+
     airgap: bool = False
     block_secrets: bool = False
     redact_secrets: bool = False
@@ -152,6 +155,7 @@ class SecurityConfig:
 @dataclass
 class WorkspaceConfig:
     """Project-level metadata block from the ``workspace:`` section."""
+
     name: str = ""
     version: str = ""
     team: str = ""
@@ -162,6 +166,7 @@ class WorkspaceConfig:
 @dataclass
 class DefaultsConfig:
     """Default provider/model/target used when not specified per-run."""
+
     provider: str = ""
     model: str = ""
     target: str = ""
@@ -200,10 +205,6 @@ def _parse_allowlist(raw_entries: list[Any]) -> list[AllowlistEntry]:
                 f"Allowlist entry must be a string or a mapping, got {type(item).__name__}: {item!r}"
             )
     return entries
-
-
-_VALID_CONFIDENCE = {"HIGH", "MEDIUM", "LOW"}
-_VALID_SEVERITY = {"HIGH", "MEDIUM", "LOW", "INFO"}
 
 
 def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
@@ -380,7 +381,14 @@ _TOP_LEVEL_KEYS = frozenset(
 _WORKSPACE_KEYS = frozenset({"name", "version", "team", "description", "policy"})
 _DEFAULTS_KEYS = frozenset({"provider", "model", "target"})
 _SCANNER_KEYS = frozenset(
-    {"allowlist", "disabled_rules", "enabled_rules", "severity_overrides", "custom_rules", "rules_dirs"}
+    {
+        "allowlist",
+        "disabled_rules",
+        "enabled_rules",
+        "severity_overrides",
+        "custom_rules",
+        "rules_dirs",
+    }
 )
 _LINTER_KEYS = frozenset(
     {"disabled_rules", "enabled_rules", "custom_vague_verbs", "custom_rules", "rules_dirs"}
@@ -463,7 +471,7 @@ def validate_workspace_config(raw: dict[str, Any]) -> tuple[list[str], list[str]
             if "severity_overrides" in sc:
                 so = sc["severity_overrides"]
                 if not isinstance(so, dict):
-                    errors.append(f"'scanner.severity_overrides' must be a mapping.")
+                    errors.append("'scanner.severity_overrides' must be a mapping.")
                 else:
                     for code, level in so.items():
                         if not isinstance(level, str) or level.upper() not in _VALID_RISK:
@@ -531,9 +539,7 @@ def validate_workspace_config(raw: dict[str, Any]) -> tuple[list[str], list[str]
     return errors, warnings
 
 
-def _validate_allowlist(
-    path: str, entries: Any, errors: list[str], warnings: list[str]
-) -> None:
+def _validate_allowlist(path: str, entries: Any, errors: list[str], warnings: list[str]) -> None:
     if not isinstance(entries, list):
         errors.append(f"'{path}' must be a list.")
         return
@@ -556,19 +562,26 @@ def _validate_allowlist(
             for k in sorted(unknown):
                 errors.append(f"'{path}[{i}]': unknown key '{k}'")
         else:
-            errors.append(
-                f"'{path}[{i}]' must be a string or mapping, got {type(entry).__name__}."
-            )
+            errors.append(f"'{path}[{i}]' must be a string or mapping, got {type(entry).__name__}.")
 
 
 def _validate_custom_scan_rules(path: str, rules: Any, errors: list[str]) -> None:
     if not isinstance(rules, list):
         errors.append(f"'{path}' must be a list.")
         return
-    _SCAN_RULE_KEYS = frozenset({
-        "id", "pattern", "category", "risk", "confidence",
-        "message", "recommendation", "false_positive_note", "use_original_text",
-    })
+    _SCAN_RULE_KEYS = frozenset(
+        {
+            "id",
+            "pattern",
+            "category",
+            "risk",
+            "confidence",
+            "message",
+            "recommendation",
+            "false_positive_note",
+            "use_original_text",
+        }
+    )
     for i, rule in enumerate(rules):
         if not isinstance(rule, dict):
             errors.append(f"'{path}[{i}]' must be a mapping.")
@@ -596,10 +609,20 @@ def _validate_custom_lint_rules(path: str, rules: Any, errors: list[str]) -> Non
     if not isinstance(rules, list):
         errors.append(f"'{path}' must be a list.")
         return
-    _LINT_RULE_KEYS = frozenset({
-        "id", "pattern", "category", "severity", "confidence",
-        "message", "suggestion", "false_positive_note", "negate", "requires_agentic",
-    })
+    _LINT_RULE_KEYS = frozenset(
+        {
+            "id",
+            "pattern",
+            "category",
+            "severity",
+            "confidence",
+            "message",
+            "suggestion",
+            "false_positive_note",
+            "negate",
+            "requires_agentic",
+        }
+    )
     for i, rule in enumerate(rules):
         if not isinstance(rule, dict):
             errors.append(f"'{path}[{i}]' must be a mapping.")

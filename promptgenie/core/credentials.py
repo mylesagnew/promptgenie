@@ -26,7 +26,6 @@ Public API
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 _KEYRING_SERVICE = "promptgenie"
 
@@ -35,6 +34,7 @@ def is_keyring_available() -> bool:
     """Return True if the keyring package is installed and functional."""
     try:
         import keyring  # type: ignore[import-untyped]
+
         # Test that a backend is available
         keyring.get_keyring()
         return True
@@ -64,6 +64,7 @@ def get_credential(provider: str) -> str | None:
     2. Keyring
     """
     from promptgenie.core.providers import load_providers_config
+
     configs = load_providers_config()
     cfg = configs.get(provider)
 
@@ -76,6 +77,7 @@ def get_credential(provider: str) -> str | None:
     # 2. Keyring
     try:
         import keyring  # type: ignore[import-untyped]
+
         val = keyring.get_password(_KEYRING_SERVICE, provider)
         if val:
             return val
@@ -95,6 +97,7 @@ def delete_credential(provider: str) -> bool:
     """Delete the stored credential for *provider*. Returns True if deleted."""
     try:
         import keyring  # type: ignore[import-untyped]
+
         existing = keyring.get_password(_KEYRING_SERVICE, provider)
         if existing:
             keyring.delete_password(_KEYRING_SERVICE, provider)
@@ -108,7 +111,9 @@ def list_stored_credentials() -> list[str]:
     """Return provider names that have credentials stored in the keyring."""
     try:
         import keyring  # type: ignore[import-untyped]
+
         from promptgenie.core.providers import load_providers_config
+
         providers = load_providers_config()
         stored = []
         for name in providers:
@@ -143,16 +148,16 @@ def resolve_credential_ref(ref: str) -> str | None:
     if not ref.startswith(_REF_PREFIX):
         return ref  # treat as literal value
 
-    scheme_path = ref[len(_REF_PREFIX):]
+    scheme_path = ref[len(_REF_PREFIX) :]
 
     if scheme_path.startswith("aws-ssm:"):
-        return _resolve_aws_ssm(scheme_path[len("aws-ssm:"):])
+        return _resolve_aws_ssm(scheme_path[len("aws-ssm:") :])
     if scheme_path.startswith("gcp-secret:"):
-        return _resolve_gcp_secret(scheme_path[len("gcp-secret:"):])
+        return _resolve_gcp_secret(scheme_path[len("gcp-secret:") :])
     if scheme_path.startswith("azure-kv:"):
-        return _resolve_azure_kv(scheme_path[len("azure-kv:"):])
+        return _resolve_azure_kv(scheme_path[len("azure-kv:") :])
     if scheme_path.startswith("1password:"):
-        return _resolve_1password(scheme_path[len("1password:"):])
+        return _resolve_1password(scheme_path[len("1password:") :])
 
     return None
 
@@ -160,9 +165,10 @@ def resolve_credential_ref(ref: str) -> str | None:
 def _resolve_aws_ssm(parameter_path: str) -> str | None:
     try:
         import boto3  # type: ignore[import-untyped]
+
         ssm = boto3.client("ssm")
         resp = ssm.get_parameter(Name=parameter_path, WithDecryption=True)
-        return resp["Parameter"]["Value"]
+        return resp["Parameter"]["Value"]  # type: ignore[no-any-return]
     except ImportError as exc:
         raise ImportError(
             "boto3 is required for AWS SSM credential resolution. pip install boto3"
@@ -174,16 +180,19 @@ def _resolve_aws_ssm(parameter_path: str) -> str | None:
 def _resolve_gcp_secret(resource: str) -> str | None:
     try:
         from google.cloud import secretmanager  # type: ignore[import-untyped]
+
         client = secretmanager.SecretManagerServiceClient()
         if resource.startswith("projects/"):
-            name = resource if resource.endswith("/versions/latest") else resource + "/versions/latest"
+            name = (
+                resource if resource.endswith("/versions/latest") else resource + "/versions/latest"
+            )
         else:
             parts = resource.split("/", 1)
             if len(parts) != 2:
                 raise ValueError(f"Invalid GCP secret resource: {resource!r}. Use project/secret.")
             name = f"projects/{parts[0]}/secrets/{parts[1]}/versions/latest"
         resp = client.access_secret_version(request={"name": name})
-        return resp.payload.data.decode("utf-8").strip()
+        return resp.payload.data.decode("utf-8").strip()  # type: ignore[no-any-return]
     except ImportError as exc:
         raise ImportError(
             "google-cloud-secret-manager required. pip install google-cloud-secret-manager"
@@ -194,8 +203,9 @@ def _resolve_gcp_secret(resource: str) -> str | None:
 
 def _resolve_azure_kv(path: str) -> str | None:
     try:
-        from azure.keyvault.secrets import SecretClient  # type: ignore[import-untyped]
         from azure.identity import DefaultAzureCredential  # type: ignore[import-untyped]
+        from azure.keyvault.secrets import SecretClient  # type: ignore[import-untyped]
+
         parts = path.split("/", 1)
         if len(parts) != 2:
             raise ValueError(f"Invalid Azure Key Vault path: {path!r}. Use vault/secret.")
@@ -204,7 +214,7 @@ def _resolve_azure_kv(path: str) -> str | None:
             vault_url=f"https://{vault_name}.vault.azure.net",
             credential=DefaultAzureCredential(),
         )
-        return client.get_secret(secret_name).value
+        return client.get_secret(secret_name).value  # type: ignore[no-any-return]
     except ImportError as exc:
         raise ImportError(
             "azure-keyvault-secrets and azure-identity required. "
@@ -216,6 +226,7 @@ def _resolve_azure_kv(path: str) -> str | None:
 
 def _resolve_1password(path: str) -> str | None:
     import subprocess
+
     parts = path.split("/")
     if len(parts) < 3:
         raise ValueError(f"Invalid 1Password path: {path!r}. Use vault/item/field.")
@@ -223,7 +234,9 @@ def _resolve_1password(path: str) -> str | None:
     try:
         result = subprocess.run(
             ["op", "read", f"op://{vault}/{item}/{field}"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip() or "op CLI returned non-zero exit code")
@@ -240,9 +253,11 @@ def _resolve_1password(path: str) -> str | None:
 def store_credential_ref(provider: str, ref: str) -> None:
     """Store a ``ref:`` reference (not a raw key) in providers.yaml."""
     from promptgenie.core.providers import load_providers_config, save_providers_config
+
     providers = load_providers_config()
     if provider not in providers:
         from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
+
         raise PromptGenieError(
             f"Provider '{provider}' not configured. "
             f"Add it first with: promptgenie provider add {provider}",

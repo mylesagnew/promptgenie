@@ -277,9 +277,14 @@ def run_cmd(
         try:
             from rich.live import Live
             from rich.markdown import Markdown
+
             _live_renderable = Markdown("")
-            _live_ctx = Live(_live_renderable, console=console, refresh_per_second=15,
-                             vertical_overflow="visible")
+            _live_ctx = Live(
+                _live_renderable,
+                console=console,
+                refresh_per_second=15,
+                vertical_overflow="visible",
+            )
             _live_ctx.__enter__()
         except Exception:
             _live_ctx = None
@@ -291,6 +296,7 @@ def run_cmd(
             # TTY with Rich Live: buffer and rerender Markdown in-place
             tokens_buffer.append(token)
             from rich.markdown import Markdown
+
             _live_ctx.update(Markdown("".join(tokens_buffer)))
         else:
             # Non-TTY (pipe/redirect) or Live unavailable: raw tokens

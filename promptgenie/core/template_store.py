@@ -22,11 +22,9 @@ Public API
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -59,7 +57,7 @@ class TemplateRecord:
     prompt: str = ""
     variables: list[TemplateVariable] = field(default_factory=list)
     source_path: Path | None = None
-    source_layer: str = ""      # "builtin", "user", "project"
+    source_layer: str = ""  # "builtin", "user", "project"
 
     def to_dict(self) -> dict:
         return {
@@ -84,6 +82,7 @@ class TemplateRecord:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _layer_label(path: Path) -> str:
     resolved = path.resolve()
@@ -117,23 +116,26 @@ def _load_templates_from_file(path: Path, layer: str) -> list[TemplateRecord]:
             for v in vars_raw
             if isinstance(v, dict)
         ]
-        records.append(TemplateRecord(
-            id=str(raw["id"]),
-            name=raw.get("name", raw["id"]),
-            description=raw.get("description", ""),
-            category=raw.get("category", ""),
-            system=raw.get("system", ""),
-            prompt=raw.get("prompt", ""),
-            variables=variables,
-            source_path=path,
-            source_layer=layer,
-        ))
+        records.append(
+            TemplateRecord(
+                id=str(raw["id"]),
+                name=str(raw.get("name", raw["id"])),
+                description=raw.get("description", ""),
+                category=raw.get("category", ""),
+                system=raw.get("system", ""),
+                prompt=raw.get("prompt", ""),
+                variables=variables,
+                source_path=path,
+                source_layer=layer,
+            )
+        )
     return records
 
 
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
+
 
 def list_all_templates() -> list[TemplateRecord]:
     """Return all available templates across all layers (no duplicates — highest wins)."""
@@ -176,7 +178,7 @@ def render_template(record: TemplateRecord, variables: dict[str, str] | None = N
 
     def _replacer(m: re.Match) -> str:
         key = m.group(1).strip()
-        return vars_dict.get(key, m.group(0))  # leave unreplaced if unknown
+        return str(vars_dict.get(key, m.group(0)))  # leave unreplaced if unknown
 
     return re.sub(r"\{\{\s*(\w+)\s*\}\}", _replacer, text)
 
