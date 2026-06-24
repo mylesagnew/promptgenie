@@ -1,6 +1,5 @@
 """Tests for promptgenie/core/fileio.py — safe file I/O helpers."""
 
-import io
 from pathlib import Path
 from unittest.mock import patch
 
@@ -220,7 +219,6 @@ class TestRoundTrip:
 
 class TestSafeReadTextStdin:
     def test_dash_reads_from_stdin(self):
-        fake_stdin = io.BytesIO(b"hello from stdin")
         with patch("promptgenie.core.fileio.sys") as mock_sys:
             mock_sys.stdin.buffer.read.return_value = b"hello from stdin"
             result = safe_read_text("-")

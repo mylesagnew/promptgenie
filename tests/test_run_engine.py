@@ -2,24 +2,19 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
 
 from promptgenie.core.errors import PromptGenieError
 from promptgenie.core.run_engine import (
     RunEvent,
-    RunResult,
     _assemble_prompt,
     _build_messages,
-    _git_is_clean,
     _infer_provider,
     run_spec,
 )
-from promptgenie.core.spec import ContextSource, OutputContract, PromptSpec, RunOptions
-
+from promptgenie.core.spec import ContextSource, PromptSpec
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -46,6 +41,7 @@ class TestRunEvent:
         evt = RunEvent("token", {"text": "hello"})
         line = evt.to_ndjson()
         import json
+
         obj = json.loads(line)
         assert obj["event"] == "token"
         assert obj["text"] == "hello"
@@ -54,6 +50,7 @@ class TestRunEvent:
         evt = RunEvent("done", {"status": "ok"})
         line = evt.to_ndjson()
         import json
+
         obj = json.loads(line)
         assert obj["status"] == "ok"
 
@@ -86,7 +83,8 @@ class TestAssemblePrompt:
         assert "Tell me about Python" in result
 
     def test_context_prepended(self):
-        from promptgenie.core.context_builder import ContextManifest, SourceEntry
+        from promptgenie.core.context_builder import ContextManifest
+
         spec = _minimal_spec("Answer the question.")
         manifest = ContextManifest(
             text="def foo(): pass",
@@ -212,7 +210,10 @@ class TestRunSpecWithProvider:
 
         with patch("promptgenie.core.run_engine.get_provider", return_value=mock_prov):
             result = run_spec(
-                spec, stream=True, no_input=True, no_history=True,
+                spec,
+                stream=True,
+                no_input=True,
+                no_history=True,
                 on_token=collected.append,
             )
 
@@ -227,7 +228,10 @@ class TestRunSpecWithProvider:
 
         with patch("promptgenie.core.run_engine.get_provider", return_value=mock_prov):
             run_spec(
-                spec, stream=False, no_input=True, no_history=True,
+                spec,
+                stream=False,
+                no_input=True,
+                no_history=True,
                 on_event=events.append,
             )
 
@@ -242,7 +246,10 @@ class TestRunSpecWithProvider:
 
         with patch("promptgenie.core.run_engine.get_provider", return_value=mock_prov):
             run_spec(
-                spec, stream=False, no_input=True, no_history=True,
+                spec,
+                stream=False,
+                no_input=True,
+                no_history=True,
                 tee_file=tee,
             )
 
@@ -263,7 +270,10 @@ class TestRunSpecWithProvider:
 
         with patch("promptgenie.core.run_engine.get_provider", return_value=mock_prov):
             run_spec(
-                spec, stream=False, no_input=True, no_history=True,
+                spec,
+                stream=False,
+                no_input=True,
+                no_history=True,
                 cli_vars=["service=api", "env=prod"],
             )
 

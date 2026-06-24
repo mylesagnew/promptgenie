@@ -49,10 +49,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import yaml
 
@@ -125,9 +125,20 @@ def load_providers_config() -> dict[str, ProviderConfig]:
             default_model=str(cfg.get("default_model", "")),
             local=bool(cfg.get("local", False)),
             capabilities=cap,
-            extra={k: v for k, v in cfg.items()
-                   if k not in ("type", "base_url", "api_key_env", "api_key",
-                                "default_model", "local", "capabilities")},
+            extra={
+                k: v
+                for k, v in cfg.items()
+                if k
+                not in (
+                    "type",
+                    "base_url",
+                    "api_key_env",
+                    "api_key",
+                    "default_model",
+                    "local",
+                    "capabilities",
+                )
+            },
         )
     return result
 
@@ -198,8 +209,9 @@ def save_providers_config(providers: dict[str, ProviderConfig]) -> None:
             }
         entry.update(cfg.extra)
         out["providers"][name] = entry
-    _PROVIDERS_FILE.write_text(yaml.dump(out, default_flow_style=False, sort_keys=False),
-                                encoding="utf-8")
+    _PROVIDERS_FILE.write_text(
+        yaml.dump(out, default_flow_style=False, sort_keys=False), encoding="utf-8"
+    )
 
 
 def add_provider(name: str, provider_type: str, **kwargs: Any) -> ProviderConfig:
@@ -227,7 +239,7 @@ def add_provider(name: str, provider_type: str, **kwargs: Any) -> ProviderConfig
 # ---------------------------------------------------------------------------
 
 
-def get_provider(name: str, model_override: str | None = None) -> "BaseProvider":
+def get_provider(name: str, model_override: str | None = None) -> BaseProvider:
     """Return a Provider instance for *name*.
 
     Raises PromptGenieError if the provider is unknown or blocked by air-gap mode.
@@ -345,25 +357,26 @@ class AnthropicProvider(BaseProvider):
 
         try:
             import anthropic
+
             client = anthropic.AsyncAnthropic(api_key=self._resolve_api_key())
-            kwargs_build: dict[str, Any] = dict(
-                model=m, max_tokens=max_tokens, messages=user_msgs
-            )
+            kwargs_build: dict[str, Any] = {
+                "model": m,
+                "max_tokens": max_tokens,
+                "messages": user_msgs,
+            }
             if system_text:
                 kwargs_build["system"] = system_text
             response = await asyncio.wait_for(
                 client.messages.create(**kwargs_build), timeout=timeout
             )
-            return response.content[0].text
+            return str(response.content[0].text)
         except ImportError:
             return await self._complete_httpx(user_msgs, system_text, m, max_tokens, timeout)
         except asyncio.TimeoutError as exc:
-            raise PromptGenieError(
-                "Anthropic API call timed out.", code=EXIT_TIMEOUT
-            ) from exc
+            raise PromptGenieError("Anthropic API call timed out.", code=EXIT_TIMEOUT) from exc
         except Exception as exc:
             raise PromptGenieError(
-                f"Anthropic API error: {exc}", code=EXIT_PROVIDER
+                f"Anthropic API error: {type(exc).__name__}", code=EXIT_PROVIDER
             ) from exc
 
     async def _complete_httpx(
@@ -403,7 +416,7 @@ class AnthropicProvider(BaseProvider):
                 json=body,
             )
         resp.raise_for_status()
-        return resp.json()["content"][0]["text"]
+        return str(resp.json()["content"][0]["text"])
 
     async def stream(
         self,
@@ -421,10 +434,13 @@ class AnthropicProvider(BaseProvider):
 
         try:
             import anthropic
+
             client = anthropic.AsyncAnthropic(api_key=self._resolve_api_key())
-            kwargs_build: dict[str, Any] = dict(
-                model=m, max_tokens=max_tokens, messages=user_msgs
-            )
+            kwargs_build: dict[str, Any] = {
+                "model": m,
+                "max_tokens": max_tokens,
+                "messages": user_msgs,
+            }
             if system_text:
                 kwargs_build["system"] = system_text
             async with client.messages.stream(**kwargs_build) as stream_ctx:
@@ -436,7 +452,7 @@ class AnthropicProvider(BaseProvider):
             yield text
         except Exception as exc:
             raise PromptGenieError(
-                f"Anthropic stream error: {exc}", code=EXIT_PROVIDER
+                f"Anthropic stream error: {type(exc).__name__}", code=EXIT_PROVIDER
             ) from exc
 
 
@@ -445,20 +461,73 @@ class AnthropicProvider(BaseProvider):
 # ---------------------------------------------------------------------------
 
 
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _validate_provider_base_url(cfg: ProviderConfig) -> str:
+    """Validate and normalise a provider ``base_url`` (V-004, CWE-319).
+
+    Rules:
+      * Empty -> default ``https://api.openai.com/v1``.
+      * Only ``http``/``https`` schemes are accepted.
+      * Plain ``http://`` is only permitted when the host is loopback
+        (``localhost``/``127.0.0.1``/``::1``) OR the provider is marked
+        ``local: true`` AND no API key is configured. This prevents sending an
+        ``Authorization`` header in cleartext to a remote endpoint.
+
+    Returns the base_url with any trailing ``/`` stripped.
+    """
+    from urllib.parse import urlsplit
+
+    raw = (cfg.base_url or "").strip()
+    if not raw:
+        return "https://api.openai.com/v1"
+
+    parts = urlsplit(raw)
+    scheme = parts.scheme.lower()
+    if scheme not in ("http", "https"):
+        raise PromptGenieError(
+            f"Provider '{cfg.name}' base_url uses unsupported scheme {scheme!r}: {raw!r}",
+            code=EXIT_PROVIDER,
+            hint="Use an https:// endpoint (or http:// only for a local loopback dev server).",
+        )
+
+    if scheme == "http":
+        host = (parts.hostname or "").lower()
+        is_loopback = host in _LOOPBACK_HOSTS
+        has_key = bool(cfg.api_key_env or cfg.api_key)
+        # Allow http only for loopback hosts, OR for an explicitly-local provider
+        # that has no API key (a keyless local dev server). Anything else would
+        # risk leaking credentials over cleartext.
+        if not (is_loopback or (cfg.local and not has_key)):
+            raise PromptGenieError(
+                f"Provider '{cfg.name}' base_url uses cleartext http:// to a "
+                f"non-loopback host {host!r}: {raw!r}",
+                code=EXIT_PROVIDER,
+                hint=(
+                    "Use https:// for remote endpoints. Plain http:// is only allowed "
+                    "for loopback hosts (localhost/127.0.0.1/::1) or a keyless local "
+                    "provider, to avoid sending the API key in cleartext."
+                ),
+            )
+
+    return raw.rstrip("/")
+
+
 class OpenAICompatProvider(BaseProvider):
     """Covers any OpenAI-chat-completions-compatible endpoint."""
 
     def _base_url(self) -> str:
-        return self.config.base_url or "https://api.openai.com/v1"
+        return _validate_provider_base_url(self.config)
 
     def _headers(self) -> dict[str, str]:
         headers = {"content-type": "application/json"}
         key = ""
         if self.config.api_key_env or self.config.api_key:
-            try:
+            import contextlib
+
+            with contextlib.suppress(PromptGenieError):  # local providers (Ollama) don't need a key
                 key = self._resolve_api_key()
-            except PromptGenieError:
-                pass  # local providers (Ollama) don't need a key
         if key:
             headers["authorization"] = f"Bearer {key}"
         return headers
@@ -492,14 +561,14 @@ class OpenAICompatProvider(BaseProvider):
                     json=body,
                 )
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+            return str(resp.json()["choices"][0]["message"]["content"])
         except asyncio.TimeoutError as exc:
             raise PromptGenieError(
                 f"Provider '{self.config.name}' timed out.", code=EXIT_TIMEOUT
             ) from exc
         except Exception as exc:
             raise PromptGenieError(
-                f"Provider '{self.config.name}' error: {exc}", code=EXIT_PROVIDER
+                f"Provider '{self.config.name}' error: {type(exc).__name__}", code=EXIT_PROVIDER
             ) from exc
 
     async def stream(
@@ -524,31 +593,34 @@ class OpenAICompatProvider(BaseProvider):
         body.update(kwargs)
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(timeout=timeout) as client,
+                client.stream(
                     "POST",
                     f"{self._base_url()}/chat/completions",
                     headers=self._headers(),
                     json=body,
-                ) as resp:
-                    resp.raise_for_status()
-                    async for line in resp.aiter_lines():
-                        if line.startswith("data: "):
-                            data = line[6:]
-                            if data.strip() == "[DONE]":
-                                return
-                            try:
-                                chunk = json.loads(data)
-                                delta = chunk["choices"][0]["delta"].get("content", "")
-                                if delta:
-                                    yield delta
-                            except (json.JSONDecodeError, KeyError, IndexError):
-                                continue
+                ) as resp,
+            ):
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line.startswith("data: "):
+                        data = line[6:]
+                        if data.strip() == "[DONE]":
+                            return
+                        try:
+                            chunk = json.loads(data)
+                            delta = chunk["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            continue
         except PromptGenieError:
             raise
         except Exception as exc:
             raise PromptGenieError(
-                f"Provider '{self.config.name}' stream error: {exc}", code=EXIT_PROVIDER
+                f"Provider '{self.config.name}' stream error: {type(exc).__name__}",
+                code=EXIT_PROVIDER,
             ) from exc
 
 
@@ -573,6 +645,7 @@ async def probe_provider(name: str) -> tuple[bool, str]:
     # OpenAI-compat: hit /models endpoint
     try:
         import httpx
+
         headers = {"content-type": "application/json"}
         key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else ""
         if key:
@@ -585,4 +658,4 @@ async def probe_provider(name: str) -> tuple[bool, str]:
     except ImportError:
         return False, "httpx not installed — cannot probe."
     except Exception as exc:
-        return False, f"Connection failed: {exc}"
+        return False, f"Connection failed: {type(exc).__name__}"

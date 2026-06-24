@@ -3,8 +3,6 @@
 import os
 from unittest.mock import patch
 
-import pytest
-
 from promptgenie.renderers.rich import (
     ColorMode,
     _resolve_color,
@@ -57,16 +55,19 @@ class TestResolveColor:
 class TestMakeConsole:
     def test_returns_console_object(self):
         from rich.console import Console
+
         c = make_console(ColorMode.AUTO)
         assert isinstance(c, Console)
 
     def test_stderr_console(self):
         from rich.console import Console
+
         c = make_console(ColorMode.AUTO, stderr=True)
         assert isinstance(c, Console)
 
     def test_never_mode_no_color(self):
         from rich.console import Console
+
         c = make_console(ColorMode.NEVER)
         assert isinstance(c, Console)
         # no_color should be set
@@ -76,7 +77,8 @@ class TestMakeConsole:
 class TestInitRenderer:
     def test_updates_module_console(self):
         import promptgenie.renderers.rich as renderer
-        before = id(renderer.console)
+
+        _before = id(renderer.console)  # capture reference before to verify init runs
         init_renderer(ColorMode.AUTO)
         # A new console object is created each time
         # (may or may not be same id depending on Python's memory reuse, but
@@ -84,11 +86,11 @@ class TestInitRenderer:
 
     def test_init_with_never(self):
         import promptgenie.renderers.rich as renderer
+
         init_renderer(ColorMode.NEVER)
         assert renderer.console.no_color is True
 
     def test_init_with_always(self):
-        import promptgenie.renderers.rich as renderer
         init_renderer(ColorMode.ALWAYS)
         # force_terminal may be set; just check it doesn't raise
 

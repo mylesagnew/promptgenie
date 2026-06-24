@@ -8,7 +8,13 @@ from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import FileTooLargeError, safe_read_text, safe_write_text
 from promptgenie.core.formatters import lint_to_json, lint_to_sarif
 from promptgenie.core.linter import lint
-from promptgenie.renderers.rich import console, diag_console, format_lint_issues, is_structured_mode, score_color
+from promptgenie.renderers.rich import (
+    console,
+    diag_console,
+    format_lint_issues,
+    is_structured_mode,
+    score_color,
+)
 
 
 def _resolve_config(

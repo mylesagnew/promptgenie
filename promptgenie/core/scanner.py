@@ -15,6 +15,30 @@ Confidence = Literal["HIGH", "MEDIUM", "LOW"]
 # Maximum findings emitted per rule per scan (prevents finding-flood on adversarial input).
 MAX_FINDINGS_PER_RULE: int = 5
 
+# Nested quantifier patterns are the primary source of ReDoS (catastrophic backtracking).
+# Reject any user-supplied pattern that contains a quantified group itself quantified,
+# e.g. (a+)+  (a*)*  (a+)?  (\w+){2,}  — before it can reach the regex engine.
+_NESTED_QUANTIFIER_RE = re.compile(r"\([^)]*[+*?{][^)]*\)\s*[+*?{]")
+
+
+def validate_pattern(pattern: str, rule_id: str) -> None:
+    """Raise ``ValueError`` if *pattern* is syntactically invalid or contains
+    a nested quantifier that could cause catastrophic backtracking (ReDoS).
+
+    Called at rule-pack load time so malicious patterns from user config or
+    registry downloads are rejected before they reach the scan hot-loop.
+    """
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"Rule {rule_id!r}: invalid regex: {exc}") from exc
+    if _NESTED_QUANTIFIER_RE.search(pattern):
+        raise ValueError(
+            f"Rule {rule_id!r}: pattern contains a nested quantifier which can cause "
+            f"catastrophic backtracking (ReDoS). Rewrite to use atomic groups or "
+            f"possessive quantifiers, or simplify the pattern."
+        )
+
 
 def _offset_to_line_col(text: str, offset: int) -> tuple[int, int]:
     """Convert a byte offset into 1-based (line, col)."""

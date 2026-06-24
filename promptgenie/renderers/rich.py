@@ -15,7 +15,6 @@ messages (config paths, status lines) are written to *stderr* via
 from __future__ import annotations
 
 import os
-import sys
 from enum import Enum
 
 from rich import box  # noqa: F401  — re-exported for command modules

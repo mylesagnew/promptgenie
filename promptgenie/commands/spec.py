@@ -11,21 +11,19 @@ Commands
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import click
 import yaml
 
-from promptgenie.core.errors import EXIT_OK, EXIT_USAGE, PromptGenieError
+from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
 from promptgenie.core.spec import (
     SPEC_SCHEMA_PATH,
     load_spec,
     spec_init_template,
     validate_spec,
-    _spec_to_dict,
 )
-from promptgenie.core.variables import parse_cli_vars, load_vars_file
+from promptgenie.core.variables import load_vars_file, parse_cli_vars
 from promptgenie.renderers.rich import console, diag_console, is_structured_mode
 
 
@@ -41,10 +39,16 @@ def spec_group() -> None:
 
 @spec_group.command("init")
 @click.argument("name")
-@click.option("--target", "-t", default="claude-code", show_default=True,
-              help="Target profile name (e.g. claude-code, chatgpt, ollama).")
-@click.option("--out", "-o", default=None,
-              help="Output file path. Default: <name>.prompt.yaml in cwd.")
+@click.option(
+    "--target",
+    "-t",
+    default="claude-code",
+    show_default=True,
+    help="Target profile name (e.g. claude-code, chatgpt, ollama).",
+)
+@click.option(
+    "--out", "-o", default=None, help="Output file path. Default: <name>.prompt.yaml in cwd."
+)
 @click.option("--force", is_flag=True, help="Overwrite if file already exists.")
 def spec_init_cmd(name: str, target: str, out: str | None, force: bool) -> None:
     """Scaffold a new PromptSpec YAML file at <name>.prompt.yaml.
@@ -58,8 +62,7 @@ def spec_init_cmd(name: str, target: str, out: str | None, force: bool) -> None:
     output_path = Path(out) if out else Path(f"{name.replace(' ', '-')}.prompt.yaml")
     if output_path.exists() and not force:
         diag_console.print(
-            f"[yellow]File already exists:[/yellow] {output_path}\n"
-            "Use --force to overwrite."
+            f"[yellow]File already exists:[/yellow] {output_path}\nUse --force to overwrite."
         )
         raise SystemExit(EXIT_USAGE)
 
@@ -77,9 +80,13 @@ def spec_init_cmd(name: str, target: str, out: str | None, force: bool) -> None:
 
 @spec_group.command("validate")
 @click.argument("spec_file", type=click.Path(exists=True))
-@click.option("--format", "output_format", default="rich",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              help="Output format.")
+@click.option(
+    "--format",
+    "output_format",
+    default="rich",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    help="Output format.",
+)
 def spec_validate_cmd(spec_file: str, output_format: str) -> None:
     """Validate a PromptSpec file against the schema.
 
@@ -96,22 +103,32 @@ def spec_validate_cmd(spec_file: str, output_format: str) -> None:
         spec = load_spec(spec_file)
     except PromptGenieError as exc:
         if structured:
-            console.print(json.dumps({
-                "valid": False, "file": spec_file, "errors": [str(exc)],
-                "schema_version": "1.0",
-            }))
+            console.print(
+                json.dumps(
+                    {
+                        "valid": False,
+                        "file": spec_file,
+                        "errors": [str(exc)],
+                        "schema_version": "1.0",
+                    }
+                )
+            )
         else:
             diag_console.print(f"[red]✗[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from exc
 
     errors = validate_spec(spec)
     if structured:
-        console.print(json.dumps({
-            "valid": len(errors) == 0,
-            "file": spec_file,
-            "errors": errors,
-            "schema_version": "1.0",
-        }))
+        console.print(
+            json.dumps(
+                {
+                    "valid": len(errors) == 0,
+                    "file": spec_file,
+                    "errors": errors,
+                    "schema_version": "1.0",
+                }
+            )
+        )
     else:
         if errors:
             diag_console.print(f"[red]✗[/red] [bold]{spec_file}[/bold] is invalid:")
@@ -119,8 +136,9 @@ def spec_validate_cmd(spec_file: str, output_format: str) -> None:
                 diag_console.print(f"  • {err}")
             raise SystemExit(EXIT_USAGE)
         else:
-            console.print(f"[green]✓[/green] [bold]{spec_file}[/bold] is valid "
-                          f"([dim]{spec.name}[/dim])")
+            console.print(
+                f"[green]✓[/green] [bold]{spec_file}[/bold] is valid ([dim]{spec.name}[/dim])"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -130,17 +148,23 @@ def spec_validate_cmd(spec_file: str, output_format: str) -> None:
 
 @spec_group.command("render")
 @click.argument("spec_file", type=click.Path(exists=True))
-@click.option("--var", "var_list", multiple=True, metavar="KEY=VALUE",
-              help="Inline variable override (repeatable).")
-@click.option("--vars", "vars_file", default=None,
-              help="YAML/JSON file of variable values.")
-@click.option("--no-input", is_flag=True,
-              help="Fail instead of prompting for missing variables.")
-@click.option("--format", "output_format", default="text",
-              type=click.Choice(["text", "json"], case_sensitive=False),
-              help="Output format.")
-@click.option("--show-context", is_flag=True,
-              help="Include assembled context in output.")
+@click.option(
+    "--var",
+    "var_list",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Inline variable override (repeatable).",
+)
+@click.option("--vars", "vars_file", default=None, help="YAML/JSON file of variable values.")
+@click.option("--no-input", is_flag=True, help="Fail instead of prompting for missing variables.")
+@click.option(
+    "--format",
+    "output_format",
+    default="text",
+    type=click.Choice(["text", "json"], case_sensitive=False),
+    help="Output format.",
+)
+@click.option("--show-context", is_flag=True, help="Include assembled context in output.")
 def spec_render_cmd(
     spec_file: str,
     var_list: tuple[str, ...],
@@ -160,14 +184,13 @@ def spec_render_cmd(
       promptgenie spec render my-prompt.yaml --format json | jq .prompt
     """
     from promptgenie.core.context_builder import build_context
-    from promptgenie.core.spec import render_spec
-    from promptgenie.core.variables import parse_cli_vars, load_vars_file, resolve_variables
+    from promptgenie.core.variables import resolve_variables
 
     try:
         spec = load_spec(spec_file)
     except PromptGenieError as exc:
         diag_console.print(f"[red]Error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from exc
 
     # Merge vars
     merged: dict = dict(spec.vars)
@@ -179,12 +202,14 @@ def spec_render_cmd(
     prompt_text = spec.prompt or ""
     try:
         rendered, resolved = resolve_variables(
-            prompt_text, cli_vars=cli_var_dict,
-            vars_file_values=merged, no_input=no_input,
+            prompt_text,
+            cli_vars=cli_var_dict,
+            vars_file_values=merged,
+            no_input=no_input,
         )
     except Exception as exc:
         diag_console.print(f"[red]Variable error:[/red] {exc}")
-        raise SystemExit(EXIT_USAGE)
+        raise SystemExit(EXIT_USAGE) from exc
 
     # Context
     context_text = ""
@@ -198,8 +223,9 @@ def spec_render_cmd(
             "spec_name": spec.name,
             "target": spec.target,
             "prompt": rendered,
-            "resolved_vars": {k: ("***" if "secret" in k.lower() else v)
-                              for k, v in resolved.items()},
+            "resolved_vars": {
+                k: ("***" if "secret" in k.lower() else v) for k, v in resolved.items()
+            },
             "schema_version": "1.0",
         }
         if show_context:
@@ -220,9 +246,13 @@ def spec_render_cmd(
 
 
 @spec_group.command("schema")
-@click.option("--format", "output_format", default="json",
-              type=click.Choice(["json", "yaml"], case_sensitive=False),
-              help="Output format.")
+@click.option(
+    "--format",
+    "output_format",
+    default="json",
+    type=click.Choice(["json", "yaml"], case_sensitive=False),
+    help="Output format.",
+)
 def spec_schema_cmd(output_format: str) -> None:
     """Print the JSON Schema for PromptSpec.
 
@@ -233,6 +263,7 @@ def spec_schema_cmd(output_format: str) -> None:
       promptgenie spec schema --format yaml
     """
     import json
+
     schema_text = SPEC_SCHEMA_PATH.read_text(encoding="utf-8")
     schema_obj = json.loads(schema_text)
     if output_format == "yaml":

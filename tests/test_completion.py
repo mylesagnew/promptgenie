@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-import pytest
 from click.testing import CliRunner
 
 from promptgenie.cli import cli
@@ -34,6 +30,7 @@ class TestCompletionCache:
 
     def test_write_and_read_cache(self, tmp_path, monkeypatch):
         import promptgenie.commands.completion as comp
+
         monkeypatch.setattr(comp, "_CACHE_DIR", tmp_path)
         monkeypatch.setattr(comp, "_CACHE_FILE", tmp_path / "completions.json")
         data = {"targets": ["claude"], "templates": ["agentic-task"]}
@@ -43,6 +40,7 @@ class TestCompletionCache:
 
     def test_read_cache_missing_returns_none(self, tmp_path, monkeypatch):
         import promptgenie.commands.completion as comp
+
         monkeypatch.setattr(comp, "_CACHE_FILE", tmp_path / "no_such.json")
         assert _read_cache() is None
 

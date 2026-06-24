@@ -283,10 +283,16 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 |---|---|---|---|
 | Phase 1 — Terminal and Pipeline Foundations | ✅ Shipped (v1.1.0) | 128 | 765 |
 | Phase 2 — PromptSpec and Run Engine | ✅ Shipped (v1.2.0) | 93 | 858 |
-| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | 929 |
-| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | 1007 |
-| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | 1107 |
-| v1.6.0 — Internal Event Model + Policy Hardening | ✅ Shipped (v1.6.0) | 110 | **1203** |
+| Security patch — SSRF / injection / secrets gate | ✅ Shipped (v1.2.1) | 39 | — |
+| Security patch — DNS rebinding / VS Code binary / mypy | ✅ Shipped (v1.2.2) | 11 | — |
+| Security patch — allowlist bypass / spec trust / IP pinning | ✅ Shipped (v1.2.3) | 32 | — |
+| Security patch — URL gate bypass / provider TLS / extension fail-closed | ✅ Shipped (v1.2.4) | 15 | — |
+| Phase 3 — SecDevOps Guardrails | ✅ Shipped (v1.3.0) | 71 | — |
+| Phase 4 — Evaluation and Regression Testing | ✅ Shipped (v1.4.0) | 77 | — |
+| Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | — |
+| v1.6.0 — Internal Event Model + Policy Hardening | ✅ Shipped (v1.6.0) | 110 | — |
+| v1.7.0 — Workspace Schema + Config Validation | ✅ Shipped (v1.7.0) | 70 | — |
+| Native token compression (`compress`/`optimize`) | ✅ Shipped (Unreleased) | 30 | **1400** |
 | Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-import pytest
 import yaml
 
 from promptgenie.core.differ import (
@@ -18,7 +16,6 @@ from promptgenie.core.differ import (
 )
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -53,9 +50,10 @@ Stop and ask before deploying.
 
 
 def _make_result(a_text: str, b_text: str) -> DiffResult:
+    import difflib
+
     from promptgenie.core.differ import _section_deltas
     from promptgenie.core.generator import estimate_tokens, score_prompt
-    import difflib
 
     profile = {"name": "claude", "required_sections": [], "forbidden_patterns": []}
     a_tokens = estimate_tokens(a_text)
@@ -66,19 +64,29 @@ def _make_result(a_text: str, b_text: str) -> DiffResult:
     b_lint = lint(b_text)
     a_scan = scan(a_text)
     b_scan = scan(b_text)
-    unified = list(difflib.unified_diff(
-        a_text.splitlines(keepends=True),
-        b_text.splitlines(keepends=True),
-        fromfile="a.md", tofile="b.md", lineterm=""
-    ))
+    unified = list(
+        difflib.unified_diff(
+            a_text.splitlines(keepends=True),
+            b_text.splitlines(keepends=True),
+            fromfile="a.md",
+            tofile="b.md",
+            lineterm="",
+        )
+    )
     deltas = _section_deltas(a_text, b_text)
     return DiffResult(
-        a_text=a_text, b_text=b_text,
-        a_path="a.md", b_path="b.md",
-        a_tokens=a_tokens, b_tokens=b_tokens,
-        a_score=a_score, b_score=b_score,
-        a_lint=a_lint, b_lint=b_lint,
-        a_scan=a_scan, b_scan=b_scan,
+        a_text=a_text,
+        b_text=b_text,
+        a_path="a.md",
+        b_path="b.md",
+        a_tokens=a_tokens,
+        b_tokens=b_tokens,
+        a_score=a_score,
+        b_score=b_score,
+        a_lint=a_lint,
+        b_lint=b_lint,
+        a_scan=a_scan,
+        b_scan=b_scan,
         unified_diff=unified,
         section_deltas=deltas,
     )

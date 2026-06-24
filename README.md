@@ -202,6 +202,8 @@ $ promptgenie scan examples/auth-refactor.md
 
 > **Scanner scope:** `scan` is a regex/heuristic tripwire with Unicode normalization (NFKC). It catches obvious prompt-injection vocabulary, hardcoded secrets, unsafe agent permission patterns, split/multiline overrides, HTML and block-comment smuggling, base64-encoded payloads (≥40 chars, >70% printable), and fullwidth Unicode obfuscation. It does **not** catch within-word character splits, non-NFKC Unicode homoglyphs (e.g. Turkish ı), synonym substitution, or indirect reference attacks. See `tests/test_scanner_adversarial.py` for a full list of documented detection gaps.
 
+> **Custom rule safety:** patterns loaded from `.promptgenie.yaml` `custom_rules` or registry-installed rule packs are validated at load time for syntax errors and nested quantifiers (`(a+)+`, `(\w+)*`, etc.) — the primary cause of catastrophic backtracking (ReDoS). Invalid or dangerous patterns are rejected with a clear error before they reach the scanner.
+
 **Lint a prompt for quality issues:**
 
 ```
@@ -355,7 +357,8 @@ Optional extras:
 |---|---|---|
 | `benchmark` | `anthropic` SDK — required for `promptgenie benchmark` | `pip install "promptgenie[benchmark]"` |
 | `tokenizer` | `tiktoken` — accurate token counts (falls back to `len/4` without it) | `pip install "promptgenie[tokenizer]"` |
-| `llm` | `openai` SDK — required for `promptgenie scan --llm` | `pip install "promptgenie[llm]"` |
+| `providers` | `httpx` + `anthropic` SDK — required to run prompts against providers | `pip install "promptgenie[providers]"` |
+| _(no extra)_ | `openai` SDK — required for `promptgenie scan --llm` (not packaged as an extra) | `pip install openai` |
 
 ### Docker
 
@@ -1655,12 +1658,26 @@ promptgenie run my-prompt.yaml --no-input --var env=prod
 | `--vars FILE` | YAML/JSON variable file |
 | `--max-context-tokens N` | Context token budget |
 | `--context-strategy` | `manual` \| `newest` \| `smallest` \| `git-relevant` |
-| `--allow-url` | Permit URL-type context sources |
+| `--trust` | Trust this spec's context sources without prompting (records the spec as trusted) |
+| `--allow-url` | Permit URL-type context sources (HTTPS-only; SSRF-protected with IP pinning) |
+| `--allow-insecure-url` | Also permit plain `http://` URL sources (emits a security warning; default blocked) |
+| `--allow-sensitive-env` | Permit credential-like env vars in `env` context sources (emits a warning) |
+| `--allow-secrets` | Downgrade secrets gate from hard-block to warning (use only in controlled CI environments) |
 | `--tee FILE` | Write response to file while streaming |
 | `--format text\|ndjson` | NDJSON emits `start/token/warning/error/done` events |
 | `--show-context` | Print context manifest before sending |
 
-Run history is persisted to `~/.local/share/promptgenie/runs/`.
+Run history is persisted to `~/.local/share/promptgenie/runs/` (files `0600`, with secrets redacted).
+
+> **Security defaults (v1.2.4+):** The run engine enforces these constraints by default.
+> (1) **Spec trust boundary** — a spec with host-touching context sources (`cmd`/`file`/`glob`/`env`/`url`) must be trusted before it runs. Interactive sessions prompt; CI must pass `--trust`/`--yes` or pre-register via `promptgenie trust add`. Trust is keyed by spec path + content hash, so editing a trusted spec re-prompts.
+> (2) **Command allowlist** — `cmd` sources are restricted to inert read-only tools; interpreters (`python3`, `node`, `awk`, …) and eval flags (`-c`, `-e`, `-exec`) are blocked, and `git` is limited to read-only subcommands. All subprocess calls use `shell=False`.
+> (3) **Env credential guard** — `env` sources refuse credential-like variable names (`*KEY*`, `AWS_*`, `ANTHROPIC_*`, …) unless `--allow-sensitive-env` is passed.
+> (4) **Secrets gate** — a detected secret in the assembled prompt aborts the run (exit 6) before any provider call. Pass `--allow-secrets` to override.
+> (5) **User-controlled URL egress** — `url` sources are fetched **only** when the user passes `--allow-url`; a spec cannot enable network egress on its own (the former `policy_gated` field is removed). Fetches require `https://` and pin the validated IP for the connection. `http://` requires `--allow-insecure-url`; `file://` and private IP ranges are blocked unconditionally.
+> (6) **Provider TLS** — a provider `base_url` may use plain `http://` only for loopback/`local` keyless endpoints; remote providers must use `https://`, so an API key is never sent over cleartext.
+> (7) **VS Code trusted binary** — the `promptgenie.executablePath` setting is machine-scoped; custom paths require an absolute path + basename check + one-time trust prompt, and the check fails closed if the extension context is unavailable.
+> See [SECURITY.md](SECURITY.md) for the full security model.
 
 ---
 
@@ -2132,7 +2149,7 @@ linter:
       suggestion: "Narrow the refactor to specific modules or files."
 ```
 
-**Custom scanner rules** can also be added under `scanner.custom_rules`. Each rule requires `id`, `pattern`, `risk`, `confidence`, `message`, and `recommendation`:
+**Custom scanner rules** can also be added under `scanner.custom_rules`. Each rule requires `id`, `pattern`, `risk`, `confidence`, `message`, and `recommendation`. All patterns are validated at load time — syntax errors and nested quantifiers (ReDoS risk) raise `ValueError` and abort config loading:
 
 ```yaml
 scanner:

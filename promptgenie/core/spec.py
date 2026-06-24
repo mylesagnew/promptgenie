@@ -38,7 +38,7 @@ from typing import Any
 
 import yaml
 
-from promptgenie.core.errors import EXIT_USAGE, EXIT_TEMPLATE, PromptGenieError
+from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
 
 SPEC_SCHEMA_PATH = Path(__file__).parent.parent / "schemas" / "promptspec.schema.json"
 
@@ -62,7 +62,6 @@ class ContextSource:
     url: str = ""
     label: str = ""
     max_bytes: int = 0  # 0 = no limit
-    policy_gated: bool = True
 
 
 @dataclass
@@ -251,7 +250,6 @@ def _build_context_source(raw: dict[str, Any]) -> ContextSource:
         url=str(raw.get("url", "")),
         label=str(raw.get("label", "")),
         max_bytes=int(raw.get("max_bytes", 0)),
-        policy_gated=bool(raw.get("policy_gated", True)),
     )
 
 
@@ -280,12 +278,13 @@ def render_spec(spec: PromptSpec, resolved_vars: dict[str, Any]) -> str:
     text = spec.prompt or (f"[template:{spec.template}]" if spec.template else "")
     if not text:
         text = ""
+
     # Simple {{name}} substitution
-    def _sub(m: re.Match) -> str:  # type: ignore[type-arg]
-        name = m.group(1)
+    def _sub(m: re.Match[str]) -> str:
+        name: str = m.group(1)
         if name in resolved_vars:
             return str(resolved_vars[name])
-        return m.group(0)
+        return str(m.group(0))
 
     return re.sub(r"\{\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}\}", _sub, text)
 
@@ -304,17 +303,20 @@ def _spec_to_dict(spec: PromptSpec) -> dict[str, Any]:
         "mode": spec.mode,
         "vars": spec.vars,
         "context": [
-            {k: v for k, v in {
-                "type": s.type,
-                "path": s.path or None,
-                "pattern": s.pattern or None,
-                "var": s.var or None,
-                "command": s.command or None,
-                "url": s.url or None,
-                "label": s.label or None,
-                "max_bytes": s.max_bytes or None,
-                "policy_gated": s.policy_gated,
-            }.items() if v is not None}
+            {
+                k: v
+                for k, v in {
+                    "type": s.type,
+                    "path": s.path or None,
+                    "pattern": s.pattern or None,
+                    "var": s.var or None,
+                    "command": s.command or None,
+                    "url": s.url or None,
+                    "label": s.label or None,
+                    "max_bytes": s.max_bytes or None,
+                }.items()
+                if v is not None
+            }
             for s in spec.context
         ],
         "policy": spec.policy,
@@ -325,8 +327,16 @@ def _spec_to_dict(spec: PromptSpec) -> dict[str, Any]:
         "output_contract": {
             "format": spec.output_contract.format,
             **({"schema": spec.output_contract.schema} if spec.output_contract.schema else {}),
-            **({"max_tokens": spec.output_contract.max_tokens} if spec.output_contract.max_tokens else {}),
-            **({"min_tokens": spec.output_contract.min_tokens} if spec.output_contract.min_tokens else {}),
+            **(
+                {"max_tokens": spec.output_contract.max_tokens}
+                if spec.output_contract.max_tokens
+                else {}
+            ),
+            **(
+                {"min_tokens": spec.output_contract.min_tokens}
+                if spec.output_contract.min_tokens
+                else {}
+            ),
         },
         "run": {
             "dry_run": spec.run.dry_run,

@@ -192,7 +192,8 @@ def fetch_remote_index(url: str = DEFAULT_REGISTRY_URL, timeout: int = 10) -> li
     Raises ``urllib.error.URLError`` / ``OSError`` on network failure.
     """
     _validate_url(url)
-    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310  # nosec: B310 — scheme validated by _validate_url
+    # scheme validated by _validate_url above
+    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310  # nosec B310
         import yaml
 
         data = resp.read(_MAX_DOWNLOAD_BYTES + 1)
@@ -223,7 +224,8 @@ def _download_to_temp(url: str, timeout: int = 30, max_bytes: int = _MAX_DOWNLOA
     Uses ``mkstemp`` to avoid TOCTOU races (no ``mktemp``).
     """
     _validate_url(url)
-    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310  # nosec: B310 — scheme validated by _validate_url
+    # scheme validated by _validate_url above
+    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310  # nosec B310
         data = resp.read(max_bytes + 1)
     if len(data) > max_bytes:
         raise ValueError(

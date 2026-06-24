@@ -1,4 +1,7 @@
-FROM python:3.12-slim
+# Pin base image to a specific digest to prevent supply-chain attacks from
+# mutable tags.  To update: docker pull python:3.12-slim && docker inspect
+# python:3.12-slim --format='{{index .RepoDigests 0}}'
+FROM python:3.12-slim@sha256:c2d8472b831337ab296a8ce652e1ba786e9e3034fc445dc58b50a7f5251f0003
 
 # Non-root user
 RUN groupadd --gid 1001 promptgenie \

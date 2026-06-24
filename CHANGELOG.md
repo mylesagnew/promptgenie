@@ -151,6 +151,305 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Tests
 
 - 71 new tests in `tests/test_phase3.py`. Total: **929 tests, all passing.**
+### Security lineage (merged from `main`)
+
+The release entries below come from the parallel security-audit line that was merged into this branch. The fixes they describe (URL-gate bypass, env exfiltration, provider TLS, spec trust, etc.) are present in the merged code.
+
+---
+
+## [1.2.4] — 2026-06-12  ·  Fourth security audit round
+
+Addresses findings V-001 through V-005 from an external SecDevOps audit run against `100c19e`. The audit confirmed the v1.2.3 hardening (command allowlist, SSRF/DNS pinning, env guard) is effective; this release closes a remaining secure-by-default bypass and four supporting issues.
+
+### Security
+
+- **V-001 (HIGH) fixed — PromptSpec could bypass the `--allow-url` network gate** (CWE-918)
+  (`promptgenie/core/context_builder.py`, `promptgenie/core/spec.py`) — `ContextSource` carried a
+  spec-author-controlled `policy_gated` field. A spec setting `policy_gated: false` caused the URL
+  egress gate to evaluate `no_url = gate and no_url → False`, fetching a URL **without** the user
+  passing `--allow-url`. The spec must not have authority over the user's network policy. The
+  `policy_gated` field is removed entirely; the URL gate is now governed solely by `--allow-url`
+  (`no_url`). See **Breaking changes**.
+
+- **V-002 (MEDIUM) fixed — CI exposed `ANTHROPIC_API_KEY` to a PR-triggered job that doesn't need
+  it** (CWE-522) (`.github/workflows/prompt-check.yml`) — the "Run prompt test suites" step injected
+  the Anthropic key, but `promptgenie test` runs entirely offline (lint/scan/score). The `env:`
+  block was removed, shrinking the secret's blast radius on pull-request runs.
+
+- **V-003 (MEDIUM) fixed — VS Code extension failed open when the extension context was
+  unavailable** (CWE-494/426) (`vscode-extension/src/runner.ts`) — the custom-binary trust path
+  returned the configured binary "allow by default" when `_extensionContext` was unset. It now fails
+  closed and refuses to execute, so an activation-ordering bug can never silently skip the trust
+  prompt. Tests inject a context via the existing `setExtensionContext`.
+
+- **V-004 (MEDIUM) fixed — provider `base_url` accepted any scheme; API key could be sent over
+  cleartext HTTP** (CWE-319) (`promptgenie/core/providers.py`) — added
+  `_validate_provider_base_url()`: rejects non-HTTP(S) schemes; permits `http://` only for loopback
+  hosts or `local: true` keyless providers; rejects remote `http://` and any `http://` that would
+  transmit an `Authorization` header to a non-loopback host.
+
+- **V-005 (LOW) fixed — malformed `# nosec` comments degraded Bandit signal** (CWE-703) — all
+  suppressions normalized to canonical `# nosec BXXX` form with the justification on the preceding
+  line; removed a spurious `B202` suppression. Bandit now emits zero malformed-nosec warnings and
+  zero HIGH/MEDIUM findings.
+
+### Added
+
+- **Resource caps on context ingestion** — `_gather_stdin` now honours `max_bytes`, and `_gather_glob`
+  stops collecting after `_GLOB_MAX_FILES` (1000) files, bounding memory on large or hostile inputs.
+- **New tests** — `TestV001UrlGateNotBypassable`, `TestV004ProviderBaseUrlValidation`, and
+  `TestResourceCaps` in the test suite (955 tests total, coverage 77.56%).
+
+### Changed
+
+- **`ruff format`** applied to three drifted files; **README** optional-extras table corrected (the
+  `llm` extra never existed — `openai` is installed directly; the real `providers` extra is now
+  documented); **`pyproject.toml`** coverage comment updated to the measured 77.56%.
+
+### Breaking changes
+
+- **PromptSpec: the `policy_gated` context-source key is removed.** It is no longer a recognised
+  field and is silently ignored if present in an existing spec. URL context sources are gated
+  **only** by the `--allow-url` CLI flag (and `--allow-insecure-url` for plain HTTP); a spec can no
+  longer weaken or disable that gate. Specs that previously relied on `policy_gated: false` to fetch
+  URLs without `--allow-url` must now pass `--allow-url` explicitly.
+
+---
+
+## [1.2.3] — 2026-06-12  ·  Third security audit round
+
+Addresses findings S-1 through S-5 from the third internal security review. The headline fix (S-1) closes a bypass that effectively re-opened the F-001 command-execution vector; S-2 adds a trust boundary around `promptgenie run`. No new product features; behaviour changes are noted under **Changed**.
+
+### Security
+
+- **S-1 fixed — command allowlist bypass via interpreters** (`promptgenie/core/context_builder.py`) —
+  The `_CMD_ALLOWLIST` previously included interpreters and code-exec primitives (`python3`, `node`,
+  `make`, `env`, `awk`, `sed`, `find`, …). Each passed the executable-basename check while still
+  executing arbitrary code (`python3 -c …`, `node -e …`, `awk 'BEGIN{system(…)}'`, `find … -exec …`,
+  `env sh -c …`, `git -c alias.x=!sh …`), nullifying the F-001 hardening. The allowlist is now
+  reduced to genuinely inert read-only tools (`git`, `cat`, `ls`, `grep`, `head`, `tail`, `wc`,
+  `sort`, `uniq`, `cut`, `tr`, `printenv`, …). Three new layers were added: a `_DANGEROUS_ARG_FLAGS`
+  argument denylist (`-c`, `-e`, `--eval`, `-exec`, `-execdir`, …) enforced for **every** command;
+  a read-only `_GIT_SUBCOMMAND_ALLOWLIST` (only `log`, `diff`, `show`, `status`, `branch`,
+  `rev-parse`, `ls-files`, `blame`, `describe`, `tag`, `remote`, `shortlog`); and a hard reject of
+  any `git -c …` config-injection form.
+
+- **S-2 fixed — no trust gate before `run` executes an untrusted spec** (`promptgenie/core/trust.py`,
+  `promptgenie/commands/run.py`, `promptgenie/commands/trust.py`) — `promptgenie run spec.yaml`
+  previously executed a spec's `cmd`/`file`/`glob`/`env`/`url` context sources automatically, with
+  no trust boundary (a cloned malicious repo's spec ran on first invocation). A spec trust store now
+  guards this: specs that touch the host require explicit trust before their context sources run.
+  Interactive sessions prompt and list the dangerous sources; non-interactive sessions abort unless
+  `--trust` or `--yes` is passed. Trust is keyed by resolved-path **and** content hash, so editing a
+  trusted spec re-prompts. The store lives at `~/.config/promptgenie/trust.json` (file `0600`, dir
+  `0700`). Specs with only inline prompt/vars do not require trust.
+
+- **S-3 fixed — `env` context source secret exfiltration** (`promptgenie/core/context_builder.py`) —
+  `_gather_env()` would read any named environment variable (including `ANTHROPIC_API_KEY`,
+  `AWS_SECRET_ACCESS_KEY`) into the prompt and ship it to the provider. Credential-like variable
+  names (matching `_SENSITIVE_ENV_RE`: `*KEY*`, `*SECRET*`, `*TOKEN*`, `*PASSWORD*`, `*CREDENTIAL*`,
+  and `AWS_`/`AZURE_`/`GCP_`/`OPENAI_`/`ANTHROPIC_`/`GITHUB_`/`SLACK_` prefixes) now raise
+  `SecurityError` unless `--allow-sensitive-env` is explicitly passed (which emits a warning).
+
+- **S-4 fixed — run history stored secrets in plaintext, possibly world-readable**
+  (`promptgenie/core/history.py`) — Run NDJSON files are now created with `0600` (parent dirs
+  `0700`), and the assembled prompt (`start` event) and final response (`done` event) are passed
+  through the existing secret redactor before being written. Persisted readers prefer the redacted
+  response.
+
+- **S-5 fixed — SSRF DNS-rebinding TOCTOU window** (`promptgenie/core/context_builder.py`) — The
+  previous fix resolved the hostname for validation but `urlopen` then re-resolved it, leaving a
+  rebinding window. `_check_url_allowed()` now returns the validated public IP, and `_gather_url()`
+  pins the connection to that IP (`_PinnedHTTPSConnection`/`_PinnedHTTPConnection`) while preserving
+  the original `Host` header and TLS SNI/cert hostname — so the IP that was validated is the IP that
+  is connected to.
+
+### Added
+
+- **`promptgenie trust` command group** — `trust list`, `trust add <spec>`, `trust revoke <spec>`
+  for managing the spec trust store.
+- **New `run` flags** — `--trust` (trust this spec's context sources without prompting and record
+  it), `--allow-sensitive-env` (permit credential-like env vars in `env` context sources).
+- **40+ new security tests** in `tests/test_security_fixes.py` across `TestS1AllowlistHardening`,
+  `TestS1GitSubcommandAllowlist`, `TestSpecTrust`, `TestS3EnvExfiltration`,
+  `TestS4HistoryRedaction`, and `TestS5DnsPinning`.
+
+### Changed
+
+- **`promptgenie run` now requires trust for host-touching specs (breaking for non-interactive
+  callers).** Scripts that run specs with `cmd`/`file`/`glob`/`env`/`url` context sources in
+  `--no-input`/CI mode must now pass `--trust` (or `--yes`) or pre-register the spec via
+  `promptgenie trust add`. Specs with only inline content are unaffected.
+- **Command context sources** — the executable allowlist no longer includes any interpreter or
+  build tool; `cmd` sources are limited to read-only inspection utilities (see S-1).
+
+---
+
+## [1.2.2] — 2026-06-12  ·  Second security audit round
+
+Addresses all findings from the second internal security audit (F-001 through Q-003). Fixes DNS-rebinding SSRF bypass, VS Code extension untrusted binary execution, residual shell-injection paths, CodeQL misconfiguration, 25 mypy errors, and ruff import drift. No new user-facing features; existing behaviour is unchanged except where noted under **Changed**.
+
+### Security
+
+- **F-001 fixed — residual command execution paths** (`promptgenie/core/context_builder.py`,
+  `promptgenie/core/spec.py`) — `_gather_git` was missing an explicit `shell=False` keyword on its
+  `subprocess.run` call, leaving a latent CWE-78 path. Fixed with `shell=False` and a `# nosec B603`
+  comment confirming the argv is fully hardcoded. `spec.py render_spec` tightened to
+  `re.Match[str]` eliminating an `Any`-typed return that mypy flagged as a CWE-94 surface.
+  No `eval()`, `exec()`, or template-engine execution paths were found.
+
+- **F-002 fixed — SSRF bypass via DNS rebinding and plain HTTP** (`promptgenie/core/context_builder.py`) —
+  The previous IP-blocklist check operated on the URL string only, which a DNS rebinding attack could
+  bypass. `_check_url_allowed()` now calls `socket.getaddrinfo()` before opening any connection and
+  checks every resolved IP against the RFC-1918/loopback/link-local blocklist. A `SecurityError`
+  naming "DNS rebinding" is raised if any resolved address is private. Separately, plain `http://`
+  has been removed from `_ALLOWED_CONTEXT_SCHEMES` — only `https://` is permitted by default
+  (CWE-319). HTTP can be re-enabled with an explicit `--allow-insecure-url` flag, which emits a
+  `warnings.warn` security notice.
+
+- **F-003 fixed — VS Code extension executes workspace-configurable binary** (`vscode-extension/`) —
+  The extension previously passed any `promptgenie.cliPath` workspace setting directly to
+  `cp.spawn()` with no validation (CWE-426/427). Three layers of protection added:
+  - `isTrustedPath()` in `runner.ts` — requires an absolute path whose basename matches
+    `promptgenie`/`promptgenie.exe` and which exists as a regular file.
+  - `confirmCustomBinaryTrust()` — shows a one-time VS Code modal warning for non-default binary
+    paths; the user's decision is stored in `globalState` keyed by path hash and persists across
+    sessions. Paths under well-known install prefixes (`/usr/local/bin`, `~/.local/bin`, npm global
+    bin, pipx bin) are silently trusted.
+  - `package.json` — new `promptgenie.executablePath` setting uses `scope: "machine"` so workspace
+    `.vscode/settings.json` cannot override it; `markdownDescription` explicitly warns about the
+    risk of pointing the setting at an untrusted binary. Existing `cliPath` setting hardened to the
+    same scope.
+
+- **F-004 fixed — CodeQL JavaScript analysis misconfigured** (`.github/workflows/codeql.yml`) —
+  The single combined job used `category: "/language:python"` for a multi-language matrix, meaning
+  JavaScript results were misattributed. Refactored into two separate jobs:
+  `analyze-python` (`paths: [promptgenie/]`, `paths-ignore: [tests/]`) and
+  `analyze-javascript` (`paths: [vscode-extension/]`, `paths-ignore: [**/*.test.ts, **/node_modules/**]`).
+  Both jobs use `queries: security-and-quality` and carry correct per-language `category` strings.
+
+### Added
+
+- **`--allow-insecure-url` flag on `promptgenie run` / `context build`** — explicit opt-in to
+  permit `http://` URL context sources (default blocked since F-002 fix). A `warnings.warn` security
+  notice is emitted whenever the flag is active.
+
+- **11 new security tests** (`tests/test_security_fixes.py`) — `TestGatherUrlSecurity` (4 tests:
+  policy gate, SSRF pre-block, network error wrapping, `allow_insecure` passthrough),
+  `TestGatherGitSecure` (3 tests: `shell=False` enforcement, staged/diff paths, `FileNotFoundError`
+  fallback), `TestSecretsGateAllowBranch` (1 test: `allow_secrets=True` warning path),
+  `TestCheckUrlAllowed` additions (3 tests: HTTP default-blocked, DNS-rebinding mock, DNS-failure
+  passthrough).
+
+### Fixed
+
+- **Q-001 — 25 mypy errors resolved (0 remaining)** across 7 files: `formatters.py` (Sequence type,
+  loop variable narrowing), `spec.py` (`re.Match[str]`, `str()` wraps), `vars.py` (`str()` casts on
+  widened dict values), `completion.py` (`_ShellMeta` TypedDict, `_read_cache` return type),
+  `doctor.py` (`_ShellMeta | None` annotation), `providers.py` (`str()` wraps on three
+  `response.content` accesses), `provider.py` (`isinstance(v, dict)` guard before `.items()`).
+  All fixes are genuine type annotations — no `Any` silencing used.
+
+- **Q-003 — Ruff import-order drift eliminated** — `tests/test_security_fixes.py` imports sorted;
+  nested `with` statements merged (SIM117). `promptgenie/core/formatters.py` `Sequence` moved from
+  `typing` to `collections.abc` (UP035). Zero ruff errors remain.
+
+- **Coverage improved** from 75.92 % → 76.46 % via the 11 new targeted tests above (Q-002).
+
+---
+
+## [1.2.1] — 2026-06-11  ·  Security hardening patch
+
+Addresses all Priority 0 critical vulnerabilities identified in the internal security audit, plus secure-default improvements, CI signal restoration, and supply-chain hardening. No new user-facing features; existing behaviour is unchanged except where noted under **Changed**.
+
+### Security
+
+- **VULN-001 fixed — shell injection via untrusted spec** (`promptgenie/core/context_builder.py`) —
+  `_gather_cmd()` previously passed spec-supplied `cmd` values to `subprocess.run(shell=True)`,
+  allowing arbitrary command execution from a malicious spec file. Fixed by parsing commands with
+  `shlex.split()` and passing the resulting argv list to `subprocess.run(shell=False)`. Added
+  `_validate_cmd_allowed()` which checks the executable basename against `_CMD_ALLOWLIST` (a
+  frozenset of known-safe tools: `git`, `cat`, `grep`, `python3`, `make`, etc.) and raises
+  `SecurityError` for any other executable before a process is spawned.
+
+- **VULN-002 fixed — SSRF and path traversal via untrusted spec** (`promptgenie/core/context_builder.py`) —
+  Two related issues resolved:
+  - *URL*: `_gather_url()` passed spec-supplied URLs directly to `urlopen` with no scheme or IP
+    validation. Added `_check_url_allowed(url)` which blocks non-HTTP(S) schemes (`file://`,
+    `ftp://`, `data:`, etc.), explicit loopback IPs (`127.x`, `::1`), RFC-1918 ranges
+    (`10.x`, `172.16–31.x`, `192.168.x`), and link-local addresses (`169.254.x`).
+  - *File*: `_gather_file()` read spec-supplied paths with no containment check. Now resolves
+    symlinks with `Path.resolve()` and asserts the resulting path is under `base_dir` before
+    reading. Absolute paths and `../` traversals both raise `SecurityError`.
+
+- **VULN-003 fixed — secrets gate promoted from warn to hard-block** (`promptgenie/core/run_engine.py`) —
+  When `_check_secrets_gate()` found a HIGH/CRITICAL secret in the assembled prompt, the engine
+  emitted a warning event but continued to call the provider. The run now raises
+  `PromptGenieError(code=EXIT_SECRETS)` and aborts before any provider call. Opt-out is available
+  via `--allow-secrets` (see Added below).
+
+- **ReDoS protection for custom and registry rule packs** — `validate_pattern()` added to
+  `promptgenie/core/scanner.py`. All custom scan and lint rule patterns (from `.promptgenie.yaml`
+  `custom_rules` or registry pack `scanner_rules`/`lint_rules`) are validated at load time:
+  (1) `re.compile()` rejects syntactically invalid patterns; (2) `_NESTED_QUANTIFIER_RE` rejects
+  patterns containing a quantified group that is itself quantified — e.g. `(a+)+`, `(\w+)*`,
+  `(x+)?` — the primary cause of catastrophic backtracking (ReDoS). A malicious or poorly-written
+  rule pack downloaded from the registry can no longer cause the scanner to hang indefinitely.
+  Built-in rules are pre-vetted and are not affected.
+
+- **Bandit B310 resolved** (`promptgenie/commands/doctor.py:127`) — `OLLAMA_BASE_URL` scheme
+  validated via `urlparse` before `urlopen` call. All HIGH and MEDIUM Bandit findings are now
+  resolved with genuine fixes (no `# nosec` suppressions). CI Bandit gate passes strictly.
+
+- **Provider error leakage eliminated** (`promptgenie/core/providers.py`) — Four `except Exception`
+  paths previously propagated raw exception messages (which could include internal base URLs,
+  credentials, or tracebacks) via `f"...{exc}"`. Changed to `f"...{type(exc).__name__}"` — only
+  the exception class name is surfaced to the caller.
+
+- **CI supply-chain hardening — all GitHub Actions now SHA-pinned** — `actions/setup-node`,
+  `actions/upload-artifact`, and `actions/download-artifact` in `.github/workflows/ci.yml` and
+  `.github/workflows/release.yml` pinned to full commit SHAs. Every action reference across both
+  workflows is now pinned to an immutable commit SHA.
+
+### Added
+
+- **`--allow-secrets` flag on `promptgenie run`** — explicit opt-in to bypass the secrets hard-block
+  (see VULN-003 above). When passed, the engine reverts to warning-only behaviour and proceeds with
+  the provider call. Intended for controlled CI environments where secret content is intentional
+  (e.g. prompt injection test fixtures). A prominent warning is printed to stderr when the flag is
+  active.
+
+- **39 new security tests** (`tests/test_security_fixes.py`) — covers URL scheme/SSRF validation,
+  RFC-1918 and loopback blocking, command allowlist enforcement, path traversal via `../` and
+  absolute paths, symlink escape attempts, secrets gate hard-block, and `--allow-secrets` override.
+
+- **CodeQL JavaScript/TypeScript analysis** (`.github/workflows/codeql.yml`) — `javascript` added
+  to the language matrix. The `vscode-extension/` directory contains 617 lines of TypeScript
+  across five source files and now participates in CodeQL scanning on every push to `main` and on
+  pull requests.
+
+- **Dependabot npm ecosystem** (`.github/dependabot.yml`) — weekly Monday dependency update PRs
+  for `/vscode-extension` in addition to the existing `uv` and `github-actions` entries.
+
+- **Docker base image digest-pinned** (`Dockerfile`) — `FROM python:3.12-slim` replaced with a
+  fully-qualified digest pin (`FROM python:3.12-slim@sha256:c2d847…`). An inline comment documents
+  how to rotate the digest when upstream releases a new patch image.
+
+### Changed
+
+- **`promptgenie run` — secrets gate is now a hard block (breaking for scripts that relied on
+  warn-only behaviour).** Runs that previously emitted a warning and continued will now exit with
+  `EXIT_SECRETS` (exit code 6). Pass `--allow-secrets` to restore the old behaviour explicitly.
+
+### Fixed
+
+- **Ruff: 142 errors → 0** — auto-fixed 114 issues; manually resolved 28 remaining (`B904`,
+  `SIM102`, `SIM105`, `SIM110`, `C408`, `C416`, `F841`, `B017`, `B905`). CI Ruff gate now passes.
+- **Coverage threshold** — lowered from 85 % to 75 % in `pyproject.toml` to match actual measured
+  coverage (75.92 %). Previous threshold caused the CI coverage gate to fail on every run. The gap
+  to 85 % requires CLI command integration tests; tracked as a follow-on.
+- **Mypy** — 25 type errors resolved; missing annotations added across `context_builder.py`,
+  `run_engine.py`, `providers.py`, and `variables.py`.
 
 ---
 
@@ -863,7 +1162,7 @@ Initial public release.
 [1.4.0]: https://github.com/mylesagnew/promptgenie/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/mylesagnew/promptgenie/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/mylesagnew/promptgenie/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/mylesagnew/promptgenie/compare/v1.0.11...v1.1.0
+[1.1.0]: https://github.com/mylesagnew/promptgenie/compare/v1.0.19...v1.1.0
 [1.0.11]: https://github.com/mylesagnew/promptgenie/compare/v1.0.10...v1.0.11
 [1.0.10]: https://github.com/mylesagnew/promptgenie/compare/v1.0.9...v1.0.10
 [1.0.9]: https://github.com/mylesagnew/promptgenie/compare/v1.0.8...v1.0.9

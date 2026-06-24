@@ -1,7 +1,5 @@
 """Tests for promptgenie.core.errors — exit codes and PromptGenieError."""
 
-import sys
-
 import pytest
 
 from promptgenie.core.errors import (
@@ -49,8 +47,17 @@ class TestExitCodeValues:
         assert EXIT_INTERRUPTED == 130
 
     def test_all_codes_are_distinct(self):
-        codes = [EXIT_OK, EXIT_FAILURE, EXIT_USAGE, EXIT_PROVIDER, EXIT_TEMPLATE,
-                 EXIT_TEST, EXIT_SECRETS, EXIT_TIMEOUT, EXIT_INTERRUPTED]
+        codes = [
+            EXIT_OK,
+            EXIT_FAILURE,
+            EXIT_USAGE,
+            EXIT_PROVIDER,
+            EXIT_TEMPLATE,
+            EXIT_TEST,
+            EXIT_SECRETS,
+            EXIT_TIMEOUT,
+            EXIT_INTERRUPTED,
+        ]
         assert len(codes) == len(set(codes))
 
 

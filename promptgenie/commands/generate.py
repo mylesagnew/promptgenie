@@ -7,12 +7,18 @@ from rich.table import Table
 
 from promptgenie.core.config import PromptGenieConfig, load_config
 from promptgenie.core.context_packs import render_pack
-from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_TEMPLATE, EXIT_USAGE
+from promptgenie.core.errors import EXIT_TEMPLATE, EXIT_USAGE
 from promptgenie.core.fileio import safe_write_text
 from promptgenie.core.generator import generate_prompt
 from promptgenie.core.linter import lint
 from promptgenie.core.scanner import scan
-from promptgenie.core.variables import VarResolutionError, find_variables, parse_cli_vars, load_vars_file, resolve_variables
+from promptgenie.core.variables import (
+    VarResolutionError,
+    find_variables,
+    load_vars_file,
+    parse_cli_vars,
+    resolve_variables,
+)
 from promptgenie.renderers.rich import (
     console,
     diag_console,
@@ -165,6 +171,7 @@ def generate(
             sys.exit(EXIT_USAGE)
     if vars_schema_file:
         from promptgenie.core.variables import load_schema_file
+
         try:
             vars_schema = load_schema_file(vars_schema_file)
         except Exception as exc:

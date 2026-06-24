@@ -13,19 +13,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 
 import click
 import yaml
 
-from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE, PromptGenieError
+from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.providers import (
-    ProviderConfig,
+    _PROVIDERS_FILE,
     add_provider,
     load_providers_config,
     probe_provider,
     save_providers_config,
-    _PROVIDERS_FILE,
 )
 from promptgenie.renderers.rich import console, diag_console, is_structured_mode
 
@@ -41,9 +39,13 @@ def provider_group() -> None:
 
 
 @provider_group.command("list")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def provider_list_cmd(output_format: str) -> None:
     """List all configured providers.
 
@@ -74,11 +76,13 @@ def provider_list_cmd(output_format: str) -> None:
         return
 
     if not providers:
-        console.print("[dim]No providers configured. "
-                      "Run 'promptgenie provider add' to add one.[/dim]")
+        console.print(
+            "[dim]No providers configured. Run 'promptgenie provider add' to add one.[/dim]"
+        )
         return
 
     from rich.table import Table
+
     table = Table(title="Configured Providers", show_header=True, header_style="bold")
     table.add_column("Name", style="cyan", no_wrap=True)
     table.add_column("Type")
@@ -106,17 +110,20 @@ def provider_list_cmd(output_format: str) -> None:
 
 @provider_group.command("add")
 @click.argument("name")
-@click.option("--type", "provider_type",
-              type=click.Choice(["anthropic", "openai_compat"], case_sensitive=False),
-              default="openai_compat", show_default=True,
-              help="Provider type.")
+@click.option(
+    "--type",
+    "provider_type",
+    type=click.Choice(["anthropic", "openai_compat"], case_sensitive=False),
+    default="openai_compat",
+    show_default=True,
+    help="Provider type.",
+)
 @click.option("--base-url", default="", help="API base URL (OpenAI-compat providers).")
-@click.option("--api-key-env", default="",
-              help="Environment variable name that holds the API key.")
-@click.option("--model", "default_model", default="",
-              help="Default model name.")
-@click.option("--local", is_flag=True,
-              help="Mark as a local provider (no API key required by default).")
+@click.option("--api-key-env", default="", help="Environment variable name that holds the API key.")
+@click.option("--model", "default_model", default="", help="Default model name.")
+@click.option(
+    "--local", is_flag=True, help="Mark as a local provider (no API key required by default)."
+)
 def provider_add_cmd(
     name: str,
     provider_type: str,
@@ -143,7 +150,7 @@ def provider_add_cmd(
         --base-url http://localhost:1234/v1 \\
         --model local-model --local
     """
-    cfg = add_provider(
+    add_provider(
         name,
         provider_type=provider_type,
         base_url=base_url,
@@ -194,9 +201,13 @@ def provider_remove_cmd(name: str, yes: bool) -> None:
 
 @provider_group.command("show")
 @click.argument("name")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
-              default="rich", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "yaml"], case_sensitive=False),
+    default="rich",
+    show_default=True,
+)
 def provider_show_cmd(name: str, output_format: str) -> None:
     """Show details for a specific provider.
 
@@ -237,7 +248,7 @@ def provider_show_cmd(name: str, output_format: str) -> None:
 
     console.print(f"[bold cyan]{p.name}[/bold cyan]")
     for k, v in data.items():
-        if k == "capabilities":
+        if k == "capabilities" and isinstance(v, dict):
             console.print("  capabilities:")
             for ck, cv in v.items():
                 console.print(f"    {ck}: {cv}")
@@ -252,9 +263,12 @@ def provider_show_cmd(name: str, output_format: str) -> None:
 
 @provider_group.command("doctor")
 @click.argument("name")
-@click.option("--format", "output_format",
-              type=click.Choice(["rich", "json"], case_sensitive=False),
-              default="rich")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json"], case_sensitive=False),
+    default="rich",
+)
 def provider_doctor_cmd(name: str, output_format: str) -> None:
     """Test reachability and configuration of a provider.
 
@@ -281,13 +295,18 @@ def provider_doctor_cmd(name: str, output_format: str) -> None:
                 "local": cap.local,
                 "supports_tools": cap.supports_tools,
             }
-        console.print(json.dumps({
-            "provider": name,
-            "status": status,
-            "message": message,
-            "capabilities": cap_dict,
-            "schema_version": "1.0",
-        }, indent=2))
+        console.print(
+            json.dumps(
+                {
+                    "provider": name,
+                    "status": status,
+                    "message": message,
+                    "capabilities": cap_dict,
+                    "schema_version": "1.0",
+                },
+                indent=2,
+            )
+        )
     else:
         icon = "[green]✓[/green]" if ok else "[red]✗[/red]"
         console.print(f"{icon} [bold]{name}[/bold]: {message}")

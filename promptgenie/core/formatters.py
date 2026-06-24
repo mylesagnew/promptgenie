@@ -16,6 +16,7 @@ SARIF spec: https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
@@ -273,14 +274,14 @@ def multi_scan_to_json(
             "findings": findings_data,
         }
 
-        lr = llm_map.get(file_path)
-        if lr is not None:
+        llm_result = llm_map.get(file_path)
+        if llm_result is not None:
             file_entry["llm"] = {
-                "skipped": lr.skipped,
-                "skip_reason": lr.skip_reason if lr.skipped else None,
-                "model": lr.model,
-                "chars_analyzed": lr.chars_analyzed,
-                "redaction_count": lr.redaction_count,
+                "skipped": llm_result.skipped,
+                "skip_reason": llm_result.skip_reason if llm_result.skipped else None,
+                "model": llm_result.model,
+                "chars_analyzed": llm_result.chars_analyzed,
+                "redaction_count": llm_result.redaction_count,
                 "findings": [
                     {
                         "category": lf.category,
@@ -289,7 +290,7 @@ def multi_scan_to_json(
                         "evidence": lf.evidence,
                         "recommendation": lf.recommendation,
                     }
-                    for lf in lr.findings
+                    for lf in llm_result.findings
                 ],
             }
 
@@ -358,7 +359,7 @@ def multi_scan_to_sarif(
     return json.dumps(sarif, indent=2)
 
 
-def _aggregate_risk(risk_levels: list[str]) -> str:
+def _aggregate_risk(risk_levels: Sequence[str]) -> str:
     """Return the highest risk level from a list, or 'NONE' if empty."""
     order = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
     if not risk_levels:

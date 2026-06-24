@@ -122,12 +122,7 @@
         "command": {"type": "string", "description": "Shell command to run (cmd type)."},
         "url": {"type": "string", "description": "URL to fetch (url type)."},
         "label": {"type": "string", "description": "Optional label shown in source manifest."},
-        "max_bytes": {"type": "integer", "description": "Truncate source to this many bytes."},
-        "policy_gated": {
-          "type": "boolean",
-          "default": true,
-          "description": "Whether this source requires policy approval (url/cmd types)."
-        }
+        "max_bytes": {"type": "integer", "description": "Truncate source to this many bytes."}
       }
     },
     "OutputContract": {

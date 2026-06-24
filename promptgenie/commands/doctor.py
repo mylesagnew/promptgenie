@@ -15,11 +15,9 @@ from __future__ import annotations
 import importlib.util
 import os
 import platform
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 import click
 
@@ -124,7 +122,18 @@ def _check_ollama() -> CheckResult:
 
     base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     try:
-        req = urllib.request.urlopen(f"{base}/api/tags", timeout=2)
+        from urllib.parse import urlparse
+
+        _scheme = urlparse(base).scheme.lower()
+        if _scheme not in ("http", "https"):
+            return CheckResult(
+                label="Ollama (local provider)",
+                passed=False,
+                detail=f"OLLAMA_BASE_URL has disallowed scheme {_scheme!r}",
+                remediation="Set OLLAMA_BASE_URL to an http:// or https:// URL",
+            )
+        # scheme validated above
+        req = urllib.request.urlopen(f"{base}/api/tags", timeout=2)  # nosec B310
         req.close()
         return CheckResult(
             label="Ollama (local provider)",
@@ -176,9 +185,9 @@ def _check_openai_key() -> CheckResult:
 
 
 def _check_completion(shell: str) -> CheckResult:
-    from promptgenie.commands.completion import _SHELL_META
+    from promptgenie.commands.completion import _SHELL_META, _ShellMeta
 
-    meta = _SHELL_META.get(shell, {})
+    meta: _ShellMeta | None = _SHELL_META.get(shell)
     if not meta:
         return CheckResult(label=f"{shell} completion", passed=False, detail="unknown shell")
 
@@ -315,7 +324,6 @@ def doctor_cmd(verbose: bool, output_format: str) -> None:
 
     if output_format == "json":
         import json as _json
-        from importlib.metadata import version
 
         data = {
             "schema_version": "1.0",

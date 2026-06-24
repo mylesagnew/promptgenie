@@ -2,9 +2,14 @@
 
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
-| 1.x     | ✓ Active  |
+| Version | Supported          |
+|---------|--------------------|
+| 1.2.x   | ✓ Active (current) |
+| 1.1.x   | ✓ Security patches |
+| 1.0.x   | ✗ End of life      |
+| < 1.0   | ✗ End of life      |
+
+Current release: **1.2.4**. Patch releases are the only supported channel — no LTS or legacy branch exists. Users on 1.0.x should upgrade to 1.2.x to receive the security fixes listed below.
 
 ---
 
@@ -21,6 +26,145 @@ Include:
 - Any suggested fix (optional)
 
 You will receive an acknowledgement within **48 hours** and a resolution timeline within **7 days**.
+
+---
+
+## Run Engine Security Model (v1.2.3+)
+
+The `promptgenie run` command executes PromptSpec YAML files that can name context sources,
+provider URLs, and shell commands. The following hardened defaults are in effect from v1.2.3:
+
+### Spec trust boundary
+
+A PromptSpec can name context sources (`cmd`, `file`, `glob`, `env`, `url`) that read from — or
+execute against — the host. Because a spec may arrive from an untrusted source (a cloned
+repository, a shared gist), `promptgenie run` treats any spec containing a host-touching context
+source as **untrusted until explicitly trusted**:
+
+- On first run, an interactive session lists the dangerous context sources (the `cmd` strings,
+  file paths, and URLs) and prompts for confirmation. On approval the spec is recorded as trusted.
+- A non-interactive session (`--no-input`, CI) aborts with `exit 2` unless `--trust` or `--yes` is
+  passed, or the spec was pre-registered with `promptgenie trust add`.
+- Trust is keyed by the spec's **resolved absolute path and a hash of its content**. Editing a
+  trusted spec invalidates the trust record and re-prompts — a trusted spec cannot be swapped for a
+  malicious one without re-confirmation.
+- The trust store lives at `~/.config/promptgenie/trust.json` (file mode `0600`, directory `0700`).
+  Manage it with `promptgenie trust list | add <spec> | revoke <spec>`.
+- Specs containing only an inline prompt and variables (no host-touching sources) do **not** require
+  trust.
+
+### Secrets gate — hard block
+
+If the assembled prompt contains a HIGH or CRITICAL secret finding (API keys, tokens, credentials),
+the run aborts with `exit 6` before any provider call is made. This prevents accidental credential
+exfiltration to external LLM providers.
+
+To bypass this gate in controlled environments (e.g. prompt injection test fixtures), pass
+`--allow-secrets` to `promptgenie run`. A warning is printed to stderr whenever this flag is active.
+Never use `--allow-secrets` in production pipelines that handle real credentials.
+
+### URL context sources — SSRF protection
+
+`context: [{type: url, url: ...}]` entries are validated before any network call:
+- Only `https://` is permitted by default. `http://`, `file://`, `ftp://`, `data:`, and all other
+  schemes raise `SecurityError`. Plain HTTP can be re-enabled with `--allow-insecure-url` (emits a
+  security warning).
+- **DNS rebinding defence with IP pinning** — the hostname is resolved via `socket.getaddrinfo()`
+  before the connection is opened, and every returned IP is checked against the blocklist. From
+  v1.2.3 the **validated IP is pinned for the actual connection** (the socket dials the checked IP
+  while the original hostname is preserved in the `Host` header and TLS SNI/certificate
+  verification). This closes the time-of-check/time-of-use window where a rebinding attacker could
+  return a public IP to the validation lookup and a private IP to the connection.
+- Requests to loopback addresses (`127.0.0.1`, `::1`), RFC-1918 private ranges (`10.x`,
+  `172.16–31.x`, `192.168.x`), and link-local addresses (`169.254.x`) are blocked at both the
+  URL-string level and the post-resolution level.
+- **The egress gate is user-controlled only.** URL context sources are fetched only when the user
+  passes `--allow-url`. From v1.2.4 a spec can no longer weaken this: the former spec-level
+  `policy_gated` field has been removed, so an untrusted spec cannot enable network egress on its
+  own behalf. (CWE-918 / secure-by-default.)
+
+### Environment context sources — credential protection
+
+`context: [{type: env, var: ...}]` entries refuse to read credential-like variables into the
+prompt. Variable names matching common secret patterns (`*KEY*`, `*SECRET*`, `*TOKEN*`,
+`*PASSWORD*`, `*CREDENTIAL*`, `*PRIVATE*`, `*SESSION*`, and `AWS_`/`AZURE_`/`GCP_`/`GOOGLE_`/
+`OPENAI_`/`ANTHROPIC_`/`GITHUB_`/`SLACK_` prefixes) raise `SecurityError`. This prevents a spec
+from pulling an API key or cloud credential into a prompt and exfiltrating it to a provider. The
+`--allow-sensitive-env` flag overrides this with a printed warning.
+
+### File context sources — path containment
+
+`context: [{type: file, path: ...}]` entries are resolved to their real path (symlinks expanded)
+and must fall within the project directory (the directory containing the spec file). Paths that
+escape via `../`, absolute references, or symlink chains raise `SecurityError`.
+
+### Command context sources — allowlist
+
+`context: [{type: cmd, cmd: ...}]` entries are parsed with `shlex.split()` (no shell expansion)
+and validated in three layers before any process is spawned (all `subprocess.run` calls use
+`shell=False`):
+
+1. **Executable allowlist** — the basename must be one of a small set of inert, read-only
+   inspection tools (`git`, `cat`, `ls`, `grep`, `echo`, `pwd`, `date`, `uname`, `wc`, `head`,
+   `tail`, `sort`, `uniq`, `cut`, `tr`, `printenv`). Interpreters and build tools (`python`,
+   `python3`, `node`, `npm`, `make`, `env`, `awk`, `sed`, `find`, etc.) are **deliberately
+   excluded** — each can execute arbitrary code despite a benign basename.
+2. **Dangerous-argument denylist** — even for an allowlisted tool, any argument that is an
+   eval/exec flag (`-c`, `-e`, `--eval`, `--eval=…`, `-exec`, `-execdir`, `--exec`) is rejected.
+   This is defense-in-depth against future allowlist additions.
+3. **`git` subcommand allowlist** — when the tool is `git`, the subcommand must be read-only
+   (`log`, `diff`, `show`, `status`, `branch`, `rev-parse`, `ls-files`, `blame`, `describe`,
+   `tag`, `remote`, `shortlog`). Mutating subcommands (`push`, `config <key> <value>`, …) and the
+   `git -c …` config-injection form (which can alias a subcommand to a shell) are rejected.
+
+Executables not on the allowlist (`rm`, `bash`, `sh`, `curl`, `nc`, and any other tool) raise
+`SecurityError`.
+
+### Provider endpoint validation
+
+Provider `base_url` values (from `~/.config/promptgenie/providers.yaml`) are validated before any
+request (`_validate_provider_base_url`, v1.2.4+):
+
+- Non-HTTP(S) schemes are rejected.
+- Plain `http://` is permitted **only** for loopback hosts (`localhost`, `127.0.0.1`, `::1`) or for
+  providers explicitly marked `local: true` with no API key configured. This supports local dev
+  servers (Ollama, LM Studio, vLLM) while preventing an `Authorization` header from ever being sent
+  over cleartext to a remote endpoint (CWE-319).
+- Remote providers must use `https://`.
+
+---
+
+## VS Code Extension Security Model (v1.2.2+)
+
+> From **v1.2.4** the custom-binary trust check **fails closed**: if the extension context is
+> unavailable (e.g. an activation-ordering bug), the extension refuses to execute the configured
+> binary rather than allowing it by default.
+
+### Trusted binary path enforcement
+
+The extension resolves the CLI binary to execute via the `promptgenie.executablePath` setting
+(falls back to `promptgenie` on `$PATH`). From v1.2.2, custom paths are validated before use:
+
+- **Absolute path required** — relative paths are rejected unconditionally.
+- **Basename check** — the resolved basename must be `promptgenie` or `promptgenie.exe`.
+- **Regular file check** — the path must exist as a regular file (not a dangling symlink or
+  directory).
+- **Trust prompt for non-standard locations** — if a custom path is not under a recognised install
+  prefix (`/usr/local/bin`, `~/.local/bin`, npm global bin, pipx bin), a one-time VS Code modal
+  warning is shown: "This workspace has configured a custom PromptGenie binary at \<path\>. Do
+  you trust this path?" The user's answer is stored in extension `globalState` (not workspace
+  state) keyed by a hash of the absolute path, so it persists across sessions and cannot be reset
+  by a workspace `.vscode/settings.json`.
+
+### Setting scope: machine
+
+`promptgenie.executablePath` (and the deprecated `promptgenie.cliPath`) use `scope: "machine"` in
+`package.json`. This means workspace-level or folder-level `.vscode/settings.json` files **cannot
+override** the binary path. Only user-level or machine-level settings apply. This prevents a
+malicious repository from silently redirecting the extension to an arbitrary binary on clone.
+
+> **If you manage VS Code settings via policy or MDM:** the `promptgenie.executablePath` setting
+> can be locked at machine scope to a known-good path, preventing any per-user override.
 
 ---
 
@@ -57,6 +201,13 @@ Files collected across all paths are subject to a per-file byte cap (default 1 M
 
 **Custom rules:**
 Project-specific scanner rules can be added under `scanner.custom_rules` in `.promptgenie.yaml` (see README Configuration section). Each rule is a `ScanRule` with `id`, `category`, `pattern`, `risk`, `confidence`, `message`, `recommendation`, and optional `false_positive_note`. Custom rules are appended after built-in rules and participate in the same allowlist and severity-override system.
+
+**Pattern safety:** custom rule patterns are validated at load time by `validate_pattern()` in `promptgenie/core/scanner.py`. Two checks are applied:
+
+1. **Syntax** — `re.compile(pattern)` rejects patterns that are not valid Python regex.
+2. **Nested quantifier detection** — patterns containing a quantified group that is itself quantified (e.g. `(a+)+`, `(\w+)*`, `(\d+){2,}`) are rejected. These constructs are the primary cause of catastrophic backtracking (ReDoS) and can cause the scanner to hang indefinitely on adversarial input. Rewrite such patterns using non-capturing groups or simplified alternatives.
+
+Registry-installed rule packs are subject to the same validation at load time. A malformed pack raises `ValueError` and is never silently loaded.
 
 ---
 
@@ -122,7 +273,7 @@ Use `--yes` only in CI pipelines where the prompt content has already been revie
   pip install pip-audit
   pip-audit
   ```
-- Dependabot is configured for weekly `uv` and `github-actions` dependency update PRs.
+- Dependabot is configured for weekly `uv`, `github-actions`, and `npm` (vscode-extension) dependency update PRs.
 
 ---
 

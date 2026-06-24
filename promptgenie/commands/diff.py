@@ -11,14 +11,12 @@ import sys
 
 import click
 from rich import box
-from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
 
 from promptgenie.core.config import PromptGenieConfig, load_config
 from promptgenie.core.differ import (
     DiffResult,
-    SideBySideRow,
     build_side_by_side,
     diff_prompts,
     diff_to_json,
@@ -30,8 +28,8 @@ from promptgenie.renderers.rich import (
     RISK_COLORS,
     SEVERITY_COLORS,
     console,
-    diag_console,
     delta_str,
+    diag_console,
     is_structured_mode,
     score_color,
 )
