@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+
+- **Native token compression engine** (`promptgenie/core/compressor.py`) — a pure-Python, dependency-free reimplementation of the lossless / low-risk structural techniques popularised by [headroom](https://github.com/headroomlabs-ai/headroom): content-routed compressors that shrink a prompt's token footprint *before* it reaches the model. No Rust toolchain, tree-sitter, or ONNX — keeps the `click`/`rich`/`pyyaml`-only base install. Public API: `compress(text, techniques=None, max_tokens=None) → CompressResult`. Techniques are fence-aware (code blocks are never corrupted) and split into two tiers: **default** (lossless — `trim-trailing-ws`, `collapse-blank-lines`, `json-compact`) and **aggressive** (mildly lossy — `strip-html-comments`, `collapse-spaces`, `dedupe-log-lines`). `CompressResult` reports `tokens_before/after`, `tokens_saved`, `ratio`, per-technique edit counts, and `budget_met`.
+
+- **`promptgenie compress`** (alias **`promptgenie optimize`**) — new command. Compresses a prompt or context file (or stdin) and writes the result to stdout or `--out`. `--max-tokens N` sets a budget (enables every technique, exits 1 if the result still exceeds N tokens); `--aggressive` adds the lossy tier; `--techniques T,T` selects an explicit subset; `--list-techniques` prints the catalogue; `--diff`/`--dry-run` report per-technique savings to stderr without emitting compressed text; `--format json|yaml` emits a machine-readable savings report with `schema_version: "1.0"`. Delivers the ROADMAP's planned Token and Cost Optimizer. 30 new tests.
+
 *Next milestone: Phase 6 — Governance, SSO, and Cloud Sync.*
 
 ---

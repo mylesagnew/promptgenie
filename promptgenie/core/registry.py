@@ -290,6 +290,90 @@ def install_pack(
     return dest
 
 
+# ── local install (air-gap / offline) ─────────────────────────────────────────
+
+
+def install_from_local(
+    source: str | Path,
+    install_dir: Path | None = None,
+    expected_sha256: str | None = None,
+) -> Path:
+    """Install a pack from a local file path (YAML or .tar.gz tarball).
+
+    Supports two source formats:
+    * Single YAML file — copied directly into *install_dir*.
+    * ``.tar.gz`` tarball — extracted; must contain exactly one ``pack.yaml``
+      (or a ``*.yaml`` matching the pack id at the archive root).
+
+    Parameters
+    ----------
+    source:
+        Path to a local ``.yaml`` or ``.tar.gz`` file.
+    install_dir:
+        Directory to install into. Defaults to ``USER_PACKS_DIR``.
+    expected_sha256:
+        Optional SHA-256 hex digest to verify the source file before install.
+        Raises ``ValueError`` on mismatch.
+
+    Returns the path of the installed YAML file.
+    """
+    import tarfile as _tarfile
+
+    src = Path(source)
+    if not src.exists():
+        raise FileNotFoundError(f"Local pack source not found: {src}")
+
+    dest_dir = install_dir or USER_PACKS_DIR
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Optional integrity check
+    if expected_sha256 and not _verify_sha256(src, expected_sha256):
+        actual = hashlib.sha256(src.read_bytes()).hexdigest()
+        raise ValueError(
+            f"SHA-256 mismatch for local pack {src.name}. "
+            f"Expected {expected_sha256}, got {actual}"
+        )
+
+    if src.suffix.lower() == ".yaml":
+        dest = dest_dir / src.name
+        shutil.copy2(str(src), str(dest))
+        return dest
+
+    if src.name.endswith(".tar.gz") or src.suffix.lower() == ".tgz":
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            with _tarfile.open(src, "r:gz") as tf:
+                # Safety: reject paths that escape the extraction directory
+                for member in tf.getmembers():
+                    member_path = (tmp / member.name).resolve()
+                    if not str(member_path).startswith(str(tmp.resolve())):
+                        raise ValueError(
+                            f"Unsafe path in tarball: {member.name!r}"
+                        )
+                tf.extractall(tmp)
+
+            # Find the pack YAML: prefer pack.yaml at root, then any *.yaml
+            yaml_files = list(tmp.rglob("pack.yaml")) + list(tmp.rglob("*.yaml"))
+            if not yaml_files:
+                raise ValueError(
+                    f"No YAML file found in tarball {src.name}. "
+                    "A pack tarball must contain a pack.yaml or <pack-id>.yaml file."
+                )
+            pack_yaml = yaml_files[0]
+            # Derive pack id from filename or pack.yaml 'id' field
+            raw = safe_read_yaml(pack_yaml) or {}
+            pack_id = raw.get("id") or pack_yaml.stem
+            dest = dest_dir / f"{pack_id}.yaml"
+            shutil.copy2(str(pack_yaml), str(dest))
+        return dest
+
+    raise ValueError(
+        f"Unsupported local pack format: {src.name!r}. "
+        "Use a .yaml file or a .tar.gz tarball."
+    )
+
+
 # ── update ────────────────────────────────────────────────────────────────────
 
 

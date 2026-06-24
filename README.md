@@ -406,6 +406,7 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 | `provider show` | Show capabilities and config for a provider |
 | `vars list` | List `{{variable}}` placeholders declared in a spec |
 | `vars inspect` | Show resolved value + source for each variable |
+| `compress` / `optimize` | Shrink a prompt's token footprint with native content-routed compression; `--max-tokens` budget, `--aggressive`, `--format json` |
 | `pack list` | List available context packs |
 | `pack show` | Preview a context pack's rendered content |
 | `pack inject` | Inject a context pack into an existing prompt file |
@@ -798,6 +799,59 @@ Outputs a colour-coded change log (KEPT / REWRITTEN / ADDED / DROPPED per sectio
 | `--out`, `-o` | Save adapted prompt to file |
 | `--show-original` | Print original alongside adapted version |
 | `--strip-agentic-safety` | Remove agentic safety sections when adapting to a non-agentic target (off by default) |
+
+---
+
+### `compress` / `optimize`
+
+Shrink a prompt's (or assembled context's) token footprint *before* it reaches the model — same content, fewer tokens. A native, dependency-free engine inspired by [headroom](https://github.com/headroomlabs-ai/headroom): content-routed structural techniques, no Rust toolchain or heavy ML deps. `optimize` is an alias for `compress`.
+
+```bash
+# Compress to stdout (lossless default tier)
+promptgenie compress prompt.md
+
+# Write the smaller version to a file
+promptgenie compress prompt.md --out smaller.md
+
+# Hit a token budget — enables every technique, exits 1 if it can't fit
+promptgenie compress prompt.md --max-tokens 4000
+
+# Add the aggressive (mildly lossy) tier and show what changed
+promptgenie compress prompt.md --aggressive --diff
+
+# Machine-readable savings report
+promptgenie compress prompt.md --format json | jq '.tokens_saved'
+
+# Pipe-friendly
+cat context.md | promptgenie compress -
+```
+
+**Techniques** (fence-aware — fenced ```code``` blocks are never altered):
+
+| Technique | Tier | What it does |
+|---|---|---|
+| `trim-trailing-ws` | default | Strip trailing whitespace at line ends |
+| `collapse-blank-lines` | default | Collapse 2+ consecutive blank lines into one |
+| `json-compact` | default | Minify whole-document JSON and ```json fenced blocks |
+| `strip-html-comments` | aggressive | Remove `<!-- HTML comments -->` from prose |
+| `collapse-spaces` | aggressive | Collapse runs of inline spaces in prose (keeps indentation) |
+| `dedupe-log-lines` | aggressive | Fold 3+ identical consecutive lines into `line (×N)` |
+
+The **default** tier is lossless / near-lossless for Markdown prompts. The **aggressive** tier (via `--aggressive`, or automatically when `--max-tokens` is set) trades a little fidelity for higher savings — ideal for build logs, search dumps, and verbose tool output. Run `promptgenie compress --list-techniques` for the live catalogue.
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--out`, `-o` | Write compressed output to a file instead of stdout |
+| `--max-tokens N` | Target token budget; enables all techniques; exits 1 if the result still exceeds N |
+| `--techniques T,T` | Run an explicit subset of techniques (overrides the tiers) |
+| `--aggressive` | Add the aggressive tier on top of the defaults |
+| `--list-techniques` | Print the technique catalogue and exit |
+| `--diff` / `--dry-run` | Report per-technique savings to stderr (`--dry-run` skips writing/emitting output) |
+| `--format` | Output format: `text` (default) / `json` / `yaml` |
+
+Exits `0` on success, `1` when a `--max-tokens` budget cannot be met, `2` on a bad technique name or unreadable file.
 
 ---
 

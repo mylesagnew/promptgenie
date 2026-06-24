@@ -228,7 +228,30 @@ def add_provider(name: str, provider_type: str, **kwargs: Any) -> ProviderConfig
 
 
 def get_provider(name: str, model_override: str | None = None) -> "BaseProvider":
-    """Return a Provider instance for *name*."""
+    """Return a Provider instance for *name*.
+
+    Raises PromptGenieError if the provider is unknown or blocked by air-gap mode.
+    """
+    # ── Air-gap check ─────────────────────────────────────────────────────────
+    try:
+        from promptgenie.core.config import load_config
+        cfg_pg = load_config()
+        if cfg_pg.security.airgap:
+            _local_names = {"ollama", "localai", "lm-studio", "lmstudio", "vllm", "llamafile"}
+            if name.lower() not in _local_names:
+                raise PromptGenieError(
+                    f"Air-gap mode is enabled — external provider '{name}' is blocked.",
+                    code=EXIT_PROVIDER,
+                    hint=(
+                        "Air-gap mode only permits local providers (Ollama, LocalAI, etc.). "
+                        "Disable with: promptgenie config set security.airgap false"
+                    ),
+                )
+    except PromptGenieError:
+        raise
+    except Exception:
+        pass  # config load failure — don't block
+
     configs = load_providers_config()
     if name not in configs:
         raise PromptGenieError(

@@ -267,15 +267,40 @@ def provider_doctor_cmd(name: str, output_format: str) -> None:
     ok, message = asyncio.run(probe_provider(name))
     status = "ok" if ok else "error"
 
+    providers = load_providers_config()
+    cfg = providers.get(name)
+    cap = cfg.capabilities if cfg else None
+
     if is_structured_mode(output_format):
+        cap_dict = {}
+        if cap:
+            cap_dict = {
+                "streaming": cap.streaming,
+                "structured_output": cap.structured_output,
+                "max_context_tokens": cap.max_context_tokens,
+                "local": cap.local,
+                "supports_tools": cap.supports_tools,
+            }
         console.print(json.dumps({
             "provider": name,
             "status": status,
             "message": message,
+            "capabilities": cap_dict,
             "schema_version": "1.0",
         }, indent=2))
     else:
         icon = "[green]✓[/green]" if ok else "[red]✗[/red]"
         console.print(f"{icon} [bold]{name}[/bold]: {message}")
+        if cap:
+            from rich.table import Table
+            table = Table(show_header=True, header_style="dim", box=None, padding=(0, 2))
+            table.add_column("Capability")
+            table.add_column("Value")
+            table.add_row("streaming",        "[green]yes[/green]" if cap.streaming else "no")
+            table.add_row("structured_output","[green]yes[/green]" if cap.structured_output else "no")
+            table.add_row("supports_tools",   "[green]yes[/green]" if cap.supports_tools else "no")
+            table.add_row("local",            "[green]yes[/green]" if cap.local else "no")
+            table.add_row("max_context_tokens", f"{cap.max_context_tokens:,}")
+            console.print(table)
 
     raise SystemExit(EXIT_OK if ok else EXIT_FAILURE)

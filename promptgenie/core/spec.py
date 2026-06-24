@@ -84,6 +84,14 @@ class RunOptions:
 
 
 @dataclass
+class SecretVarBinding:
+    """A variable whose value is sourced from an environment variable at runtime."""
+    from_env: str           # env var name to read from
+    secret: bool = True     # always redact in logs/history
+    default: str | None = None  # fallback if env var is unset
+
+
+@dataclass
 class PromptSpec:
     version: int
     name: str
@@ -91,6 +99,8 @@ class PromptSpec:
     template: str | None = None
     mode: str = "chat"
     vars: dict[str, Any] = field(default_factory=dict)
+    # Secret bindings separated out so they are never logged as plain values
+    secret_vars: dict[str, SecretVarBinding] = field(default_factory=dict)
     context: list[ContextSource] = field(default_factory=list)
     policy: list[str] = field(default_factory=list)
     provider: str | None = None
@@ -200,13 +210,26 @@ def _build_spec(raw: dict[str, Any]) -> PromptSpec:
         require_clean=bool(run_raw.get("require_clean", False)),
         no_history=bool(run_raw.get("no_history", False)),
     )
+    # Split raw vars into plain values and secret bindings
+    plain_vars: dict[str, Any] = {}
+    secret_vars: dict[str, SecretVarBinding] = {}
+    for k, v in (raw.get("vars") or {}).items():
+        if isinstance(v, dict) and "from_env" in v:
+            secret_vars[k] = SecretVarBinding(
+                from_env=str(v["from_env"]),
+                secret=bool(v.get("secret", True)),
+                default=v.get("default"),
+            )
+        else:
+            plain_vars[k] = v
     return PromptSpec(
         version=int(raw["version"]),
         name=str(raw["name"]),
         target=str(raw["target"]),
         template=raw.get("template"),
         mode=str(raw.get("mode", "chat")),
-        vars=dict(raw.get("vars") or {}),
+        vars=plain_vars,
+        secret_vars=secret_vars,
         context=context_sources,
         policy=list(raw.get("policy") or []),
         provider=raw.get("provider"),

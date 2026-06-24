@@ -32,6 +32,7 @@ EXIT_TEMPLATE: int = 4  # template / profile error
 EXIT_TEST: int = 5  # test assertion failures
 EXIT_SECRETS: int = 6  # secrets gate triggered
 EXIT_TIMEOUT: int = 7  # operation timed out
+EXIT_REGRESSION: int = 8  # baseline regression gate triggered
 EXIT_INTERRUPTED: int = 130  # SIGINT / KeyboardInterrupt
 
 
@@ -115,6 +116,7 @@ def _code_label(code: int) -> str:
         EXIT_TEST: "Test failure",
         EXIT_SECRETS: "Secrets blocked",
         EXIT_TIMEOUT: "Timeout",
+        EXIT_REGRESSION: "Regression",
         EXIT_INTERRUPTED: "Interrupted",
     }.get(code, "Error")
 

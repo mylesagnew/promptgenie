@@ -43,10 +43,31 @@
           {"type": "string"},
           {"type": "number"},
           {"type": "boolean"},
-          {"type": "null"}
+          {"type": "null"},
+          {
+            "type": "object",
+            "description": "Secret variable binding — value sourced from an environment variable.",
+            "required": ["from_env"],
+            "additionalProperties": false,
+            "properties": {
+              "from_env": {
+                "type": "string",
+                "description": "Name of the environment variable to read the value from."
+              },
+              "secret": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to redact this variable in logs and history."
+              },
+              "default": {
+                "type": "string",
+                "description": "Fallback value if the environment variable is not set."
+              }
+            }
+          }
         ]
       },
-      "description": "Inline variable values merged with --var flags and --vars files."
+      "description": "Inline variable values merged with --var flags and --vars files. Use {from_env: VAR_NAME, secret: true} for secret bindings."
     },
     "context": {
       "type": "array",
