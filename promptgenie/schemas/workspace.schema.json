@@ -204,6 +204,11 @@
           "type": "boolean",
           "default": false,
           "description": "Auto-redact detected secrets instead of blocking the run."
+        },
+        "store_history_content": {
+          "type": "boolean",
+          "default": false,
+          "description": "Persist prompt and response bodies in run history. Default false stores metadata and content hashes only; when true, bodies are secret-redacted before being written."
         }
       }
     },

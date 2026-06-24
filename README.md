@@ -1674,7 +1674,9 @@ promptgenie run my-prompt.yaml --no-input --var env=prod
 | `--format text\|ndjson` | NDJSON emits `start/token/warning/error/done` events |
 | `--show-context` | Print context manifest before sending |
 
-Run history is persisted to `~/.local/share/promptgenie/runs/` (files `0600`, with secrets redacted).
+Run history is persisted to `~/.local/share/promptgenie/runs/` (files `0600`, directories `0700`).
+
+> **Privacy default:** history stores **run metadata and content hashes only** — prompt and response **bodies are not written to disk**, and per-token text is never persisted. To also store bodies (e.g. for `history show`/`history diff`/`replay`), opt in with `promptgenie config set security.store_history_content true`; even then, the prompt and response are secret-redacted before being written. The same default governs the SQLite store behind `history`/`palette`.
 
 > **Security defaults (v1.2.4+):** The run engine enforces these constraints by default.
 > (1) **Spec trust boundary** — a spec with host-touching context sources (`cmd`/`file`/`glob`/`env`/`url`) must be trusted before it runs. Interactive sessions prompt; CI must pass `--trust`/`--yes` or pre-register via `promptgenie trust add`. Trust is keyed by spec path + content hash, so editing a trusted spec re-prompts.

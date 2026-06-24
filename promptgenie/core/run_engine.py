@@ -479,6 +479,16 @@ async def _run_spec_async(
 
     writer: RunWriter | None = None
     if not effective_no_history:
+        # Privacy default: persist run metadata + content hashes only. Prompt and
+        # response bodies are written to history solely when the user opts in via
+        # security.store_history_content (then they are still secret-redacted).
+        store_history_content = False
+        try:
+            from promptgenie.core.config import load_config
+
+            store_history_content = load_config().security.store_history_content
+        except Exception:
+            pass  # config load failure — fall back to the private default
         writer = RunWriter(
             run_id=run_id,
             spec_name=spec.name,
@@ -487,6 +497,7 @@ async def _run_spec_async(
             model=model_name,
             dry_run=effective_dry_run,
             prompt=prompt,
+            store_content=store_history_content,
         )
         writer._ensure_file()
 

@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+
+- **History privacy default — metadata-only persistence.** Run history no longer writes prompt or response **bodies** to disk by default; it persists run metadata plus SHA-256 content hashes only, and per-token text is no longer streamed to the NDJSON log. This applies to both the NDJSON run log (`promptgenie/core/history.py`) and the SQLite store behind `history`/`palette` (`promptgenie/core/history_db.py`). Opt back in with `security.store_history_content: true` (or `promptgenie config set security.store_history_content true`); even when enabled, prompt/response bodies are secret-redacted before being written. New `SecurityConfig.store_history_content` field (default `false`), wired through the workspace JSON Schema, `config show/get/set`, and `run_spec`. The SQLite store now also creates `history.db` with mode `0600` under a `0700` directory. **Migration:** existing run files/rows are untouched; clear old content with `promptgenie history clear` if desired. New tests in `tests/test_history_privacy.py`; the S-4 redaction tests now exercise the opt-in path.
+
 ### Added
 
 - **Native token compression engine** (`promptgenie/core/compressor.py`) — a pure-Python, dependency-free reimplementation of the lossless / low-risk structural techniques popularised by [headroom](https://github.com/headroomlabs-ai/headroom): content-routed compressors that shrink a prompt's token footprint *before* it reaches the model. No Rust toolchain, tree-sitter, or ONNX — keeps the `click`/`rich`/`pyyaml`-only base install. Public API: `compress(text, techniques=None, max_tokens=None) → CompressResult`. Techniques are fence-aware (code blocks are never corrupted) and split into two tiers: **default** (lossless — `trim-trailing-ws`, `collapse-blank-lines`, `json-compact`) and **aggressive** (mildly lossy — `strip-html-comments`, `collapse-spaces`, `dedupe-log-lines`). `CompressResult` reports `tokens_before/after`, `tokens_saved`, `ratio`, per-technique edit counts, and `budget_met`.

@@ -794,6 +794,7 @@ class TestS4HistoryRedaction:
             model="claude",
             dry_run=False,
             prompt=f"My key is {fake_key}",
+            store_content=True,  # opt in so bodies are persisted (then must be redacted)
         )
         writer._ensure_file()
         writer.write_token("response with " + fake_key)
@@ -823,6 +824,7 @@ class TestS4HistoryRedaction:
             model="claude",
             dry_run=False,
             prompt="clean prompt",
+            store_content=True,  # opt in so the response body is persisted (then redacted)
         )
         writer._ensure_file()
         writer.write_token("here is " + fake_key)
