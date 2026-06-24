@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Security
+
+- **VS Code extension — bounded subprocess output.** The extension's CLI runner (`vscode-extension/src/runner.ts`) accumulated `stdout`/`stderr` without limit: it passed `maxBuffer` to `cp.spawn`, which silently ignores it (the option only applies to `exec`/`execFile`), so a hostile or runaway CLI could grow the buffers until the extension host ran out of memory. The runner now caps each stream at 8 MB (kills the process and rejects with a clear error on overflow) and adds a 30 s watchdog timeout that terminates a hung process. A single `settled` guard prevents double resolve/reject. Verified via `tsc` compile + eslint; a dedicated runner test harness is tracked as separate follow-up (the extension currently ships no test framework).
+
 ### Changed
 
 - **History privacy default — metadata-only persistence.** Run history no longer writes prompt or response **bodies** to disk by default; it persists run metadata plus SHA-256 content hashes only, and per-token text is no longer streamed to the NDJSON log. This applies to both the NDJSON run log (`promptgenie/core/history.py`) and the SQLite store behind `history`/`palette` (`promptgenie/core/history_db.py`). Opt back in with `security.store_history_content: true` (or `promptgenie config set security.store_history_content true`); even when enabled, prompt/response bodies are secret-redacted before being written. New `SecurityConfig.store_history_content` field (default `false`), wired through the workspace JSON Schema, `config show/get/set`, and `run_spec`. The SQLite store now also creates `history.db` with mode `0600` under a `0700` directory. **Migration:** existing run files/rows are untouched; clear old content with `promptgenie history clear` if desired. New tests in `tests/test_history_privacy.py`; the S-4 redaction tests now exercise the opt-in path.
