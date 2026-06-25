@@ -176,6 +176,16 @@ def _trust_gate(
     "(KEY/SECRET/TOKEN/...). Blocked by default to prevent secret exfiltration.",
 )
 @click.option(
+    "--compress-context",
+    is_flag=True,
+    help="Run the lossless compressor over the assembled context to save tokens.",
+)
+@click.option(
+    "--compress-aggressive",
+    is_flag=True,
+    help="Compress context with the aggressive techniques too (implies --compress-context).",
+)
+@click.option(
     "--trust",
     "trust_spec",
     is_flag=True,
@@ -243,6 +253,8 @@ def run_cmd(
     context_strategy: str,
     allow_url: bool,
     allow_sensitive_env: bool,
+    compress_context: bool,
+    compress_aggressive: bool,
     trust_spec: bool,
     assume_yes: bool,
     allow_secrets: bool,
@@ -335,12 +347,20 @@ def run_cmd(
             base_dir=base_dir,
             no_url=not allow_url,
             allow_sensitive_env=allow_sensitive_env,
+            compress=compress_context,
+            compress_aggressive=compress_aggressive,
         )
         diag_console.print("[bold]Context manifest:[/bold]")
         for entry in manifest.entries:
             status = "✓" if entry.included else "✗ (trimmed)"
             diag_console.print(
                 f"  [{entry.source_type}] {entry.label}  ~{entry.token_estimate} tokens  {status}"
+            )
+        comp = manifest.compression
+        if comp is not None and comp.changed:
+            diag_console.print(
+                f"[green]Compressed[/green] {comp.tokens_before} → {comp.tokens_after} tokens "
+                f"([bold]-{comp.ratio:.0%}[/bold])"
             )
         diag_console.print(f"[dim]Total: ~{manifest.total_tokens} tokens[/dim]\n")
 
@@ -365,6 +385,8 @@ def run_cmd(
             context_strategy=context_strategy,
             allow_url=allow_url,
             allow_sensitive_env=allow_sensitive_env,
+            compress_context=compress_context,
+            compress_aggressive=compress_aggressive,
             allow_secrets=allow_secrets,
             block_secrets=block_secrets,
             redact_secrets=redact_secrets,

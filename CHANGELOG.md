@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+
+- **Context-builder auto-compression (ROADMAP #8).** `run` and `context build` can now run the lossless compressor over the *assembled* context before it is used, via `--compress-context` / `--compress` (safe default tier) and `--compress-aggressive` (adds HTML-comment stripping, space collapsing, log-line deduping). `build_context` gained `compress` / `compress_aggressive` parameters and returns the result on a new `ContextManifest.compression` field (before/after tokens, per-technique breakdown); `total_tokens` reflects the compressed text. Savings are reported to stderr by `context build` and `run --show-context`, and included in `context build --format json|yaml`. 8 tests in `tests/test_context_compression.py`.
+
 ### Changed
 
 - **`pack init` no longer writes into the installed package directory.** It previously created new packs under `promptgenie/context-packs/` (inside the install — surprising, pollutes the package, and fails on a read-only site-packages). It now defaults to the user pack directory (`~/.promptgenie/registry/packs`, which `load_pack` already searches), with a new `--out-dir` flag to target the current project instead. `init_pack` refuses any id that already exists in a loadable location (so built-in collisions are still rejected), and `list_packs` now also surfaces user/registry context packs — so a freshly `init`-ed pack shows up in `pack list` and works with `pack show` / `--pack`. 5 tests in `tests/test_pack_init_location.py`.

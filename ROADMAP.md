@@ -144,7 +144,9 @@ promptgenie context build --max-tokens 12000 --strategy git-relevant  # ✅ ship
 
 **Shipped:** `promptgenie tokens` — the read-only companion to `compress`: reports a prompt's token count and the *potential* savings of each compression technique (applied individually) plus the combined default-tier and all-tier totals, without modifying anything. `--format text|json|yaml`.
 
-**Planned next:** context-builder auto-compression in the run engine, and summarisation / low-value-section removal for further savings.
+**Shipped:** context-builder auto-compression — `run` and `context build` now accept `--compress-context` / `--compress` (safe tier) and `--compress-aggressive`, running the compressor over the *assembled* context before it is sent. `build_context` returns the savings on `ContextManifest.compression` (before/after tokens, per-technique breakdown), surfaced in `--show-context`, the build report, and `--format json|yaml`.
+
+**Planned next:** summarisation / low-value-section removal for further savings.
 
 ---
 

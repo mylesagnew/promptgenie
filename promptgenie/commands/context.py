@@ -96,6 +96,17 @@ def context_group() -> None:
     is_flag=True,
     help="Print the source manifest (labels, hashes, token estimates) without the text.",
 )
+@click.option(
+    "--compress",
+    "compress_context",
+    is_flag=True,
+    help="Run the lossless compressor over the assembled context to save tokens.",
+)
+@click.option(
+    "--compress-aggressive",
+    is_flag=True,
+    help="Compress with the aggressive techniques too (implies --compress).",
+)
 def context_build_cmd(
     file_paths: tuple[str, ...],
     glob_patterns: tuple[str, ...],
@@ -110,6 +121,8 @@ def context_build_cmd(
     out: str | None,
     output_format: str,
     manifest_only: bool,
+    compress_context: bool,
+    compress_aggressive: bool,
 ) -> None:
     """Assemble context from one or more sources.
 
@@ -152,16 +165,41 @@ def context_build_cmd(
             strategy=strategy,
             base_dir=Path.cwd(),
             no_url=not allow_url,
+            compress=compress_context,
+            compress_aggressive=compress_aggressive,
         )
     except PromptGenieError as exc:
         diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(exc.code) from exc
+
+    comp = manifest.compression
+    if comp is not None and comp.changed:
+        diag_console.print(
+            f"[green]Compressed[/green] context "
+            f"{comp.tokens_before} → {comp.tokens_after} tokens "
+            f"([bold]-{comp.ratio:.0%}[/bold], {len(comp.applied)} technique(s))"
+        )
+    elif comp is not None:
+        diag_console.print("[dim]Compression made no change to the assembled context.[/dim]")
+
+    compression_obj = (
+        {
+            "tokens_before": comp.tokens_before,
+            "tokens_after": comp.tokens_after,
+            "tokens_saved": comp.tokens_saved,
+            "ratio": round(comp.ratio, 4),
+            "techniques": [t.name for t in comp.applied],
+        }
+        if comp is not None
+        else None
+    )
 
     if output_format == "json":
         output_obj = {
             "schema_version": "1.0",
             "total_tokens": manifest.total_tokens,
             "trimmed_count": manifest.trimmed_count,
+            "compression": compression_obj,
             "manifest": [
                 {
                     "label": e.label,
@@ -181,6 +219,7 @@ def context_build_cmd(
             "schema_version": "1.0",
             "total_tokens": manifest.total_tokens,
             "trimmed_count": manifest.trimmed_count,
+            "compression": compression_obj,
             "manifest": [
                 {
                     "label": e.label,
