@@ -169,6 +169,8 @@ output_contract:
 
 Use native structured output where available; otherwise inject schema into prompt and validate post-parse. Repair mode coerces malformed output and marks repaired fields.
 
+**Shipped:** structured output contracts (`promptgenie/core/output_contract.py`). `promptgenie validate-output FILE --schema S` validates a response (file/stdin) against a JSON Schema; `promptgenie output repair FILE --schema S` extracts JSON embedded in prose, coerces scalar types, fills missing required fields from their `default`/type, and re-validates; `promptgenie run --schema S --output-mode json` validates the live response against `--schema` (or the spec's `output_contract.schema`, inline or a file path) and exits 1 if it does not conform. Validation uses the optional `jsonschema` library when installed (`pip install promptgenie[schema]`) and otherwise a built-in subset validator (`type`, `required`, `properties`, `items`, `enum`, `additionalProperties`, `minimum`/`maximum`, `minLength`/`maxLength`, `minItems`/`maxItems`, `pattern`) — base install stays dependency-free. 36 tests in `tests/test_output_contract.py`.
+
 ---
 
 ### Prompt Dependency Graph
@@ -273,6 +275,7 @@ Dynamic completions for `--template`, `--target`, `--provider`, `--model`, conte
 | `providers` | `httpx` + `anthropic` | `promptgenie run` (full provider support) |
 | `tui` | `textual>=0.50` | `promptgenie tui`, `promptgenie palette` |
 | `watch` | `watchfiles>=0.21` | `promptgenie watch` (fast inotify/FSEvents mode) |
+| `schema` | `jsonschema>=4.0` | Full JSON Schema validation for `validate-output` / `output repair` / `run --schema` (built-in subset validator used otherwise) |
 | `llm` | `openai` | `promptgenie scan --llm` |
 | `secrets` | `keyring` | `promptgenie auth login` (keyring backend) |
 | `semantic-diff` | `rapidfuzz` | `promptgenie diff --semantic` |

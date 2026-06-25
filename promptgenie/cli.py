@@ -21,6 +21,7 @@ from promptgenie.commands.history_cmd import history_group
 from promptgenie.commands.interactive import interactive_cmd
 from promptgenie.commands.lint import lint_cmd
 from promptgenie.commands.lock_cmd import lock_cmd
+from promptgenie.commands.output_cmd import output_group
 from promptgenie.commands.pack import pack_group
 from promptgenie.commands.palette_cmd import palette_cmd
 from promptgenie.commands.plugin_cmd import plugin_group
@@ -38,6 +39,7 @@ from promptgenie.commands.tokens_cmd import tokens_cmd
 from promptgenie.commands.trust import trust_group
 from promptgenie.commands.tui_cmd import tui_cmd
 from promptgenie.commands.validate import validate_cmd, validate_profiles_cmd
+from promptgenie.commands.validate_output import validate_output_cmd
 from promptgenie.commands.vars import vars_group
 from promptgenie.commands.watch_cmd import watch_cmd
 from promptgenie.commands.wizard_cmd import wizard_cmd
@@ -88,6 +90,8 @@ cli.add_command(context_group)
 cli.add_command(doctor_cmd)
 cli.add_command(provider_group)
 cli.add_command(run_cmd)
+cli.add_command(validate_output_cmd)
+cli.add_command(output_group)
 cli.add_command(spec_group)
 cli.add_command(trust_group)
 cli.add_command(vars_group)
