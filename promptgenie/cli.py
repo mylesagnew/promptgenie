@@ -34,6 +34,7 @@ from promptgenie.commands.spec import spec_group
 from promptgenie.commands.targets import list_targets_cmd, list_templates_cmd
 from promptgenie.commands.template_cmd import template_group
 from promptgenie.commands.test import test_cmd
+from promptgenie.commands.tokens_cmd import tokens_cmd
 from promptgenie.commands.trust import trust_group
 from promptgenie.commands.tui_cmd import tui_cmd
 from promptgenie.commands.validate import validate_cmd, validate_profiles_cmd
@@ -92,6 +93,7 @@ cli.add_command(trust_group)
 cli.add_command(vars_group)
 cli.add_command(compress_cmd)
 cli.add_command(optimize_cmd)
+cli.add_command(tokens_cmd)
 # Phase 3 — SecDevOps Guardrails
 cli.add_command(analyze_cmd)
 cli.add_command(redact_cmd)

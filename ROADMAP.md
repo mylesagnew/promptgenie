@@ -136,13 +136,15 @@ Ordered by development leverage and user adoption impact:
 ```bash
 promptgenie compress prompt.md                      # ✅ shipped
 promptgenie optimize prompt.md --max-tokens 4000    # ✅ shipped (alias of compress)
-promptgenie tokens prompt.md                         # 🔲 planned (inspector)
+promptgenie tokens prompt.md                         # ✅ shipped (read-only inspector)
 promptgenie context build --max-tokens 12000 --strategy git-relevant  # ✅ shipped
 ```
 
 **Shipped:** `promptgenie compress` / `optimize` — a native, dependency-free compression engine (`promptgenie/core/compressor.py`) inspired by [headroom](https://github.com/headroomlabs-ai/headroom). Content-routed, fence-aware techniques in two tiers: lossless **default** (`trim-trailing-ws`, `collapse-blank-lines`, `json-compact`) and lossy **aggressive** (`strip-html-comments`, `collapse-spaces`, `dedupe-log-lines`). `--max-tokens` budget, `--diff`/`--dry-run`, `--format json|yaml`. Accurate token counts use `tiktoken` when installed (`promptgenie[tokenizer]`), falling back to a `len/4` estimate.
 
-**Planned next:** `promptgenie tokens` (a read-only per-technique savings inspector), context-builder auto-compression in the run engine, and summarisation / low-value-section removal for further savings.
+**Shipped:** `promptgenie tokens` — the read-only companion to `compress`: reports a prompt's token count and the *potential* savings of each compression technique (applied individually) plus the combined default-tier and all-tier totals, without modifying anything. `--format text|json|yaml`.
+
+**Planned next:** context-builder auto-compression in the run engine, and summarisation / low-value-section removal for further savings.
 
 ---
 

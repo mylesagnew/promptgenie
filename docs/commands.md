@@ -482,6 +482,28 @@ Exits `0` on success, `1` when a `--max-tokens` budget cannot be met, `2` on a b
 
 ---
 
+### `tokens`
+
+The **read-only** companion to `compress` — reports a prompt's token count and how much each compression technique *would* save, without modifying anything.
+
+```bash
+promptgenie tokens prompt.md
+promptgenie tokens prompt.md --format json | jq '.combined.all'
+cat context.md | promptgenie tokens -
+```
+
+Output shows: current token + character count, the token estimator in use (`tiktoken` if installed, else the `len/4` heuristic), the potential saving of **each technique applied individually**, and the combined **default-tier** and **all-technique** totals.
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--format` | Output format: `text` (default) / `json` / `yaml` |
+
+`--format json` emits `{schema_version, source, tokens, chars, estimator, techniques[], combined{default, all}}`. Nothing is written or modified — run `promptgenie compress` to apply the savings.
+
+---
+
 ### `test`
 
 Run a declarative prompt test suite defined in a `.prompt-test.yaml` file. Assert content, structure, quality scores, token budgets, lint severity, and security risk — all without sending the prompt to a model.
