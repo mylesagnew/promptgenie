@@ -376,10 +376,13 @@ class SourceEntry:
 
 @dataclass
 class ContextManifest:
-    text: str  # assembled context text
+    text: str  # assembled context text (post-compression when enabled)
     entries: list[SourceEntry] = field(default_factory=list)
-    total_tokens: int = 0
+    total_tokens: int = 0  # tokens of the (possibly compressed) assembled text
     trimmed_count: int = 0  # number of entries excluded by budget
+    # Populated when compression is requested; None otherwise. Carries the
+    # before/after token counts and per-technique breakdown for reporting.
+    compression: Any = None  # core.compressor.CompressResult | None
 
 
 # ---------------------------------------------------------------------------
@@ -712,6 +715,8 @@ def build_context(
     no_url: bool = True,
     allow_insecure_url: bool = False,
     allow_sensitive_env: bool = False,
+    compress: bool = False,
+    compress_aggressive: bool = False,
 ) -> ContextManifest:
     """Gather all context sources and assemble them into a ContextManifest.
 
@@ -735,6 +740,14 @@ def build_context(
         When True, permit ``env`` sources that name credential-like variables
         (logs a security warning). Blocked by default (S-3). Corresponds to
         ``--allow-sensitive-env``.
+    compress:
+        When True, run the lossless compressor (``core.compressor``) over the
+        assembled context text. ``total_tokens`` then reflects the compressed
+        text and ``ContextManifest.compression`` carries the savings.
+    compress_aggressive:
+        When True (implies *compress*), also apply the aggressive techniques
+        (HTML-comment stripping, space collapsing, log-line deduping) rather
+        than just the safe default tier.
     """
     base_dir = base_dir or Path.cwd()
     ignore_patterns = _load_promptignore(base_dir)
@@ -805,9 +818,20 @@ def build_context(
 
     text = "\n\n".join(parts)
 
+    # Optional post-assembly compression (lossless; see core.compressor).
+    compression = None
+    if (compress or compress_aggressive) and text:
+        from promptgenie.core.compressor import ALL_TECHNIQUES
+        from promptgenie.core.compressor import compress as _compress
+
+        techniques = ALL_TECHNIQUES if compress_aggressive else None
+        compression = _compress(text, techniques=techniques)
+        text = compression.compressed_text
+
     return ContextManifest(
         text=text,
         entries=all_entries,
         total_tokens=_estimate_tokens(text),
         trimmed_count=trimmed,
+        compression=compression,
     )

@@ -244,6 +244,8 @@ def run_spec(
     context_strategy: str = "manual",
     allow_url: bool = False,
     allow_sensitive_env: bool = False,
+    compress_context: bool = False,
+    compress_aggressive: bool = False,
     # Security / pre-send secrets gate
     allow_secrets: bool = False,
     block_secrets: bool = False,
@@ -286,6 +288,8 @@ def run_spec(
             context_strategy=context_strategy,
             allow_url=allow_url,
             allow_sensitive_env=allow_sensitive_env,
+            compress_context=compress_context,
+            compress_aggressive=compress_aggressive,
             allow_secrets=allow_secrets,
             block_secrets=block_secrets,
             redact_secrets=redact_secrets,
@@ -320,6 +324,8 @@ async def _run_spec_async(
     context_strategy: str,
     allow_url: bool,
     allow_sensitive_env: bool,
+    compress_context: bool,
+    compress_aggressive: bool,
     allow_secrets: bool,
     block_secrets: bool,
     redact_secrets: bool,
@@ -420,6 +426,8 @@ async def _run_spec_async(
             base_dir=base_dir,
             no_url=not allow_url,
             allow_sensitive_env=allow_sensitive_env,
+            compress=compress_context,
+            compress_aggressive=compress_aggressive,
         )
 
     # ---- 4. assemble prompt ----
