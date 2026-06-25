@@ -316,7 +316,7 @@ class TestAnalyzeWithLlm:
     def test_missing_openai_package_returns_skipped(self):
         cfg = LLMAnalysisConfig(enabled=True, privacy_mode=False, api_key_env="OPENAI_API_KEY")
         with (
-            patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}),
+            patch.dict(os.environ, {"OPENAI_API_KEY": "unit-test-api-key"}),
             patch("builtins.__import__", side_effect=ImportError("no openai")),
         ):
             result = analyze_with_llm("text", config=cfg)

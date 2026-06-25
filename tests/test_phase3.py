@@ -881,12 +881,12 @@ class TestAuthLoginSource:
                     "login",
                     "anthropic",
                     "--key",
-                    "sk-test123",
+                    "unit-test-api-key",
                     "--source",
                     "keyring",
                 ],
             )
-            mock_store.assert_called_once_with("anthropic", "sk-test123")
+            mock_store.assert_called_once_with("anthropic", "unit-test-api-key")
 
 
 # ---------------------------------------------------------------------------
