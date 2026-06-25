@@ -292,7 +292,10 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 | Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | — |
 | v1.6.0 — Internal Event Model + Policy Hardening | ✅ Shipped (v1.6.0) | 110 | — |
 | v1.7.0 — Workspace Schema + Config Validation | ✅ Shipped (v1.7.0) | 70 | — |
-| Native token compression (`compress`/`optimize`) | ✅ Shipped (Unreleased) | 30 | **1400** |
+| Native token compression (`compress`/`optimize`) | ✅ Shipped (Unreleased) | 30 | — |
+| NousResearch Hermes integration (profile + provider) | ✅ Shipped (Unreleased) | 11 | — |
+| Security hardening (history privacy, extension bound, SBOM attest, version-drift + gitleaks CI, threat model) | ✅ Shipped (Unreleased) | 50 | — |
+| Coverage uplift — async-provider harness + command tests (~75%→~82%) | ✅ Shipped (Unreleased) | ~130 | **1541** |
 | Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*
