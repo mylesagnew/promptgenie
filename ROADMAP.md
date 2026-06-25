@@ -146,7 +146,7 @@ promptgenie context build --max-tokens 12000 --strategy git-relevant  # ✅ ship
 
 **Shipped:** context-builder auto-compression — `run` and `context build` now accept `--compress-context` / `--compress` (safe tier) and `--compress-aggressive`, running the compressor over the *assembled* context before it is sent. `build_context` returns the savings on `ContextManifest.compression` (before/after tokens, per-technique breakdown), surfaced in `--show-context`, the build report, and `--format json|yaml`.
 
-**Planned next:** summarisation / low-value-section removal for further savings.
+**Shipped:** summarisation — heuristic, dependency-free low-value-section removal (`promptgenie compress --summarise`). Splits the document into heading-delimited sections and drops low-value ones (examples, changelog, appendix, log dumps) together with their subsections. Without a budget it removes only low-value sections; with `--max-tokens` it additionally drops other non-protected sections (largest first) until the document fits. Protected sections (objective, scope, requirements, output format, guardrails…) and the preamble are never dropped; headings inside fenced code are ignored. Dropped sections are reported on `CompressResult.dropped_sections` and in `--format json`.
 
 ---
 
