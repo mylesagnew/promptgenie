@@ -567,13 +567,15 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 - [x] `generate`, `lint`, `scan`, `diff`, `adapt`, `test`, `benchmark`, `workflow`, `interactive`, `policy`, `validate`, `pack`, `ci` — full command surface
 - [x] Multi-file / directory / zip scanning with zip-slip protection; opt-in LLM semantic analysis (`--llm`) with pre-send secret redaction
 - [x] Context packs, workflow mode, plugin registry (14 packs), OWASP LLM Top 10 rules, enterprise lint rules
-- [x] GitHub Actions CI (`ci.yml`): pytest 3.10–3.12, coverage ≥85%, ruff, mypy, bandit, pip-audit, VS Code extension CI, build + wheel smoke test
+- [x] GitHub Actions CI (`ci.yml`): pytest 3.10–3.12 with a coverage gate, ruff, mypy, bandit, pip-audit, gitleaks secret scan, version-drift gate, VS Code extension CI, build + wheel smoke test
 - [x] SARIF output on lint, scan, and policy for GitHub Code Scanning upload
 - [x] Policy-as-code: `policy` command with `--max-risk`, `--min-score`, `--format sarif`, expired allowlist reporting
 - [x] Registry hardening: SHA-256 checksums required, HTTPS-only, 1 MiB download cap, fail-closed YAML parsing
-- [x] VS Code / Cursor extension: inline diagnostics, status bar score, command palette
-- [x] SBOM, release provenance, CodeQL, OpenSSF Scorecard, Dependabot
-- [x] 1,273 tests · 85%+ coverage · 0 ruff issues · 0 mypy errors
+- [x] VS Code / Cursor extension: inline diagnostics, status bar score, command palette, bounded subprocess output
+- [x] Native token compression (`compress` / `optimize`) — content-routed, fence-aware, dependency-free
+- [x] NousResearch Hermes integration — `hermes` target profile + built-in OpenAI-compatible provider
+- [x] Security posture: metadata-only run history by default, SBOM attestation + build provenance, CodeQL, OpenSSF Scorecard, Dependabot, and a formal [THREAT_MODEL.md](THREAT_MODEL.md)
+- [x] 1,541 tests · ~82% coverage (gate 81%) · 0 ruff issues · 0 mypy errors
 
 ---
 

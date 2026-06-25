@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Tests
+
+- **Coverage uplift ~75% → ~82% (CI gate 81%).** Added a reusable async test harness (`tests/test_providers_async.py`) that mocks `httpx` and the `anthropic` SDK so the provider `complete()`/`stream()` coroutines and the non-dry-run `run_engine` send path run fully offline (`providers.py` 53% → 81%). Added `tests/test_coverage_boost*.py` covering the matrix evaluator via a fake provider, `registry` install with real SHA-256 verification, `gh_reporter`, change detection (mocked git), completion internals, plugin core, keyring-backed credentials (mocked), and ~50 command edge paths. Suite is now **1,541 tests**. The remaining gap to 85% is the Textual TUI (needs the `[tui]` extra in CI + a small refactor to make the App testable) and the benchmark command / watch loop.
+
 ### Documentation
 
 - **Split the long-form docs and added a formal threat model.** The README was ~2,300 lines; the bulky per-command reference and the `.promptgenie.yaml` configuration reference now live in **[docs/commands.md](docs/commands.md)** and **[docs/configuration.md](docs/configuration.md)**, with the README trimmed to ~730 lines plus a Documentation index and pointers. Added **[THREAT_MODEL.md](THREAT_MODEL.md)** — a formal threat model (assets, trust boundaries, attacker model, and an explicit threat→control mapping for the 18 controls described in `SECURITY.md`). The new `docs/` tree is excluded from the prompt-file CI scans (it documents trigger phrases by design).
