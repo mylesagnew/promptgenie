@@ -54,6 +54,19 @@ PACKS_DIR = Path(__file__).parent.parent / "context-packs"
 _PACK_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
+def _clean_str_list(value: object) -> list[str]:
+    """Coerce a pack list field to clean strings, dropping None/blank entries.
+
+    A scaffolded pack (``pack init``) seeds list fields with ``- # comment``
+    placeholder lines that YAML parses as ``None``. Without cleaning, a
+    ``", ".join(...)`` over such a list raises TypeError and ``render_pack``
+    emits ``- None`` lines.
+    """
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if item is not None and str(item).strip()]
+
+
 def _validate_pack_id(pack_id: str) -> None:
     """Reject pack IDs that could escape the packs directory."""
     if not pack_id or not _PACK_ID_RE.match(pack_id):
@@ -96,9 +109,9 @@ def list_packs() -> list[dict]:
         packs.append(
             {
                 "id": f.stem,
-                "name": data.get("name", f.stem),
-                "description": data.get("description", ""),
-                "stack": data.get("stack", []),
+                "name": str(data.get("name") or f.stem),
+                "description": str(data.get("description") or ""),
+                "stack": _clean_str_list(data.get("stack")),
             }
         )
     return packs
@@ -125,6 +138,11 @@ def load_pack(pack_id: str) -> dict:
             # Only return if this is a context-type pack (or has context-like keys)
             pack_type = data.get("type", "context")
             if pack_type == "context" or not (data.get("scanner_rules") or data.get("lint_rules")):
+                # Normalise list fields: drop None/blank placeholder entries so
+                # downstream joins and rendering never see a None item.
+                for key, value in list(data.items()):
+                    if isinstance(value, list):
+                        data[key] = _clean_str_list(value)
                 return data
     raise FileNotFoundError(
         f"Context pack not found: {pack_id}  (searched {', '.join(str(d) for d in search_dirs)})"
