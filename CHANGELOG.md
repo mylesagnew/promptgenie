@@ -18,6 +18,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Tests
 
+- **Coverage uplift ~82% → ~83% — Textual TUI + benchmark command (CI gate 82%).** Made the TUI testable: `tui_cmd.py` now exposes a module-level `build_tui_app()` factory (instead of defining the app inside `_run_tui`), so `tests/test_tui.py` drives it headlessly via Textual's `app.run_test()` pilot — `tui_cmd.py` 12% → 89%. Added `tests/test_benchmark_cmd.py` covering the `benchmark` command end-to-end through a fake `AnthropicProvider` (no network). The CI test job now installs the `[tui]` extra so these run in CI. Also fixed a latent shadow: the palette TUI's `query` reactive (which shadowed textual's `DOMNode.query()`) was renamed to `query_text`.
+
 - **Coverage uplift ~75% → ~82% (CI gate 81%).** Added a reusable async test harness (`tests/test_providers_async.py`) that mocks `httpx` and the `anthropic` SDK so the provider `complete()`/`stream()` coroutines and the non-dry-run `run_engine` send path run fully offline (`providers.py` 53% → 81%). Added `tests/test_coverage_boost*.py` covering the matrix evaluator via a fake provider, `registry` install with real SHA-256 verification, `gh_reporter`, change detection (mocked git), completion internals, plugin core, keyring-backed credentials (mocked), and ~50 command edge paths. Suite is now **1,541 tests**. The remaining gap to 85% is the Textual TUI (needs the `[tui]` extra in CI + a small refactor to make the App testable) and the benchmark command / watch loop.
 
 ### Documentation

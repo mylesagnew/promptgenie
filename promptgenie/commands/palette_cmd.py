@@ -195,7 +195,8 @@ def _run_palette_tui(items: list[PaletteItem]) -> str | None:
             Binding("enter", "confirm", "Select", show=True),
         ]
 
-        query: reactive[str] = reactive("")
+        # NB: not named `query` — that shadows textual's DOMNode.query() method.
+        query_text: reactive[str] = reactive("")
 
         def __init__(self, catalogue: list[PaletteItem]) -> None:
             super().__init__()
@@ -214,7 +215,7 @@ def _run_palette_tui(items: list[PaletteItem]) -> str | None:
             self.query_one("#search-bar", Input).focus()
 
         def on_input_changed(self, event: Input.Changed) -> None:
-            self.query = event.value
+            self.query_text = event.value
             self._filtered = _filter_items(self._catalogue, event.value)
             self._refresh_list()
 
@@ -293,7 +294,12 @@ def palette_cmd(no_tui: bool, print_only: bool) -> None:
 
     selected: str | None = None
 
-    if no_tui:
+    # The full-screen Textual palette needs an interactive terminal. When stdin
+    # is not a TTY (CI, pipes, test harnesses) launching it would block forever
+    # with no driver, so fall back to the readline picker in that case.
+    import sys
+
+    if no_tui or not sys.stdin.isatty():
         selected = _run_palette_readline(catalogue)
     else:
         try:

@@ -13,6 +13,9 @@ jobs:
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # Safety net: a hung test (e.g. a TUI launched without a TTY) should fail
+    # in minutes rather than burn the runner until GitHub's 6-hour default.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -26,7 +29,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install with dev dependencies (locked)
-        run: uv sync --frozen --extra dev --extra benchmark
+        run: uv sync --frozen --extra dev --extra benchmark --extra tui
 
       - name: Run tests
         run: uv run pytest tests/ --tb=short -q --cov=promptgenie --cov-report=term-missing

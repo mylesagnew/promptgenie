@@ -359,7 +359,10 @@ class TestOfflineCommands:
             assert res.exit_code in (0, 1, 2)
 
     def test_palette_print_only(self):
-        res = self.runner.invoke(cli, ["palette", "--print-only"], input="\n")
+        # --no-tui forces the readline fallback; the full-screen Textual palette
+        # cannot run under CliRunner (no TTY) and would block forever.
+        # input: empty filter, then "0" to cancel the selection.
+        res = self.runner.invoke(cli, ["palette", "--no-tui", "--print-only"], input="\n0\n")
         assert res.exit_code in (0, 1, 2)
 
     def test_run_dry_run(self, tmp_path):
