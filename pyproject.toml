@@ -90,13 +90,14 @@ addopts   = "-v --tb=short"
 source = ["promptgenie"]
 
 [tool.coverage.report]
-# Measured coverage is ~79.6%. test_providers_async.py adds an httpx/anthropic
+# Measured coverage is ~82%. test_providers_async.py adds an httpx/anthropic
 # async mocking harness (providers complete/stream + the non-dry-run run_engine
-# send path); test_ci_coverage_boost*.py cover command + core helpers. The
-# remaining gap to 85% is dominated by the Textual TUI (needs the [tui] extra in
-# CI plus a small refactor to make the App testable) and network paths
-# (pack/registry install, async matrix evaluate) — tracked as the next increment.
-fail_under = 79
+# send path); test_coverage_boost*.py cover command + core helpers (evaluate via
+# fake providers, registry install with real checksums, gh_reporter, plugin,
+# change detection, and broad command edges). The remaining gap to 85% is the
+# Textual TUI (needs the [tui] extra in CI + a small refactor to make the App
+# testable) and the benchmark command / watch loop — tracked as the next increment.
+fail_under = 81
 show_missing = true
 
 [tool.ruff]
