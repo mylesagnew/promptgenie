@@ -290,10 +290,16 @@ def pack_dirs():
 @click.argument("pack_id")
 @click.option("--name", default="", help="Human-readable name for the pack.")
 @click.option("--description", default="", help="One-line description.")
-def pack_init(pack_id, name, description):
+@click.option(
+    "--out-dir",
+    default=None,
+    type=click.Path(),
+    help="Directory to create the pack in (default: ~/.promptgenie/registry/packs).",
+)
+def pack_init(pack_id, name, description, out_dir):
     """Create a new blank context pack file."""
     try:
-        path = init_pack(pack_id, name=name, description=description)
+        path = init_pack(pack_id, name=name, description=description, out_dir=out_dir)
         console.print(f"[green]Created context pack:[/green] {path}")
         console.print("[dim]Edit the file to fill in your project details, then use:[/dim]")
         console.print(f'  promptgenie generate "your task" --pack {pack_id}')

@@ -104,16 +104,30 @@ def _packs_dir() -> Path:
 
 def list_packs() -> list[dict]:
     packs = []
-    for f in sorted(_packs_dir().glob("*.yaml")):
-        data = safe_read_yaml(f) or {}
-        packs.append(
-            {
-                "id": f.stem,
-                "name": str(data.get("name") or f.stem),
-                "description": str(data.get("description") or ""),
-                "stack": _clean_str_list(data.get("stack")),
-            }
-        )
+    seen: set[str] = set()
+    # Built-in packs first, then user/registry pack dirs (which load_pack also
+    # searches), so a `pack init`-created pack shows up here too.
+    for d in [_packs_dir(), *_extra_context_dirs()]:
+        for f in sorted(d.glob("*.yaml")):
+            if f.stem in seen:
+                continue
+            data = safe_read_yaml(f) or {}
+            # Skip non-context packs (rule/profile packs installed via the registry).
+            if (
+                data.get("type") not in (None, "context")
+                or data.get("scanner_rules")
+                or data.get("lint_rules")
+            ):
+                continue
+            seen.add(f.stem)
+            packs.append(
+                {
+                    "id": f.stem,
+                    "name": str(data.get("name") or f.stem),
+                    "description": str(data.get("description") or ""),
+                    "stack": _clean_str_list(data.get("stack")),
+                }
+            )
     return packs
 
 
@@ -215,10 +229,36 @@ def inject_pack_into_prompt(prompt_text: str, pack_id: str, mode: str = "standar
     return prompt_text.rstrip() + "\n\n" + rendered
 
 
-def init_pack(pack_id: str, name: str = "", description: str = "") -> Path:
-    """Create a blank context pack file with template structure."""
+def init_pack(
+    pack_id: str,
+    name: str = "",
+    description: str = "",
+    out_dir: Path | str | None = None,
+) -> Path:
+    """Create a blank context pack file with template structure.
+
+    By default the pack is written to the user pack directory
+    (``~/.promptgenie/registry/packs``), which ``load_pack``/``list_packs``
+    already search — so the new pack is immediately usable without writing into
+    the installed package (which may be read-only and would pollute the install).
+    Pass *out_dir* (e.g. ``"."`` for the current project) to write elsewhere.
+
+    Raises ``FileExistsError`` if a pack with this id already exists in any
+    directory PromptGenie loads packs from, or at the chosen *out_dir*.
+    """
+    from promptgenie.core.registry import USER_PACKS_DIR
+
     _validate_pack_id(pack_id)
-    path = _packs_dir() / f"{pack_id}.yaml"
+
+    # Refuse to shadow a pack that already exists anywhere we'd load from.
+    for existing_dir in [_packs_dir(), *_extra_context_dirs()]:
+        existing = existing_dir / f"{pack_id}.yaml"
+        if existing.exists():
+            raise FileExistsError(f"Pack already exists: {existing}")
+
+    target_dir = Path(out_dir) if out_dir is not None else USER_PACKS_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path = target_dir / f"{pack_id}.yaml"
     if path.exists():
         raise FileExistsError(f"Pack already exists: {path}")
 

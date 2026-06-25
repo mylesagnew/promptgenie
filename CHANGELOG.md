@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+
+- **`pack init` no longer writes into the installed package directory.** It previously created new packs under `promptgenie/context-packs/` (inside the install — surprising, pollutes the package, and fails on a read-only site-packages). It now defaults to the user pack directory (`~/.promptgenie/registry/packs`, which `load_pack` already searches), with a new `--out-dir` flag to target the current project instead. `init_pack` refuses any id that already exists in a loadable location (so built-in collisions are still rejected), and `list_packs` now also surfaces user/registry context packs — so a freshly `init`-ed pack shows up in `pack list` and works with `pack show` / `--pack`. 5 tests in `tests/test_pack_init_location.py`.
+
 ### Fixed
 
 - **`pack list` crashed on packs with empty list fields.** A scaffolded pack (`pack init`) seeds list fields with `- # comment` placeholder lines that YAML parses as `None`; `pack list` then did `", ".join(stack)` and raised `TypeError: sequence item 0: expected str instance, NoneType found`. Context-pack list fields are now normalised on load (`_clean_str_list` in `core/context_packs.py`, applied in `list_packs` and `load_pack`), dropping `None`/blank entries — which also stops `pack show`/`render_pack` from emitting `- None` lines. 5 regression tests in `tests/test_pack_none_field.py`.

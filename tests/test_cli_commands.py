@@ -147,18 +147,14 @@ class TestPackCommands:
             assert out_path.exists()
             assert "Project Context" in out_path.read_text()
 
-    def test_pack_init_and_cleanup(self):
-        import uuid
-
-        from promptgenie.core.context_packs import _packs_dir
-
-        pack_id = f"cli-test-{uuid.uuid4().hex[:8]}"
-        try:
-            result = self.runner.invoke(cli, ["pack", "init", pack_id, "--name", "CLI Test Pack"])
-            assert result.exit_code == 0
-            assert "Created" in result.output
-        finally:
-            (_packs_dir() / f"{pack_id}.yaml").unlink(missing_ok=True)
+    def test_pack_init_and_cleanup(self, tmp_path):
+        # --out-dir keeps the created pack out of the package/user dirs.
+        result = self.runner.invoke(
+            cli, ["pack", "init", "cli-test", "--name", "CLI Test Pack", "--out-dir", str(tmp_path)]
+        )
+        assert result.exit_code == 0
+        assert "Created" in result.output
+        assert (tmp_path / "cli-test.yaml").exists()
 
     def test_pack_init_duplicate_exits_1(self):
         result = self.runner.invoke(cli, ["pack", "init", "react-supabase-app"])

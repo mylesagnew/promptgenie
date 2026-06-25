@@ -86,19 +86,13 @@ class TestInjectPack:
 
 
 class TestInitPack:
-    def test_creates_yaml_file(self):
-        import uuid
-
-        pack_id = f"test-pack-{uuid.uuid4().hex[:8]}"
-        from promptgenie.core.context_packs import _packs_dir
-
-        try:
-            path = init_pack(pack_id, name="Test Pack", description="A test pack")
-            assert path.exists()
-            data = yaml.safe_load(path.read_text())
-            assert data["name"] == "Test Pack"
-        finally:
-            (_packs_dir() / f"{pack_id}.yaml").unlink(missing_ok=True)
+    def test_creates_yaml_file(self, tmp_path):
+        # Write into an isolated dir (init_pack defaults to the user pack dir).
+        path = init_pack("test-pack", name="Test Pack", description="A test pack", out_dir=tmp_path)
+        assert path.exists()
+        assert path.parent == tmp_path
+        data = yaml.safe_load(path.read_text())
+        assert data["name"] == "Test Pack"
 
     def test_raises_if_already_exists(self):
         # Use a known built-in pack
