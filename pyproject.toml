@@ -90,13 +90,13 @@ addopts   = "-v --tb=short"
 source = ["promptgenie"]
 
 [tool.coverage.report]
-# Measured coverage is ~83%. On top of the async-provider harness and command
-# coverage, test_tui.py drives the Textual TUI headlessly via app.run_test()
-# (tui_cmd.py 12% -> 89%; needs the [tui] extra, now installed in the CI test
-# job) and test_benchmark_cmd.py covers the benchmark command via a fake
-# provider. The last points to 85% are the watch loop and remaining edges.
-# Gate set with margin below the measured value.
-fail_under = 82
+# Measured coverage is ~85.3%. The watch loop (watcher.run_watch, 35% -> 97%)
+# is now driven via injected-stop tests for both the polling and watchfiles
+# backends; completion install, diff side-by-side/--out, and template edit
+# close the remaining command edges. Together with the TUI/benchmark harness
+# this lifts total coverage past 85%. Gate set with margin below the measured
+# value.
+fail_under = 85
 show_missing = true
 
 [tool.ruff]
