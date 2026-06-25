@@ -17,6 +17,7 @@ from promptgenie.commands.doctor import doctor_cmd
 from promptgenie.commands.eval_cmd import eval_group
 from promptgenie.commands.evaluate import evaluate_cmd
 from promptgenie.commands.generate import generate
+from promptgenie.commands.graph_cmd import graph_cmd
 from promptgenie.commands.history_cmd import history_group
 from promptgenie.commands.interactive import interactive_cmd
 from promptgenie.commands.lint import lint_cmd
@@ -94,6 +95,7 @@ cli.add_command(vars_group)
 cli.add_command(compress_cmd)
 cli.add_command(optimize_cmd)
 cli.add_command(tokens_cmd)
+cli.add_command(graph_cmd)
 # Phase 3 — SecDevOps Guardrails
 cli.add_command(analyze_cmd)
 cli.add_command(redact_cmd)
