@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pack list` crashed on packs with empty list fields.** A scaffolded pack (`pack init`) seeds list fields with `- # comment` placeholder lines that YAML parses as `None`; `pack list` then did `", ".join(stack)` and raised `TypeError: sequence item 0: expected str instance, NoneType found`. Context-pack list fields are now normalised on load (`_clean_str_list` in `core/context_packs.py`, applied in `list_packs` and `load_pack`), dropping `None`/blank entries — which also stops `pack show`/`render_pack` from emitting `- None` lines. 5 regression tests in `tests/test_pack_none_field.py`.
+
 ### Tests
 
 - **Coverage uplift ~75% → ~82% (CI gate 81%).** Added a reusable async test harness (`tests/test_providers_async.py`) that mocks `httpx` and the `anthropic` SDK so the provider `complete()`/`stream()` coroutines and the non-dry-run `run_engine` send path run fully offline (`providers.py` 53% → 81%). Added `tests/test_coverage_boost*.py` covering the matrix evaluator via a fake provider, `registry` install with real SHA-256 verification, `gh_reporter`, change detection (mocked git), completion internals, plugin core, keyring-backed credentials (mocked), and ~50 command edge paths. Suite is now **1,541 tests**. The remaining gap to 85% is the Textual TUI (needs the `[tui]` extra in CI + a small refactor to make the App testable) and the benchmark command / watch loop.
