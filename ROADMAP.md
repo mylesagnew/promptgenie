@@ -297,7 +297,10 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 | Native token compression (`compress`/`optimize`) | ✅ Shipped (Unreleased) | 30 | — |
 | NousResearch Hermes integration (profile + provider) | ✅ Shipped (Unreleased) | 11 | — |
 | Security hardening (history privacy, extension bound, SBOM attest, version-drift + gitleaks CI, threat model) | ✅ Shipped (Unreleased) | 50 | — |
-| Coverage uplift — async-provider harness + command tests (~75%→~82%) | ✅ Shipped (Unreleased) | ~130 | **1541** |
+| Coverage uplift — async-provider harness + command tests (~75%→~82%) | ✅ Shipped (Unreleased) | ~130 | 1541 |
+| `promptgenie tokens` — read-only savings inspector | ✅ Shipped (Unreleased) | 6 | — |
+| Pack fixes (`pack list` None crash, `pack init` location) | ✅ Shipped (Unreleased) | 10 | — |
+| Coverage uplift — Textual TUI + benchmark command (~82%→~83%) | ✅ Shipped (Unreleased) | ~20 | **1571** |
 | Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*

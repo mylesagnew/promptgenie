@@ -195,7 +195,8 @@ def _run_palette_tui(items: list[PaletteItem]) -> str | None:
             Binding("enter", "confirm", "Select", show=True),
         ]
 
-        query: reactive[str] = reactive("")
+        # NB: not named `query` — that shadows textual's DOMNode.query() method.
+        query_text: reactive[str] = reactive("")
 
         def __init__(self, catalogue: list[PaletteItem]) -> None:
             super().__init__()
@@ -214,7 +215,7 @@ def _run_palette_tui(items: list[PaletteItem]) -> str | None:
             self.query_one("#search-bar", Input).focus()
 
         def on_input_changed(self, event: Input.Changed) -> None:
-            self.query = event.value
+            self.query_text = event.value
             self._filtered = _filter_items(self._catalogue, event.value)
             self._refresh_list()
 

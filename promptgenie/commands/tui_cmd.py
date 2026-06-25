@@ -79,6 +79,22 @@ def _run_tui(
     read_only: bool,
 ) -> None:
     """Build and run the Textual app (only called when textual is available)."""
+    build_tui_app(file=file, provider=provider, model=model, read_only=read_only).run()
+
+
+def build_tui_app(
+    *,
+    file: str | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    read_only: bool = False,
+):  # returns a textual App instance
+    """Construct (but do not run) the PromptGenie Textual app.
+
+    Importing textual is deferred to call time so the rest of the CLI works
+    without the ``[tui]`` extra. Returning the app (rather than running it)
+    makes the TUI drivable from tests via ``app.run_test()``.
+    """
     from pathlib import Path
 
     from textual.app import App, ComposeResult
@@ -142,8 +158,8 @@ def _run_tui(
         token_count: reactive[int] = reactive(0)
         current_file: reactive[str] = reactive("")
 
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            super().__init__(*args, **kwargs)
+        def __init__(self) -> None:
+            super().__init__()
             self._file: Path | None = Path(file) if file else None
             self._provider = provider
             self._model = model
@@ -273,4 +289,4 @@ def _run_tui(
                     return
             log.write("[dim]No adjacent .eval.yaml found. Create one to enable Ctrl+T.[/dim]")
 
-    PromptGenieApp().run()
+    return PromptGenieApp()
