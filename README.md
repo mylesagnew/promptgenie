@@ -397,7 +397,7 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 
 ## Command reference
 
-The full per-command reference — every flag and example for `generate`, `lint`, `scan`, `policy`, `diff`, `adapt`, `compress`/`optimize`, `test`, `benchmark`, `workflow`, `pack`, `ci`, `spec`, `run`, `context`, `provider` (incl. **Hermes**), `vars`, `evaluate`/`eval`, `analyze`, `redact`, `redteam`, `auth`, `audit`, `config`, `tui`, `wizard`, `palette`, `history`, `watch`, `template`, `lock`, `plugin` — lives in **[docs/commands.md](docs/commands.md)**. Run `promptgenie --help` for the live list.
+The full per-command reference — every flag and example for `generate`, `lint`, `scan`, `policy`, `diff`, `adapt`, `compress`/`optimize`, `tokens`, `test`, `benchmark`, `workflow`, `pack`, `ci`, `spec`, `run`, `context`, `provider` (incl. **Hermes**), `vars`, `evaluate`/`eval`, `analyze`, `redact`, `redteam`, `auth`, `audit`, `config`, `tui`, `wizard`, `palette`, `history`, `watch`, `template`, `lock`, `plugin` — lives in **[docs/commands.md](docs/commands.md)**. Run `promptgenie --help` for the live list.
 
 ---
 
@@ -572,7 +572,7 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 - [x] Policy-as-code: `policy` command with `--max-risk`, `--min-score`, `--format sarif`, expired allowlist reporting
 - [x] Registry hardening: SHA-256 checksums required, HTTPS-only, 1 MiB download cap, fail-closed YAML parsing
 - [x] VS Code / Cursor extension: inline diagnostics, status bar score, command palette, bounded subprocess output
-- [x] Native token compression (`compress` / `optimize`) — content-routed, fence-aware, dependency-free
+- [x] Native token compression (`compress` / `optimize`) — content-routed, fence-aware, dependency-free — plus `tokens` (read-only savings inspector)
 - [x] NousResearch Hermes integration — `hermes` target profile + built-in OpenAI-compatible provider
 - [x] Security posture: metadata-only run history by default, SBOM attestation + build provenance, CodeQL, OpenSSF Scorecard, Dependabot, and a formal [THREAT_MODEL.md](THREAT_MODEL.md)
 - [x] 1,541 tests · ~82% coverage (gate 81%) · 0 ruff issues · 0 mypy errors
