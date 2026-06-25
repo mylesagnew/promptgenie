@@ -13,6 +13,9 @@ jobs:
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # Safety net: a hung test (e.g. a TUI launched without a TTY) should fail
+    # in minutes rather than burn the runner until GitHub's 6-hour default.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

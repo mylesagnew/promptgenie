@@ -294,7 +294,12 @@ def palette_cmd(no_tui: bool, print_only: bool) -> None:
 
     selected: str | None = None
 
-    if no_tui:
+    # The full-screen Textual palette needs an interactive terminal. When stdin
+    # is not a TTY (CI, pipes, test harnesses) launching it would block forever
+    # with no driver, so fall back to the readline picker in that case.
+    import sys
+
+    if no_tui or not sys.stdin.isatty():
         selected = _run_palette_readline(catalogue)
     else:
         try:
