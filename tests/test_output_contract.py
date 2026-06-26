@@ -47,7 +47,7 @@ class TestParsePayload:
         assert err is None and obj == {"a": 1}
 
     def test_fenced_json(self):
-        text = "Here you go:\n```json\n{\"a\": 1}\n```\n"
+        text = 'Here you go:\n```json\n{"a": 1}\n```\n'
         obj, err = parse_payload(text, "json")
         assert err is None and obj == {"a": 1}
 

@@ -331,9 +331,7 @@ def _heading_matches(heading: str, keywords: frozenset[str]) -> bool:
 def _make_section(heading: str | None, level: int, block: str) -> _Section:
     protected = heading is not None and _heading_matches(heading, _PROTECT_KEYWORDS)
     low_value = (
-        heading is not None
-        and not protected
-        and _heading_matches(heading, _LOW_VALUE_KEYWORDS)
+        heading is not None and not protected and _heading_matches(heading, _LOW_VALUE_KEYWORDS)
     )
     return _Section(
         heading=heading,
@@ -387,9 +385,7 @@ def _split_sections(text: str) -> list[_Section]:
     return [_make_section(h, lv, "".join(ls)) for h, lv, ls in blocks]
 
 
-def prune_sections(
-    text: str, max_tokens: int | None = None
-) -> tuple[str, list[DroppedSection]]:
+def prune_sections(text: str, max_tokens: int | None = None) -> tuple[str, list[DroppedSection]]:
     """Drop low-value sections from *text*, returning ``(new_text, dropped)``.
 
     Behaviour:

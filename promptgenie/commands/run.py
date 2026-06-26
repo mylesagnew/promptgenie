@@ -530,21 +530,19 @@ def _validate_output_contract(
 
     fmt = output_mode or spec.output_contract.format or "json"
     obj, parse_err = parse_payload(response, fmt)
-    errors = [f"could not parse response as {fmt}: {parse_err}"] if parse_err else (
-        validate_payload(obj, schema)
+    errors = (
+        [f"could not parse response as {fmt}: {parse_err}"]
+        if parse_err
+        else (validate_payload(obj, schema))
     )
 
     if ndjson_mode:
         print(
-            json.dumps(
-                {"event": "output_contract", "valid": not errors, "errors": errors}
-            ),
+            json.dumps({"event": "output_contract", "valid": not errors, "errors": errors}),
             flush=True,
         )
     elif errors:
-        diag_console.print(
-            f"[red]✗ Output contract violated[/red] — {len(errors)} error(s):"
-        )
+        diag_console.print(f"[red]✗ Output contract violated[/red] — {len(errors)} error(s):")
         for e in errors:
             diag_console.print(f"  [red]•[/red] {e}")
     else:

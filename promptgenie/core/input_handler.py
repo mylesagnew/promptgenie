@@ -385,9 +385,7 @@ def _collect_zip_member(
         return
 
     content = data.decode("utf-8", errors="replace")
-    result.files.append(
-        CollectedFile(path=display_path, content=content, size_bytes=len(data))
-    )
+    result.files.append(CollectedFile(path=display_path, content=content, size_bytes=len(data)))
     result.total_bytes += len(data)
 
 

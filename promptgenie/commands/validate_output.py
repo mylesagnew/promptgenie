@@ -67,9 +67,7 @@ def _infer_format(file: str, override: str) -> str:
     show_default=True,
     help="Report format.",
 )
-def validate_output_cmd(
-    file: str, schema_path: str, input_format: str, output_format: str
-) -> None:
+def validate_output_cmd(file: str, schema_path: str, input_format: str, output_format: str) -> None:
     """Validate a model response against a JSON Schema.
 
     Exits 0 when the payload is valid, 1 when it violates the schema, and 2 on

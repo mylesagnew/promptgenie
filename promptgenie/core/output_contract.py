@@ -203,7 +203,9 @@ def _builtin_validate(obj: Any, schema: dict[str, Any], path: str, errors: list[
             for i, el in enumerate(obj):
                 _builtin_validate(el, items, f"{path}[{i}]", errors)
         if "minItems" in schema and len(obj) < schema["minItems"]:
-            errors.append(f"{loc}: has {len(obj)} item(s), fewer than minItems={schema['minItems']}")
+            errors.append(
+                f"{loc}: has {len(obj)} item(s), fewer than minItems={schema['minItems']}"
+            )
         if "maxItems" in schema and len(obj) > schema["maxItems"]:
             errors.append(f"{loc}: has {len(obj)} item(s), more than maxItems={schema['maxItems']}")
 
