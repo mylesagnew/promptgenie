@@ -125,6 +125,9 @@ jobs:
       - name: Lint TypeScript
         run: npm run lint
 
+      - name: Run unit tests
+        run: npm test
+
       - name: Upload compiled extension artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -7,4 +7,5 @@ tsconfig.json
 **/*.map
 **/*.ts
 !out/**
+out/test/**
 node_modules/**
