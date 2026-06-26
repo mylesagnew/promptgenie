@@ -24,6 +24,7 @@ from typing import Any
 import click
 
 from promptgenie.core.errors import (
+    EXIT_FAILURE,
     EXIT_OK,
     EXIT_USAGE,
     PromptGenieError,
@@ -236,6 +237,22 @@ def _trust_gate(
     is_flag=True,
     help="Print the assembled context before sending (dry-run style).",
 )
+@click.option(
+    "--schema",
+    "schema_path",
+    default=None,
+    type=click.Path(),
+    help="Validate the response against this JSON Schema (overrides the spec's "
+    "output_contract.schema). Exits 1 if the output does not conform.",
+)
+@click.option(
+    "--output-mode",
+    "output_mode",
+    type=click.Choice(["json", "yaml", "markdown", "text", "code"], case_sensitive=False),
+    default=None,
+    help="How to parse the response for schema validation "
+    "(default: the spec's output_contract.format, else json).",
+)
 def run_cmd(
     spec_file: str,
     var_list: tuple[str, ...],
@@ -263,6 +280,8 @@ def run_cmd(
     output_format: str,
     tee_file: str | None,
     show_context: bool,
+    schema_path: str | None,
+    output_mode: str | None,
 ) -> None:
     """Execute a PromptSpec end-to-end.
 
@@ -455,3 +474,79 @@ def run_cmd(
         )
         if tee_file:
             diag_console.print(f"[dim]Response written to: {tee_file}[/dim]")
+
+    # ---- output-contract validation ----
+    _validate_output_contract(
+        spec=spec,
+        response=result.response,
+        schema_path=schema_path,
+        output_mode=output_mode,
+        ndjson_mode=ndjson_mode,
+    )
+
+
+def _validate_output_contract(
+    *,
+    spec: PromptSpec,
+    response: str,
+    schema_path: str | None,
+    output_mode: str | None,
+    ndjson_mode: bool,
+) -> None:
+    """Validate *response* against an output-contract schema, if one applies.
+
+    The schema comes from ``--schema`` (a file) or the spec's
+    ``output_contract.schema`` (an inline mapping or a file path). When neither
+    is present this is a no-op. Exits ``EXIT_FAILURE`` if the output does not
+    conform.
+    """
+    from promptgenie.core.output_contract import (
+        OutputContractError,
+        load_schema,
+        parse_payload,
+        validate_payload,
+    )
+
+    schema: dict[str, Any] | None = None
+    if schema_path:
+        try:
+            schema = load_schema(schema_path)
+        except OutputContractError as exc:
+            diag_console.print(f"[red]Error:[/red] {exc}")
+            raise SystemExit(EXIT_USAGE) from exc
+    else:
+        oc_schema = spec.output_contract.schema
+        if isinstance(oc_schema, dict) and oc_schema:
+            schema = oc_schema
+        elif isinstance(oc_schema, str) and oc_schema:
+            try:
+                schema = load_schema(oc_schema)
+            except OutputContractError as exc:
+                diag_console.print(f"[red]Error:[/red] {exc}")
+                raise SystemExit(EXIT_USAGE) from exc
+
+    if schema is None:
+        return  # no contract to enforce
+
+    fmt = output_mode or spec.output_contract.format or "json"
+    obj, parse_err = parse_payload(response, fmt)
+    errors = (
+        [f"could not parse response as {fmt}: {parse_err}"]
+        if parse_err
+        else (validate_payload(obj, schema))
+    )
+
+    if ndjson_mode:
+        print(
+            json.dumps({"event": "output_contract", "valid": not errors, "errors": errors}),
+            flush=True,
+        )
+    elif errors:
+        diag_console.print(f"[red]✗ Output contract violated[/red] — {len(errors)} error(s):")
+        for e in errors:
+            diag_console.print(f"  [red]•[/red] {e}")
+    else:
+        diag_console.print("[green]✓ Output conforms to the schema.[/green]")
+
+    if errors:
+        raise SystemExit(EXIT_FAILURE)
