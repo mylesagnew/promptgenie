@@ -183,6 +183,8 @@ promptgenie graph --format json
 
 Nodes: PromptSpec, Template, Context pack, Policy, Provider/model, Eval suite. Used in CI reports and dependency-aware `--changed` filtering.
 
+**Shipped:** `promptgenie graph` (`promptgenie/core/graph.py`, `promptgenie/commands/graph_cmd.py`). Builds a typed node/edge graph — `spec`, `workflow`, `step`, `template`, `target`, `provider`, `model`, `policy`, `context`, `schema` — from one or more spec/workflow files, or by discovering every recognisable spec/workflow under `--root`. Shared dependencies (a provider/template/policy used by many specs) de-duplicate to a single node; workflow `depends_on` becomes step→step edges. Renders to `--format mermaid|dot|json`; `--out FILE` to write. Dependency-free. 15 tests in `tests/test_graph.py`.
+
 ---
 
 ### `promptgenie fmt`
