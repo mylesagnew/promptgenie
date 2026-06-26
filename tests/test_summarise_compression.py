@@ -99,9 +99,7 @@ class TestBudgetMode:
         # Two droppable sections; a tiny budget forces both to go, low-value first.
         body = "word " * 200
         text = (
-            "# Task\n\nkeep this objective.\n\n"
-            f"## Examples\n\n{body}\n\n"
-            f"## Background\n\n{body}\n"
+            f"# Task\n\nkeep this objective.\n\n## Examples\n\n{body}\n\n## Background\n\n{body}\n"
         )
         new, dropped = prune_sections(text, max_tokens=20)
         reasons = {d.heading: d.reason for d in dropped}
@@ -161,9 +159,7 @@ class TestCompressCLISummarise:
     def test_cli_summarise_json_reports_dropped(self, tmp_path):
         f = tmp_path / "p.md"
         f.write_text("# Task\n\ndo it\n\n## Changelog\n\n- v1\n- v2\n- v3\n")
-        res = CliRunner().invoke(
-            cli, ["compress", str(f), "--summarise", "--format", "json"]
-        )
+        res = CliRunner().invoke(cli, ["compress", str(f), "--summarise", "--format", "json"])
         assert res.exit_code == 0
         data = json.loads(res.stdout)
         headings = [d["heading"] for d in data["dropped_sections"]]

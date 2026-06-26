@@ -441,12 +441,7 @@ def _safe_pack_id(raw_id: object) -> str:
     traverse directories or escape the install dir is rejected.
     """
     pack_id = str(raw_id).strip()
-    if (
-        not pack_id
-        or "/" in pack_id
-        or "\\" in pack_id
-        or not _SAFE_PACK_ID_RE.match(pack_id)
-    ):
+    if not pack_id or "/" in pack_id or "\\" in pack_id or not _SAFE_PACK_ID_RE.match(pack_id):
         raise ValueError(f"Unsafe or invalid pack id derived from tarball: {raw_id!r}")
     return pack_id
 

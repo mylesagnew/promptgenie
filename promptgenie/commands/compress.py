@@ -142,9 +142,7 @@ def _build_command(name: str) -> click.Command:
             raise SystemExit(EXIT_USAGE) from exc
 
         try:
-            result = compress(
-                text, techniques=selected, max_tokens=max_tokens, summarise=summarise
-            )
+            result = compress(text, techniques=selected, max_tokens=max_tokens, summarise=summarise)
         except UnknownTechniqueError as exc:
             diag_console.print(f"[red]Error:[/red] {exc}")
             raise SystemExit(EXIT_USAGE) from exc
