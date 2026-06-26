@@ -12,7 +12,7 @@ from promptgenie.core.fileio import safe_read_yaml
 
 if TYPE_CHECKING:
     from promptgenie.core.linter import LintRule
-    from promptgenie.core.scanner import ScanRule
+    from promptgenie.core.scanner import FindingRisk, ScanRule
 
 
 @dataclass
@@ -70,7 +70,7 @@ class ScannerConfig:
     allowlist: list[AllowlistEntry] = field(default_factory=list)
     disabled_rules: list[str] = field(default_factory=list)
     enabled_rules: list[str] = field(default_factory=list)  # whitelist — only these codes run
-    severity_overrides: dict[str, str] = field(default_factory=dict)
+    severity_overrides: dict[str, FindingRisk] = field(default_factory=dict)
     custom_scan_rules: list[ScanRule] = field(default_factory=list)
     rules_dirs: list[str] = field(default_factory=list)  # extra rule pack directories
 
@@ -186,9 +186,6 @@ class PromptGenieConfig:
     security: SecurityConfig = field(default_factory=SecurityConfig)
 
 
-_VALID_RISK_LEVELS = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
-
-
 def _parse_allowlist(raw_entries: list[Any]) -> list[AllowlistEntry]:
     entries: list[AllowlistEntry] = []
     for item in raw_entries:
@@ -212,7 +209,7 @@ def _parse_allowlist(raw_entries: list[Any]) -> list[AllowlistEntry]:
 
 
 def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
-    from promptgenie.core.scanner import ScanRule, validate_pattern
+    from promptgenie.core.scanner import ScanRule, coerce_confidence, coerce_finding_risk, validate_pattern
 
     rules = []
     for entry in raw_rules:
@@ -220,22 +217,15 @@ def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
             raise ValueError(f"Custom scan rule must be a mapping, got {type(entry).__name__}.")
         rule_id = str(entry.get("id", ""))
         pattern = str(entry.get("pattern", ""))
-        risk = str(entry.get("risk", "MEDIUM")).upper()
-        confidence = str(entry.get("confidence", "MEDIUM")).upper()
         if not rule_id:
             raise ValueError(f"Custom scan rule missing 'id': {entry!r}")
         if not pattern:
             raise ValueError(f"Custom scan rule {rule_id!r} missing 'pattern'.")
-        if risk not in _VALID_RISK_LEVELS:
-            raise ValueError(
-                f"Custom scan rule {rule_id!r}: invalid risk {risk!r}. "
-                f"Must be one of {sorted(_VALID_RISK_LEVELS)}."
-            )
-        if confidence not in _VALID_CONFIDENCE:
-            raise ValueError(
-                f"Custom scan rule {rule_id!r}: invalid confidence {confidence!r}. "
-                f"Must be one of {sorted(_VALID_CONFIDENCE)}."
-            )
+        try:
+            risk = coerce_finding_risk(str(entry.get("risk", "MEDIUM")), rule_id)
+            confidence = coerce_confidence(str(entry.get("confidence", "MEDIUM")), rule_id)
+        except ValueError as exc:
+            raise ValueError(f"Custom scan rule {exc}") from exc
         try:
             validate_pattern(pattern, rule_id)
         except ValueError as exc:
@@ -245,8 +235,8 @@ def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
                 id=rule_id,
                 category=str(entry.get("category", "custom")),
                 pattern=pattern,
-                risk=risk,  # type: ignore[arg-type]
-                confidence=confidence,  # type: ignore[arg-type]
+                risk=risk,
+                confidence=confidence,
                 message=str(entry.get("message", "")),
                 recommendation=str(entry.get("recommendation", "")),
                 false_positive_note=str(entry.get("false_positive_note", "")),
@@ -257,8 +247,8 @@ def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
 
 
 def _parse_custom_lint_rules(raw_rules: list[Any]) -> list[LintRule]:
-    from promptgenie.core.linter import LintRule
-    from promptgenie.core.scanner import validate_pattern
+    from promptgenie.core.linter import LintRule, coerce_severity
+    from promptgenie.core.scanner import coerce_confidence, validate_pattern
 
     rules = []
     for entry in raw_rules:
@@ -266,22 +256,15 @@ def _parse_custom_lint_rules(raw_rules: list[Any]) -> list[LintRule]:
             raise ValueError(f"Custom lint rule must be a mapping, got {type(entry).__name__}.")
         rule_id = str(entry.get("id", ""))
         pattern = str(entry.get("pattern", ""))
-        severity = str(entry.get("severity", "MEDIUM")).upper()
-        confidence = str(entry.get("confidence", "MEDIUM")).upper()
         if not rule_id:
             raise ValueError(f"Custom lint rule missing 'id': {entry!r}")
         if not pattern:
             raise ValueError(f"Custom lint rule {rule_id!r} missing 'pattern'.")
-        if severity not in _VALID_SEVERITY:
-            raise ValueError(
-                f"Custom lint rule {rule_id!r}: invalid severity {severity!r}. "
-                f"Must be one of {sorted(_VALID_SEVERITY)}."
-            )
-        if confidence not in _VALID_CONFIDENCE:
-            raise ValueError(
-                f"Custom lint rule {rule_id!r}: invalid confidence {confidence!r}. "
-                f"Must be one of {sorted(_VALID_CONFIDENCE)}."
-            )
+        try:
+            severity = coerce_severity(str(entry.get("severity", "MEDIUM")), rule_id)
+            confidence = coerce_confidence(str(entry.get("confidence", "MEDIUM")), rule_id)
+        except ValueError as exc:
+            raise ValueError(f"Custom lint rule {exc}") from exc
         try:
             validate_pattern(pattern, rule_id)
         except ValueError as exc:
@@ -291,8 +274,8 @@ def _parse_custom_lint_rules(raw_rules: list[Any]) -> list[LintRule]:
                 id=rule_id,
                 category=str(entry.get("category", "custom")),
                 pattern=pattern,
-                severity=severity,  # type: ignore[arg-type]
-                confidence=confidence,  # type: ignore[arg-type]
+                severity=severity,
+                confidence=confidence,
                 message=str(entry.get("message", "")),
                 suggestion=str(entry.get("suggestion", "")),
                 false_positive_note=str(entry.get("false_positive_note", "")),
@@ -304,15 +287,13 @@ def _parse_custom_lint_rules(raw_rules: list[Any]) -> list[LintRule]:
 
 
 def _parse_scanner(raw: dict[str, Any]) -> ScannerConfig:
-    overrides: dict[str, str] = {}
+    from promptgenie.core.scanner import FindingRisk, coerce_finding_risk
+
+    overrides: dict[str, FindingRisk] = {}
     for code, level in raw.get("severity_overrides", {}).items():
-        level_upper = str(level).upper()
-        if level_upper not in _VALID_RISK_LEVELS:
-            raise ValueError(
-                f"Invalid severity override for {code!r}: {level!r}. "
-                f"Must be one of {sorted(_VALID_RISK_LEVELS)}."
-            )
-        overrides[str(code)] = level_upper
+        overrides[str(code)] = coerce_finding_risk(
+            str(level), f"severity_overrides.{code}"
+        )
 
     return ScannerConfig(
         allowlist=_parse_allowlist(raw.get("allowlist", [])),
@@ -401,7 +382,7 @@ _LINTER_KEYS = frozenset(
 _ROUTING_KEYS = frozenset({"default", "rules"})
 _SECURITY_KEYS = frozenset({"airgap", "block_secrets", "redact_secrets", "store_history_content"})
 _VALID_RISK = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW"})
-_VALID_SEVERITY = frozenset({"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"})
+_VALID_SEVERITY = frozenset({"HIGH", "MEDIUM", "LOW", "INFO"})  # matches linter.Severity
 _VALID_CONFIDENCE = frozenset({"HIGH", "MEDIUM", "LOW"})
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 

@@ -286,13 +286,14 @@ def run_pack_unit_test(pack_path: str | Path, test_path: str | Path) -> PackTest
     for r in pack_data.get("rules", []):
         if not isinstance(r, dict):
             continue
+        from promptgenie.core.scanner import coerce_confidence, coerce_finding_risk
         pack_rules.append(
             ScanRule(
                 id=str(r.get("id", "PACK_RULE")),
                 category=str(r.get("category", "custom")),
                 pattern=str(r.get("pattern", "")),
-                risk=str(r.get("risk", "MEDIUM")),  # type: ignore[arg-type]
-                confidence=str(r.get("confidence", "MEDIUM")),  # type: ignore[arg-type]
+                risk=coerce_finding_risk(str(r.get("risk", "MEDIUM"))),
+                confidence=coerce_confidence(str(r.get("confidence", "MEDIUM"))),
                 message=str(r.get("message", "")),
                 recommendation=str(r.get("recommendation", "")),
             )

@@ -53,6 +53,9 @@ from urllib.parse import urlparse
 if TYPE_CHECKING:
     import tarfile
 
+    from promptgenie.core.linter import LintRule
+    from promptgenie.core.scanner import ScanRule
+
 from promptgenie.core.fileio import safe_read_yaml, safe_write_text
 
 # ── constants ─────────────────────────────────────────────────────────────────
@@ -586,7 +589,7 @@ def list_builtin_packs() -> list[InstalledPack]:
 # ── rule pack loading ─────────────────────────────────────────────────────────
 
 
-def load_scan_rules_from_dirs(dirs: list[str]) -> list:
+def load_scan_rules_from_dirs(dirs: list[str]) -> list[ScanRule]:
     """Load ScanRule objects from all *.yaml rule pack files in *dirs*.
 
     Silently skips non-existent directories and files with no ``scanner_rules``
@@ -619,7 +622,7 @@ def load_scan_rules_from_dirs(dirs: list[str]) -> list:
     return rules
 
 
-def load_lint_rules_from_dirs(dirs: list[str]) -> list:
+def load_lint_rules_from_dirs(dirs: list[str]) -> list[LintRule]:
     """Load LintRule objects from all *.yaml rule pack files in *dirs*.
 
     Silently skips non-existent directories and files with no ``lint_rules``

@@ -76,7 +76,7 @@ class TestConfigLoad:
             yaml.dump({"scanner": {"severity_overrides": {"SEC_001": "EXTREME"}}}, f)
             path = f.name
 
-        with pytest.raises(ValueError, match="Invalid severity override"):
+        with pytest.raises(ValueError, match="(?i)invalid risk.*severity_overrides"):
             load_config(path)
 
     def test_find_config_returns_none_when_absent(self):
@@ -399,7 +399,7 @@ class TestConfigCustomRuleErrors:
                 "scanner:\n  custom_rules:\n    - id: MY_001\n      pattern: 'foo'\n      risk: EXTREME\n      confidence: HIGH\n      message: m\n      recommendation: r\n"
             )
             path = f.name
-        with pytest.raises(ValueError, match="invalid risk"):
+        with pytest.raises(ValueError, match="(?i)invalid risk"):
             load_config(path)
 
     def test_custom_scan_rule_invalid_confidence_raises(self):
@@ -410,7 +410,7 @@ class TestConfigCustomRuleErrors:
                 "scanner:\n  custom_rules:\n    - id: MY_001\n      pattern: 'foo'\n      risk: HIGH\n      confidence: UNKNOWN\n      message: m\n      recommendation: r\n"
             )
             path = f.name
-        with pytest.raises(ValueError, match="invalid confidence"):
+        with pytest.raises(ValueError, match="(?i)invalid confidence"):
             load_config(path)
 
     def test_custom_lint_rule_not_a_dict_raises(self):
@@ -441,7 +441,7 @@ class TestConfigCustomRuleErrors:
                 "linter:\n  custom_rules:\n    - id: MY_L01\n      pattern: 'foo'\n      severity: EXTREME\n      confidence: HIGH\n      message: m\n"
             )
             path = f.name
-        with pytest.raises(ValueError, match="invalid severity"):
+        with pytest.raises(ValueError, match="(?i)invalid severity"):
             load_config(path)
 
 

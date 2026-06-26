@@ -2,7 +2,7 @@ import base64
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, TypeGuard, get_args
 
 if TYPE_CHECKING:
     from promptgenie.core.config import ScannerConfig
@@ -11,6 +11,40 @@ FindingRisk = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"]
 ScanRisk = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"]
 Risk = FindingRisk  # backwards-compat alias used by callers
 Confidence = Literal["HIGH", "MEDIUM", "LOW"]
+
+
+def _is_finding_risk(v: str) -> TypeGuard[FindingRisk]:
+    return v in get_args(FindingRisk)
+
+
+def coerce_finding_risk(raw: str, context: str = "") -> FindingRisk:
+    """Validate and narrow a raw string to ``FindingRisk``.
+
+    Raises ``ValueError`` on invalid input so callers get an explicit error
+    rather than a silent type mismatch at runtime.
+    """
+    upper = raw.strip().upper()
+    if not _is_finding_risk(upper):
+        ctx = f" ({context})" if context else ""
+        raise ValueError(
+            f"Invalid risk {raw!r}{ctx}; must be one of {', '.join(get_args(FindingRisk))}"
+        )
+    return upper
+
+
+def _is_confidence(v: str) -> TypeGuard[Confidence]:
+    return v in get_args(Confidence)
+
+
+def coerce_confidence(raw: str, context: str = "") -> Confidence:
+    """Validate and narrow a raw string to ``Confidence``."""
+    upper = raw.strip().upper()
+    if not _is_confidence(upper):
+        ctx = f" ({context})" if context else ""
+        raise ValueError(
+            f"Invalid confidence {raw!r}{ctx}; must be one of {', '.join(get_args(Confidence))}"
+        )
+    return upper
 
 # Maximum findings emitted per rule per scan (prevents finding-flood on adversarial input).
 MAX_FINDINGS_PER_RULE: int = 5
@@ -677,7 +711,7 @@ def scan(prompt: str, config: "ScannerConfig | None" = None) -> ScanResult:
                 continue
             if finding.code in cfg.severity_overrides:
                 finding = SecurityFinding(
-                    risk=cast(FindingRisk, cfg.severity_overrides[finding.code]),
+                    risk=cfg.severity_overrides[finding.code],
                     code=finding.code,
                     category=finding.category,
                     source=finding.source,

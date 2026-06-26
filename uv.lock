@@ -1525,6 +1525,9 @@ providers = [
     { name = "anthropic" },
     { name = "httpx" },
 ]
+schema = [
+    { name = "jsonschema" },
+]
 tokenizer = [
     { name = "tiktoken" },
 ]
@@ -1544,6 +1547,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.0" },
     { name = "cyclonedx-bom", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "httpx", marker = "extra == 'providers'", specifier = ">=0.27" },
+    { name = "jsonschema", marker = "extra == 'schema'", specifier = ">=4.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.10.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.0" },
@@ -1557,7 +1561,7 @@ requires-dist = [
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "watchfiles", marker = "extra == 'watch'", specifier = ">=0.21" },
 ]
-provides-extras = ["benchmark", "tokenizer", "providers", "tui", "watch", "dev"]
+provides-extras = ["benchmark", "tokenizer", "providers", "tui", "watch", "schema", "dev"]
 
 [[package]]
 name = "py-serializable"

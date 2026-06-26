@@ -1,12 +1,27 @@
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, TypeGuard, get_args
 
 if TYPE_CHECKING:
     from promptgenie.core.config import LinterConfig
 
 Severity = Literal["HIGH", "MEDIUM", "LOW", "INFO"]
 Confidence = Literal["HIGH", "MEDIUM", "LOW"]
+
+
+def _is_severity(v: str) -> TypeGuard[Severity]:
+    return v in get_args(Severity)
+
+
+def coerce_severity(raw: str, context: str = "") -> Severity:
+    """Validate and narrow a raw string to ``Severity``."""
+    upper = raw.strip().upper()
+    if not _is_severity(upper):
+        ctx = f" ({context})" if context else ""
+        raise ValueError(
+            f"Invalid severity {raw!r}{ctx}; must be one of {', '.join(get_args(Severity))}"
+        )
+    return upper
 
 
 def _offset_to_line_col(text: str, offset: int) -> tuple[int, int]:
@@ -337,11 +352,11 @@ def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
                 continue
             result.issues.append(
                 LintIssue(
-                    severity=cast(Severity, rule.severity),
+                    severity=rule.severity,
                     code=rule.id,
                     message=rule.message,
                     suggestion=rule.suggestion,
-                    confidence=cast(Confidence, rule.confidence),
+                    confidence=rule.confidence,
                     line=1,
                     col=1,
                 )
@@ -352,11 +367,11 @@ def lint(prompt: str, config: "LinterConfig | None" = None) -> LintResult:
             line, col = _offset_to_line_col(lower, matched.start())
             result.issues.append(
                 LintIssue(
-                    severity=cast(Severity, rule.severity),
+                    severity=rule.severity,
                     code=rule.id,
                     message=rule.message,
                     suggestion=rule.suggestion,
-                    confidence=cast(Confidence, rule.confidence),
+                    confidence=rule.confidence,
                     line=line,
                     col=col,
                 )

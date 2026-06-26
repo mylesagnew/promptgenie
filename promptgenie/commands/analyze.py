@@ -129,7 +129,7 @@ def analyze_cmd(
     if custom_rules_file and not no_scan:
         import yaml as _yaml
 
-        from promptgenie.core.scanner import ScanRule
+        from promptgenie.core.scanner import ScanRule, coerce_confidence, coerce_finding_risk
 
         try:
             raw_rules = _yaml.safe_load(Path(custom_rules_file).read_text(encoding="utf-8")) or {}
@@ -140,8 +140,8 @@ def analyze_cmd(
                         id=str(r.get("id", "CUSTOM")),
                         category=str(r.get("category", "custom")),
                         pattern=str(r.get("pattern", "")),
-                        risk=str(r.get("risk", "MEDIUM")),  # type: ignore[arg-type]
-                        confidence=str(r.get("confidence", "MEDIUM")),  # type: ignore[arg-type]
+                        risk=coerce_finding_risk(str(r.get("risk", "MEDIUM"))),
+                        confidence=coerce_confidence(str(r.get("confidence", "MEDIUM"))),
                         message=str(r.get("message", "Custom rule match.")),
                         recommendation=str(r.get("recommendation", "")),
                         use_original_text=bool(r.get("use_original_text", False)),
