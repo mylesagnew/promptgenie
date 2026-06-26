@@ -223,25 +223,25 @@ class TestAnthropicProvider:
             patch("builtins.__import__", side_effect=_block_anthropic),
             pytest.raises(ImportError, match="anthropic"),
         ):
-            AnthropicProvider(api_key="sk-test")
+            AnthropicProvider(api_key="unit-test-api-key")
 
     def test_judge_model_returns_default(self):
         mock_anthropic = MagicMock()
         with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
-            p = AnthropicProvider(api_key="sk-test")
+            p = AnthropicProvider(api_key="unit-test-api-key")
             assert "haiku" in p.judge_model()
 
     def test_estimate_cost_known_model(self):
         mock_anthropic = MagicMock()
         with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
-            p = AnthropicProvider(api_key="sk-test")
+            p = AnthropicProvider(api_key="unit-test-api-key")
             cost = p.estimate_cost("claude-sonnet-4-6", 1_000_000, 0, 0, 0)
             assert cost == pytest.approx(3.0, rel=0.01)
 
     def test_estimate_cost_unknown_model_falls_back(self):
         mock_anthropic = MagicMock()
         with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
-            p = AnthropicProvider(api_key="sk-test")
+            p = AnthropicProvider(api_key="unit-test-api-key")
             cost = p.estimate_cost("unknown-model-xyz", 0, 0, 0, 0)
             assert cost == 0.0
 

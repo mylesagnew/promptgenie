@@ -69,6 +69,14 @@ def _build_command(name: str) -> click.Command:
         help="Include the aggressive (mildly lossy) techniques on top of defaults.",
     )
     @click.option(
+        "--summarise",
+        "--summarize",
+        "summarise",
+        is_flag=True,
+        help="Drop low-value sections (examples, changelog, appendix…). With "
+        "--max-tokens, also drops other non-protected sections until the budget fits.",
+    )
+    @click.option(
         "--list-techniques",
         "list_techniques",
         is_flag=True,
@@ -94,6 +102,7 @@ def _build_command(name: str) -> click.Command:
         max_tokens: int | None,
         techniques: str | None,
         aggressive: bool,
+        summarise: bool,
         list_techniques: bool,
         output_format: str,
         diff: bool,
@@ -133,7 +142,9 @@ def _build_command(name: str) -> click.Command:
             raise SystemExit(EXIT_USAGE) from exc
 
         try:
-            result = compress(text, techniques=selected, max_tokens=max_tokens)
+            result = compress(
+                text, techniques=selected, max_tokens=max_tokens, summarise=summarise
+            )
         except UnknownTechniqueError as exc:
             diag_console.print(f"[red]Error:[/red] {exc}")
             raise SystemExit(EXIT_USAGE) from exc
@@ -155,6 +166,15 @@ def _build_command(name: str) -> click.Command:
                 "techniques": [
                     {"name": t.name, "occurrences": t.occurrences, "chars_saved": t.chars_saved}
                     for t in result.applied
+                ],
+                "dropped_sections": [
+                    {
+                        "heading": d.heading,
+                        "level": d.level,
+                        "tokens": d.tokens,
+                        "reason": d.reason,
+                    }
+                    for d in result.dropped_sections
                 ],
             }
             if not dry_run:
@@ -223,14 +243,21 @@ def _print_summary(file: str, result, pct: float) -> None:
         diag_console.print("  [red]⚠ token budget not met[/red]")
     elif result.budget_met is True:
         diag_console.print("  [green]✓ within token budget[/green]")
-    if not result.applied:
+    if not result.applied and not result.dropped_sections:
         diag_console.print("  [dim]No applicable techniques — already compact.[/dim]")
         return
-    diag_console.print("  techniques applied:")
-    for t in result.applied:
-        diag_console.print(
-            f"    • {t.name}: {t.occurrences} edit(s), {t.chars_saved} char(s) saved"
-        )
+    if result.applied:
+        diag_console.print("  techniques applied:")
+        for t in result.applied:
+            diag_console.print(
+                f"    • {t.name}: {t.occurrences} edit(s), {t.chars_saved} char(s) saved"
+            )
+    if result.dropped_sections:
+        diag_console.print("  sections dropped (summarise):")
+        for d in result.dropped_sections:
+            diag_console.print(
+                f"    • {'#' * d.level} {d.heading}: −{d.tokens} token(s) [{d.reason}]"
+            )
 
 
 compress_cmd = _build_command("compress")

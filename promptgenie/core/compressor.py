@@ -21,10 +21,16 @@ Two tiers, mirroring headroom's "safe by default, aggressive on request" split:
   ``max_tokens`` budget forces it: HTML-comment stripping, repeated-space
   collapse, consecutive-duplicate-line folding (build logs / stack traces).
 
+A third, structural phase — **summarisation** — drops whole low-value sections
+(examples, changelogs, appendices, log dumps) either unconditionally or, when a
+``max_tokens`` budget is set, until the document fits. It is opt-in
+(``summarise=True``), heuristic, and dependency-free — no LLM, no network.
+
 Public API
 ----------
-  ``compress(text, techniques=None, max_tokens=None)`` → CompressResult
-  ``CompressResult``                                   — result dataclass
+  ``compress(text, techniques=None, max_tokens=None, summarise=False)`` → CompressResult
+  ``prune_sections(text, max_tokens=None)`` → (new_text, list[DroppedSection])
+  ``CompressResult`` / ``DroppedSection``              — result dataclasses
   ``DEFAULT_TECHNIQUES`` / ``AGGRESSIVE_TECHNIQUES`` / ``ALL_TECHNIQUES``
   ``TECHNIQUES``                                       — name → metadata
 """
@@ -231,6 +237,237 @@ def _dedupe_log_lines(text: str) -> tuple[str, int]:
 
 
 # ---------------------------------------------------------------------------
+# Summarisation — heuristic low-value-section removal
+# ---------------------------------------------------------------------------
+#
+# Unlike the techniques above (which rewrite text in place), summarisation works
+# at the *section* level: it drops whole low-value sections — examples,
+# changelogs, appendices, log dumps — either unconditionally or, when a
+# ``max_tokens`` budget is set, until the document fits. It is fully
+# dependency-free and deterministic (no LLM, no network).
+
+_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
+
+# Heading keywords that mark a section as high-value — never dropped.
+_PROTECT_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "objective",
+        "task",
+        "instruction",
+        "scope",
+        "requirement",
+        "constraint",
+        "rule",
+        "role",
+        "system",
+        "persona",
+        "goal",
+        "deliverable",
+        "output",
+        "format",
+        "context",
+        "input",
+        "policy",
+        "forbidden",
+        "must",
+        "do not",
+        "guardrail",
+        "safety",
+    }
+)
+
+# Heading keywords that mark a section as low-value — dropped first.
+_LOW_VALUE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "example",
+        "appendix",
+        "changelog",
+        "change log",
+        "history",
+        "footnote",
+        "reference",
+        "acknowledg",
+        "license",
+        "licence",
+        "related work",
+        "further reading",
+        "see also",
+        "faq",
+        "troubleshooting",
+        "disclaimer",
+        "credits",
+        "contributing",
+        "table of contents",
+        "appendices",
+    }
+)
+
+
+@dataclass
+class DroppedSection:
+    """A section removed by summarisation."""
+
+    heading: str
+    level: int
+    tokens: int
+    reason: str  # "low_value" | "budget"
+
+
+@dataclass(frozen=True)
+class _Section:
+    heading: str | None  # heading text (without leading #), None for the preamble
+    level: int  # 0 for the preamble, 1–6 for ATX headings
+    text: str  # the full block, including the heading line
+    tokens: int
+    protected: bool
+    low_value: bool
+
+
+def _heading_matches(heading: str, keywords: frozenset[str]) -> bool:
+    hl = heading.lower()
+    return any(kw in hl for kw in keywords)
+
+
+def _make_section(heading: str | None, level: int, block: str) -> _Section:
+    protected = heading is not None and _heading_matches(heading, _PROTECT_KEYWORDS)
+    low_value = (
+        heading is not None
+        and not protected
+        and _heading_matches(heading, _LOW_VALUE_KEYWORDS)
+    )
+    return _Section(
+        heading=heading,
+        level=level,
+        text=block,
+        tokens=estimate_tokens(block),
+        protected=protected,
+        low_value=low_value,
+    )
+
+
+def _split_sections(text: str) -> list[_Section]:
+    """Split *text* into sections on ATX (``#``) headings, fence-aware.
+
+    The text before the first heading is the *preamble* (level 0, never
+    dropped). ``#`` lines inside fenced code blocks are not treated as headings.
+    """
+    lines = text.splitlines(keepends=True)
+    blocks: list[tuple[str | None, int, list[str]]] = []
+    cur_heading: str | None = None
+    cur_level = 0
+    cur_lines: list[str] = []
+    in_code = False
+    fence_marker = ""
+
+    for line in lines:
+        stripped = line.lstrip()
+        is_fence = stripped.startswith("```") or stripped.startswith("~~~")
+        if is_fence:
+            marker = stripped[:3]
+            if not in_code:
+                in_code, fence_marker = True, marker
+            elif marker == fence_marker:
+                in_code, fence_marker = False, ""
+            cur_lines.append(line)
+            continue
+
+        m = None if in_code else _HEADING_RE.match(line.rstrip("\r\n"))
+        if m:
+            if cur_lines or cur_heading is not None:
+                blocks.append((cur_heading, cur_level, cur_lines))
+            cur_heading = m.group(2).strip()
+            cur_level = len(m.group(1))
+            cur_lines = [line]
+        else:
+            cur_lines.append(line)
+
+    if cur_lines or cur_heading is not None:
+        blocks.append((cur_heading, cur_level, cur_lines))
+
+    return [_make_section(h, lv, "".join(ls)) for h, lv, ls in blocks]
+
+
+def prune_sections(
+    text: str, max_tokens: int | None = None
+) -> tuple[str, list[DroppedSection]]:
+    """Drop low-value sections from *text*, returning ``(new_text, dropped)``.
+
+    Behaviour:
+
+    * ``max_tokens is None`` — unconditionally remove sections whose heading
+      looks low-value (examples, changelog, appendix, …).
+    * ``max_tokens`` set — remove low-value sections first, then other
+      non-protected sections (largest first) until the document fits the budget,
+      or there is nothing left to drop.
+
+    A heading drops together with its descendant subsections. A section (or
+    subtree) containing any protected heading is never dropped.
+    """
+    sections = _split_sections(text)
+    n = len(sections)
+    heading_idx = [i for i in range(n) if sections[i].heading is not None]
+
+    def subtree_end(i: int) -> int:
+        level = sections[i].level
+        j = i + 1
+        while j < n and sections[j].level > level:
+            j += 1
+        return j
+
+    ranges = {i: subtree_end(i) for i in heading_idx}
+
+    def subtree_protected(i: int) -> bool:
+        return any(sections[k].protected for k in range(i, ranges[i]))
+
+    candidates = [i for i in heading_idx if not subtree_protected(i)]
+    drop_set: set[int] = set()
+    dropped: list[DroppedSection] = []
+    remaining = estimate_tokens(text)
+
+    def _drop(order: list[int], reason: str, budgeted: bool) -> None:
+        nonlocal remaining
+        for i in order:
+            if i in drop_set:
+                continue  # already removed as part of an ancestor subtree
+            if budgeted and remaining <= max_tokens:  # type: ignore[operator]
+                return
+            end = ranges[i]
+            toks = sum(sections[k].tokens for k in range(i, end) if k not in drop_set)
+            for k in range(i, end):
+                drop_set.add(k)
+            dropped.append(
+                DroppedSection(
+                    heading=sections[i].heading or "",
+                    level=sections[i].level,
+                    tokens=toks,
+                    reason=reason,
+                )
+            )
+            remaining -= toks
+
+    low_value = sorted(
+        (i for i in candidates if sections[i].low_value),
+        key=lambda i: -sum(sections[k].tokens for k in range(i, ranges[i])),
+    )
+    others = sorted(
+        (i for i in candidates if not sections[i].low_value),
+        key=lambda i: -sum(sections[k].tokens for k in range(i, ranges[i])),
+    )
+
+    if max_tokens is None:
+        _drop(low_value, reason="low_value", budgeted=False)
+    elif remaining > max_tokens:
+        _drop(low_value, reason="low_value", budgeted=True)
+        _drop(others, reason="budget", budgeted=True)
+
+    if not drop_set:
+        return text, []
+
+    new_text = "".join(sections[k].text for k in range(n) if k not in drop_set)
+    return new_text, dropped
+
+
+# ---------------------------------------------------------------------------
 # Technique registry
 # ---------------------------------------------------------------------------
 
@@ -305,6 +542,7 @@ class CompressResult:
     tokens_after: int
     applied: list[TechniqueResult] = field(default_factory=list)
     budget_met: bool | None = None  # None when no max_tokens budget was set
+    dropped_sections: list[DroppedSection] = field(default_factory=list)
 
     @property
     def chars_before(self) -> int:
@@ -360,6 +598,7 @@ def compress(
     text: str,
     techniques: list[str] | None = None,
     max_tokens: int | None = None,
+    summarise: bool = False,
 ) -> CompressResult:
     """Compress *text*, returning a :class:`CompressResult`.
 
@@ -373,6 +612,13 @@ def compress(
     max_tokens:
         Optional token budget. When set, all techniques are eligible and
         ``CompressResult.budget_met`` reports whether the result fits.
+    summarise:
+        When ``True``, run heuristic low-value-section removal after the
+        in-place techniques. Without a *max_tokens* budget this drops only
+        sections whose heading looks low-value (examples, changelog, …); with a
+        budget it additionally drops other non-protected sections (largest
+        first) until the document fits. Dropped sections are reported on
+        ``CompressResult.dropped_sections``.
 
     Raises
     ------
@@ -398,6 +644,14 @@ def compress(
             )
             current = new_text
 
+    dropped_sections: list[DroppedSection] = []
+    if summarise:
+        pruned, dropped_sections = prune_sections(current, max_tokens)
+        if dropped_sections:
+            # Tidy up blank lines left where sections were removed.
+            pruned, _ = _collapse_blank_lines(pruned)
+            current = pruned
+
     tokens_after = estimate_tokens(current)
     budget_met = None if max_tokens is None else tokens_after <= max_tokens
 
@@ -408,4 +662,5 @@ def compress(
         tokens_after=tokens_after,
         applied=applied,
         budget_met=budget_met,
+        dropped_sections=dropped_sections,
     )

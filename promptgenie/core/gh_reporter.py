@@ -24,12 +24,38 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 
 def is_github_actions() -> bool:
     """Return True when running inside a GitHub Actions workflow."""
     return os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+
+
+def _confine_to_runner_temp(path: str) -> str | None:
+    """Canonicalise *path* and confine it to the GitHub runner temp area.
+
+    ``GITHUB_STEP_SUMMARY`` is read from the environment and is therefore
+    attacker-influenceable inside a workflow. Before appending to it we resolve
+    the path (following ``..`` and symlinks) and require the result to live
+    inside ``$RUNNER_TEMP`` — the directory GitHub uses for file-command files
+    such as the step summary. Anything that escapes that root, or a missing
+    ``RUNNER_TEMP``, yields ``None`` so the caller refuses to write (CWE-23).
+    """
+    runner_temp = os.environ.get("RUNNER_TEMP")
+    if not runner_temp:
+        return None
+    try:
+        resolved = Path(path).resolve()
+        root = Path(runner_temp).resolve()
+    except OSError:
+        return None
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        return None
+    return str(resolved)
 
 
 # ---------------------------------------------------------------------------
@@ -110,11 +136,25 @@ class GHReporter:
     # ── Step summary ─────────────────────────────────────────────────────────
 
     def write_step_summary(self, markdown: str) -> None:
-        """Append *markdown* to GITHUB_STEP_SUMMARY file."""
+        """Append *markdown* to the GITHUB_STEP_SUMMARY file.
+
+        When running inside a GitHub Actions workflow the destination is
+        canonicalised and confined to ``$RUNNER_TEMP`` first; a path that
+        escapes that area is refused rather than written (CWE-23 path
+        traversal). Outside a workflow the configured path is used as-is.
+        """
         if not self._summary_path:
             return
+
+        target = self._summary_path
+        if is_github_actions():
+            confined = _confine_to_runner_temp(self._summary_path)
+            if confined is None:
+                return  # outside the trusted runner temp area — refuse to write
+            target = confined
+
         try:
-            with open(self._summary_path, "a", encoding="utf-8") as fh:
+            with open(target, "a", encoding="utf-8") as fh:
                 fh.write(markdown)
                 if not markdown.endswith("\n"):
                     fh.write("\n")
