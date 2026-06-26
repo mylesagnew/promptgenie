@@ -103,9 +103,7 @@ class Graph:
     def to_json(self) -> dict[str, Any]:
         return {
             "schema_version": "1.0",
-            "nodes": [
-                {"id": n.id, "kind": n.kind, "label": n.label} for n in self.ordered_nodes()
-            ],
+            "nodes": [{"id": n.id, "kind": n.kind, "label": n.label} for n in self.ordered_nodes()],
             "edges": [
                 {"from": e.src, "to": e.dst, **({"label": e.label} if e.label else {})}
                 for e in self.edges
@@ -118,7 +116,7 @@ class Graph:
         lines = ["graph LR"]
         for n in nodes:
             label = _mermaid_escape(f"{n.kind}: {n.label}")
-            shape_open, shape_close = _MERMAID_SHAPES.get(n.kind, ("[\"", "\"]"))
+            shape_open, shape_close = _MERMAID_SHAPES.get(n.kind, ('["', '"]'))
             lines.append(f"    {alias[n.id]}{shape_open}{label}{shape_close}")
         for e in self.edges:
             if e.src not in alias or e.dst not in alias:
@@ -188,13 +186,7 @@ _KIND_COLOURS: dict[str, str] = {
 
 def _mermaid_escape(text: str) -> str:
     # Quotes and pipes break Mermaid node/edge labels; newlines too.
-    return (
-        text.replace("\\", "/")
-        .replace('"', "'")
-        .replace("|", "/")
-        .replace("\n", " ")
-        .strip()
-    )
+    return text.replace("\\", "/").replace('"', "'").replace("|", "/").replace("\n", " ").strip()
 
 
 def _dot_escape(text: str) -> str:
@@ -344,8 +336,7 @@ def build_graph(paths: list[str] | None = None, root: str | Path = ".") -> Graph
                 add_spec_to_graph(graph, raw, path)
             else:
                 raise GraphError(
-                    f"{p!r} is neither a PromptSpec (version/name/target) nor a "
-                    "workflow (steps)."
+                    f"{p!r} is neither a PromptSpec (version/name/target) nor a workflow (steps)."
                 )
         return graph
 

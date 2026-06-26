@@ -63,7 +63,16 @@ class TestSpecGraph:
         spec = _write(tmp_path, "auth.promptgenie.yaml", SPEC_YAML)
         g = build_graph([str(spec)])
         kinds = {n.kind for n in g.nodes.values()}
-        assert {"spec", "target", "template", "provider", "model", "policy", "context", "schema"} <= kinds
+        assert {
+            "spec",
+            "target",
+            "template",
+            "provider",
+            "model",
+            "policy",
+            "context",
+            "schema",
+        } <= kinds
 
         spec_id = "spec:auth-review"
         assert spec_id in g.nodes
@@ -188,9 +197,7 @@ class TestGraphCLI:
     def test_cli_out_file(self, tmp_path):
         spec = _write(tmp_path, "auth.promptgenie.yaml", SPEC_YAML)
         dest = tmp_path / "out" / "g.dot"
-        res = CliRunner().invoke(
-            cli, ["graph", str(spec), "--format", "dot", "--out", str(dest)]
-        )
+        res = CliRunner().invoke(cli, ["graph", str(spec), "--format", "dot", "--out", str(dest)])
         assert res.exit_code == 0
         assert dest.exists()
         assert "digraph promptgenie" in dest.read_text()

@@ -70,9 +70,7 @@ def graph_cmd(files: tuple[str, ...], output_format: str, root: str, out: str | 
 
     if not graph.nodes:
         where = ", ".join(files) if files else root
-        diag_console.print(
-            f"[yellow]No PromptSpecs or workflows found in[/yellow] {where}."
-        )
+        diag_console.print(f"[yellow]No PromptSpecs or workflows found in[/yellow] {where}.")
 
     if output_format == "json":
         text = json.dumps(graph.to_json(), indent=2) + "\n"
