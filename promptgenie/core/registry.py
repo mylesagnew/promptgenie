@@ -40,13 +40,18 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
+
+if TYPE_CHECKING:
+    import tarfile
 
 from promptgenie.core.fileio import safe_read_yaml, safe_write_text
 
@@ -59,6 +64,11 @@ _ALLOWED_URL_SCHEMES: frozenset[str] = frozenset({"https"})
 # Maximum bytes accepted from a single network response (1 MiB).
 # Prevents memory exhaustion from malicious or misconfigured servers.
 _MAX_DOWNLOAD_BYTES: int = 1 * 1024 * 1024  # 1 MiB
+
+# A pack id is used to build the on-disk filename ``<id>.yaml``. Constrain it to
+# a conservative charset so a crafted tarball can never traverse directories or
+# overwrite arbitrary files via the derived destination path.
+_SAFE_PACK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 # ── paths ──────────────────────────────────────────────────────────────────────
 
@@ -341,36 +351,104 @@ def install_from_local(
         return dest
 
     if src.name.endswith(".tar.gz") or src.suffix.lower() == ".tgz":
-        import tempfile
+        # Never extract the tarball to disk. Select a single manifest member,
+        # validate it (regular file only — no symlinks, devices, hardlinks,
+        # absolute paths, or ``..``), and stream just that member into memory
+        # via ``extractfile``. This removes the Tar-Slip vector entirely rather
+        # than guarding an ``extractall`` call.
+        import yaml
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp = Path(tmpdir)
-            with _tarfile.open(src, "r:gz") as tf:
-                # Safety: reject paths that escape the extraction directory
-                for member in tf.getmembers():
-                    member_path = (tmp / member.name).resolve()
-                    if not str(member_path).startswith(str(tmp.resolve())):
-                        raise ValueError(f"Unsafe path in tarball: {member.name!r}")
-                tf.extractall(tmp, filter="data")  # nosec B202 - path-validated above + tarfile data filter
+        with _tarfile.open(src, "r:gz") as tf:
+            pack_member = _select_pack_member(tf.getmembers(), src.name)
+            _assert_safe_tar_member(pack_member)
 
-            # Find the pack YAML: prefer pack.yaml at root, then any *.yaml
-            yaml_files = list(tmp.rglob("pack.yaml")) + list(tmp.rglob("*.yaml"))
-            if not yaml_files:
+            extracted = tf.extractfile(pack_member)
+            if extracted is None:
                 raise ValueError(
-                    f"No YAML file found in tarball {src.name}. "
-                    "A pack tarball must contain a pack.yaml or <pack-id>.yaml file."
+                    f"Pack manifest {pack_member.name!r} in {src.name} is not a readable file."
                 )
-            pack_yaml = yaml_files[0]
-            # Derive pack id from filename or pack.yaml 'id' field
-            raw = safe_read_yaml(pack_yaml) or {}
-            pack_id = raw.get("id") or pack_yaml.stem
-            dest = dest_dir / f"{pack_id}.yaml"
-            shutil.copy2(str(pack_yaml), str(dest))
+            with extracted:
+                raw_bytes = extracted.read(_MAX_DOWNLOAD_BYTES + 1)
+
+        if len(raw_bytes) > _MAX_DOWNLOAD_BYTES:
+            raise ValueError(
+                f"Pack manifest in {src.name} exceeds the {_MAX_DOWNLOAD_BYTES} byte limit."
+            )
+
+        text = raw_bytes.decode("utf-8")
+        parsed = yaml.safe_load(text) or {}
+        if not isinstance(parsed, dict):
+            raise ValueError(f"Pack manifest in {src.name} is not a valid YAML mapping.")
+
+        pack_id = _safe_pack_id(parsed.get("id") or PurePosixPath(pack_member.name).stem)
+        dest = dest_dir / f"{pack_id}.yaml"
+        safe_write_text(dest, text, force=True)
         return dest
 
     raise ValueError(
         f"Unsupported local pack format: {src.name!r}. Use a .yaml file or a .tar.gz tarball."
     )
+
+
+def _select_pack_member(members: list[tarfile.TarInfo], archive_name: str) -> tarfile.TarInfo:
+    """Pick the manifest member from a pack tarball without extracting anything.
+
+    Prefers a regular-file member whose basename is ``pack.yaml``; otherwise the
+    first ``*.yaml`` regular-file member in sorted (deterministic) order.
+
+    Raises ``ValueError`` if no candidate YAML member exists.
+    """
+    yaml_members = sorted(
+        (m for m in members if m.isreg() and m.name.lower().endswith(".yaml")),
+        key=lambda m: m.name,
+    )
+    if not yaml_members:
+        raise ValueError(
+            f"No YAML file found in tarball {archive_name}. "
+            "A pack tarball must contain a pack.yaml or <pack-id>.yaml file."
+        )
+    for m in yaml_members:
+        if PurePosixPath(m.name).name == "pack.yaml":
+            return m
+    return yaml_members[0]
+
+
+def _assert_safe_tar_member(member: tarfile.TarInfo) -> None:
+    """Raise ``ValueError`` unless *member* is a safe regular file.
+
+    Rejects symlinks, hardlinks, character/block devices, FIFOs, directories,
+    absolute paths, and ``..`` traversal sequences.
+    """
+    name = member.name
+    if member.issym() or member.islnk():
+        raise ValueError(f"Pack tarball member is a link (unsafe): {name!r}")
+    if member.isdev() or member.isfifo():
+        raise ValueError(f"Pack tarball member is a special/device file (unsafe): {name!r}")
+    if not member.isreg():
+        raise ValueError(f"Pack tarball member is not a regular file: {name!r}")
+
+    pure = PurePosixPath(name)
+    if pure.is_absolute() or os.path.isabs(name):
+        raise ValueError(f"Pack tarball member has an absolute path (unsafe): {name!r}")
+    if ".." in pure.parts:
+        raise ValueError(f"Pack tarball member contains path traversal (unsafe): {name!r}")
+
+
+def _safe_pack_id(raw_id: object) -> str:
+    """Return *raw_id* if it is a safe pack id, else raise ``ValueError``.
+
+    The id becomes the on-disk filename ``<id>.yaml``; anything that could
+    traverse directories or escape the install dir is rejected.
+    """
+    pack_id = str(raw_id).strip()
+    if (
+        not pack_id
+        or "/" in pack_id
+        or "\\" in pack_id
+        or not _SAFE_PACK_ID_RE.match(pack_id)
+    ):
+        raise ValueError(f"Unsafe or invalid pack id derived from tarball: {raw_id!r}")
+    return pack_id
 
 
 # ── update ────────────────────────────────────────────────────────────────────

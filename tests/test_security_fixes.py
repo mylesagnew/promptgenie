@@ -593,7 +593,7 @@ class TestS3EnvExfiltration:
     def test_anthropic_key_blocked(self, monkeypatch):
         from promptgenie.core.context_builder import _gather_env
 
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-xxx")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "unit-test-api-key")
         with pytest.raises(SecurityError, match="credential-like"):
             _gather_env("ANTHROPIC_API_KEY", "")
 

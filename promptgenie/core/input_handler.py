@@ -1,9 +1,11 @@
 """input_handler.py — multi-file / directory / zip collector with safety controls.
 
 Inspired by SkillSpector's input handling but hardened against:
-  - Zip-slip path traversal (each member path is resolved and checked against
-    the extraction root before extraction)
-  - Decompression bombs (max total uncompressed bytes, max member count)
+  - Zip-slip path traversal (zip members are never written to disk — each is
+    streamed in memory via ZipFile.open — and every member name is validated
+    before any read, so a member path can never influence a filesystem write)
+  - Decompression bombs (per-member bounded reads, max total uncompressed
+    bytes, max member count)
   - Symlinks and device files inside archives
   - Individual files that exceed a per-file byte cap
   - Total bytes across all collected files exceeding a configurable cap
@@ -269,56 +271,124 @@ def _collect_from_zip(
     max_file_bytes: int,
     allowed_suffixes: frozenset[str] | set[str],
 ) -> None:
-    """Extract and collect files from *archive* with zip-slip protection."""
+    """Collect text files from *archive* without ever writing them to disk.
+
+    Each member is streamed in memory via ``ZipFile.open`` (no ``extractall``),
+    so a malicious member name can never influence a filesystem path — the
+    classic Zip-Slip vector is removed entirely rather than merely guarded.
+    Every member is still validated up front, and a single unsafe member
+    (traversal, absolute path, symlink, device) aborts the whole archive
+    (fail-closed).
+    """
     if not zipfile.is_zipfile(archive):
         result.skipped.append(SkippedFile(path=str(archive), reason="invalid_zip"))
         return
 
-    with tempfile.TemporaryDirectory(prefix="promptgenie_zip_") as tmp_dir:
-        extract_root = Path(tmp_dir).resolve()
+    archive_str = str(archive)
 
-        try:
-            with zipfile.ZipFile(archive, "r") as zf:
-                members = zf.infolist()
+    # A purely virtual root used only to validate member *names* lexically.
+    # Nothing is written here — it need not (and does not) exist on disk.
+    validation_root = (Path(tempfile.gettempdir()) / "promptgenie_zip_validation_root").resolve()
 
-                if len(members) > DEFAULT_MAX_ZIP_MEMBERS:
-                    result.skipped.append(
-                        SkippedFile(
-                            path=str(archive),
-                            reason=f"zip_too_many_members:{len(members)}",
-                        )
+    try:
+        with zipfile.ZipFile(archive, "r") as zf:
+            members = zf.infolist()
+
+            if len(members) > DEFAULT_MAX_ZIP_MEMBERS:
+                result.skipped.append(
+                    SkippedFile(
+                        path=str(archive),
+                        reason=f"zip_too_many_members:{len(members)}",
                     )
-                    return
+                )
+                return
 
-                # Validate every member path before extracting anything
-                for info in members:
-                    _assert_safe_zip_member(info, extract_root)
+            # Validate every member name before reading anything. Any single
+            # unsafe member aborts the whole archive.
+            for info in members:
+                _assert_safe_zip_member(info, validation_root)
 
-                # Safe to extract — every member path pre-validated above by
-                # _assert_safe_zip_member (absolute paths, .. traversal, symlinks,
-                # and resolved-path escapes all raise before we reach here).
-                zf.extractall(extract_root)
+            # Safe to read — stream each member directly into memory.
+            for info in members:
+                _collect_zip_member(
+                    zf,
+                    info,
+                    archive_str,
+                    result,
+                    max_files,
+                    max_bytes,
+                    max_file_bytes,
+                    allowed_suffixes,
+                )
 
-        except (zipfile.BadZipFile, zipfile.LargeZipFile, ZipSlipError, OSError) as exc:
-            result.skipped.append(
-                SkippedFile(path=str(archive), reason=f"zip_error:{type(exc).__name__}")
-            )
-            return
-
-        # Collect the extracted files
-        _collect_from_dir(
-            extract_root, result, max_files, max_bytes, max_file_bytes, allowed_suffixes
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, ZipSlipError, OSError) as exc:
+        result.skipped.append(
+            SkippedFile(path=str(archive), reason=f"zip_error:{type(exc).__name__}")
         )
+        return
 
-        # Rewrite display paths to show the archive source.
-        # Use the resolved tmp_dir to handle macOS /tmp → /private/tmp symlink.
-        archive_str = str(archive)
-        resolved_tmp = str(Path(tmp_dir).resolve())
-        for cf in result.files:
-            cf_resolved = str(Path(cf.path).resolve())
-            if cf_resolved.startswith(resolved_tmp):
-                relative = cf_resolved[len(resolved_tmp) :].lstrip(os.sep)
-                cf.path = f"{archive_str}::{relative}"
+
+def _collect_zip_member(
+    zf: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    archive_str: str,
+    result: CollectResult,
+    max_files: int,
+    max_bytes: int,
+    max_file_bytes: int,
+    allowed_suffixes: frozenset[str] | set[str],
+) -> None:
+    """Stream a single validated zip member into *result*, recording skips.
+
+    The member is never written to disk: it is read through ``zf.open`` with a
+    hard byte cap so a header that lies about its uncompressed size (a zip bomb)
+    cannot exhaust memory.
+    """
+    if info.is_dir():
+        return
+
+    display_path = f"{archive_str}::{info.filename}"
+
+    if _quota_reached(result, max_files, max_bytes):
+        result.skipped.append(SkippedFile(path=display_path, reason="quota_exceeded"))
+        return
+
+    suffix = Path(info.filename).suffix.lower()
+    if suffix not in allowed_suffixes:
+        result.skipped.append(SkippedFile(path=display_path, reason="wrong_suffix"))
+        return
+
+    # Reject up front based on the declared (header) size; a lying header is
+    # caught below by the bounded read.
+    if info.file_size > max_file_bytes:
+        result.skipped.append(SkippedFile(path=display_path, reason="too_large"))
+        return
+
+    if result.total_bytes + info.file_size > max_bytes:
+        result.skipped.append(SkippedFile(path=display_path, reason="quota_exceeded"))
+        return
+
+    # Cap the actual read at whatever budget remains. Read one extra byte so an
+    # under-declared member (zip bomb) overflows the cap and is rejected.
+    read_cap = min(max_file_bytes, max_bytes - result.total_bytes)
+    try:
+        with zf.open(info, "r") as member_fh:
+            data = member_fh.read(read_cap + 1)
+    except (zipfile.BadZipFile, OSError) as exc:
+        result.skipped.append(
+            SkippedFile(path=display_path, reason=f"zip_error:{type(exc).__name__}")
+        )
+        return
+
+    if len(data) > read_cap:
+        result.skipped.append(SkippedFile(path=display_path, reason="too_large"))
+        return
+
+    content = data.decode("utf-8", errors="replace")
+    result.files.append(
+        CollectedFile(path=display_path, content=content, size_bytes=len(data))
+    )
+    result.total_bytes += len(data)
 
 
 def _assert_safe_zip_member(info: zipfile.ZipInfo, extract_root: Path) -> None:

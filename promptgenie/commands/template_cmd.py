@@ -32,6 +32,67 @@ import click
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.renderers.rich import console, diag_console
 
+# Editors we are willing to launch from $EDITOR / $VISUAL. The value of those
+# environment variables is attacker-influenceable, so we never execute an
+# arbitrary program from them — only the basename of the configured editor is
+# matched (case-insensitively, ``.exe`` stripped) against this allowlist before
+# the command is run (without a shell).
+_ALLOWED_EDITORS: frozenset[str] = frozenset(
+    {
+        "nano",
+        "pico",
+        "vi",
+        "vim",
+        "nvim",
+        "emacs",
+        "emacsclient",
+        "micro",
+        "helix",
+        "hx",
+        "ed",
+        "joe",
+        "kak",
+        "code",
+        "code-insiders",
+        "codium",
+        "subl",
+        "sublime_text",
+        "mate",
+        "gedit",
+        "kate",
+        "notepad",
+        "notepad++",
+    }
+)
+
+_DEFAULT_EDITOR = "nano"
+
+
+def _resolve_editor_command() -> list[str]:
+    """Return a safe argv prefix for launching the user's editor.
+
+    Reads ``$EDITOR`` / ``$VISUAL`` (falling back to ``nano``) and splits it into
+    arguments. The editor *program* (first token) must be on
+    :data:`_ALLOWED_EDITORS`; otherwise a ``ValueError`` is raised. This blocks
+    command-injection via a hostile ``$EDITOR`` value (CWE-78) while still
+    honouring common editor flags such as ``code --wait``.
+    """
+    raw = (os.environ.get("VISUAL") or os.environ.get("EDITOR") or _DEFAULT_EDITOR).strip()
+    parts = shlex.split(raw) if raw else [_DEFAULT_EDITOR]
+    if not parts:
+        parts = [_DEFAULT_EDITOR]
+
+    program = os.path.basename(parts[0])
+    if program.lower().endswith(".exe"):
+        program = program[: -len(".exe")]
+
+    if program.lower() not in _ALLOWED_EDITORS:
+        raise ValueError(
+            f"Refusing to launch editor {parts[0]!r}: not in the allowed editor list. "
+            f"Set $EDITOR to one of: {', '.join(sorted(_ALLOWED_EDITORS))}."
+        )
+    return parts
+
 
 @click.group("template", help="Manage prompt templates.")
 def template_group() -> None:
@@ -338,8 +399,14 @@ def template_edit_cmd(template_id: str) -> None:
         assert t.source_path is not None
         path = t.source_path
 
-    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "nano"
-    ret = subprocess.run([*shlex.split(editor), str(path)]).returncode
+    try:
+        editor_cmd = _resolve_editor_command()
+    except ValueError as exc:
+        diag_console.print(f"[red]Error:[/red] {exc}")
+        raise SystemExit(EXIT_FAILURE) from exc
+
+    # No shell is used; the program has been allowlisted by _resolve_editor_command.
+    ret = subprocess.run([*editor_cmd, str(path)]).returncode  # noqa: S603  # nosec B603
 
     if ret == 0:
         # Re-validate after edit
