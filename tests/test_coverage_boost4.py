@@ -46,9 +46,12 @@ class TestGHReporter:
         md = gh.format_analyze_summary([], "p.md", overall_risk="LOW", lint_score=90, passed=True)
         assert "PromptGenie" in md
 
-    def test_step_summary_file(self, tmp_path):
+    def test_step_summary_file(self, tmp_path, monkeypatch):
         from promptgenie.core import gh_reporter as gh
 
+        # RUNNER_TEMP confinement only applies under GITHUB_ACTIONS=true; here we
+        # test the plain write path, so make sure that env var is not set.
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
         summ = tmp_path / "summary.md"
         r = gh.GHReporter(summary_path=str(summ))
         r.write_step_summary("## Hello\n")
