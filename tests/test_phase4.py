@@ -592,9 +592,12 @@ class TestGHReporter:
         out = capsys.readouterr().out
         assert "::warning file=p.md::a warning" in out
 
-    def test_write_step_summary(self, tmp_path):
+    def test_write_step_summary(self, tmp_path, monkeypatch):
         from promptgenie.core.gh_reporter import GHReporter
 
+        # Outside a GitHub Actions runner the configured path is used as-is
+        # (the RUNNER_TEMP confinement only applies when GITHUB_ACTIONS=true).
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
         summary_file = tmp_path / "summary.md"
         reporter = GHReporter(summary_path=str(summary_file))
         reporter.write_step_summary("## Hello\n")
