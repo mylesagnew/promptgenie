@@ -100,10 +100,11 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 |---|---|
 | **Team policy server** | Central `.promptgenie-policy` server; policies fetched on every run; org-wide `disabled_rules`, allowlists, routing rules, approved provider list; policy version pinned in lockfile |
 | **SSO / OIDC credential binding** | `promptgenie auth login --sso`; OIDC device flow; per-user audit attribution; credential scoped to authenticated identity; `PROMPTGENIE_TOKEN` env var for CI |
-| **Prompt registry (self-hosted or cloud)** | `promptgenie registry push prompt.yaml --tag v1.2`; `promptgenie registry pull org/auth-review:latest`; versioned, signed, searchable; OCI-compatible layout |
+| **Prompt registry (self-hosted or cloud)** | 🟡 **Phase A + B.1 shipped.** *Local store:* `push/pull/list/tags/show/verify/rm/prune/search`; content-addressable OCI-inspired store; artifact = spec + template + policy + context + schema under one signed manifest; fail-closed digest verification; minisign/cosign signing with `--require-signed`; digest pins (`@sha256:`); audit; path-traversal-guarded pull. *Remote (B.1):* `--remote host[/ns]` push/pull/show/verify/tags against any OCI registry (ghcr.io/Zot/Harbor); OCI image manifests; **blob dedup on push**; client-side digest verification (untrusted server); cosign-style `.sig` signatures; `registry login/logout` (keyring + CI env); HTTPS-only + air-gap gate; `httpx` via `promptgenie[registry-remote]`. **Deferred — B.2:** SSO/OIDC device-flow login + per-user attribution (the SSO roadmap item). See [docs/registry-design.md](docs/registry-design.md). |
 | **Remote eval runners** | Offload matrix evaluations to a cloud runner pool; results streamed back; cost and latency budgets enforced server-side; results stored in registry alongside the prompt |
 | **VSCode extension — Phase 2** | Inline eval results, baseline delta badge, TUI launcher from the editor title bar; history sidebar; lockfile status indicator |
-| **`promptgenie fmt`** | Normalise Markdown prompt files and PromptSpec YAML: heading order, section structure, key sort, trailing whitespace; `--check` exits 1 if formatting would change (CI-safe) |
+| ~~**`promptgenie fmt`**~~ ✅ | Normalise Markdown prompt files and PromptSpec YAML: ATX heading normalisation, blank-line structure around headings, trailing-whitespace trim, single final newline, canonical PromptSpec key sort; fence-aware (code blocks preserved byte-for-byte); comment-preserving YAML reorder via optional `ruamel.yaml` (`promptgenie[fmt]`), comment-safe fallback otherwise; in-place by default, `--check` exits 1 if formatting would change (CI-safe), `--diff`, `--format json`, `--lang`; idempotent |
+| ~~**`promptgenie make`**~~ ✅ | YAML task graph (`promptgenie.make.yaml`): `lint`/`scan`/`test`/`evaluate` and any shell command, wired with `needs:`; topological ordering; `--changed` filtering on per-task `inputs:` globs (aggregators run only dirty sub-tasks); `--parallel N`; fail-fast with `--keep-going`; `--dry-run`, `--list`, `--format json`; multi-command tasks; cycle detection; dependency-free; compatible with Make, just, Taskfile |
 | **`promptgenie make`** | YAML task graph (`promptgenie.make.yaml`): `lint`, `scan`, `test`, `evaluate`; `--changed` filtering; `--parallel N`; compatible with Make, just, Taskfile |
 
 ---
@@ -192,10 +193,14 @@ Nodes: PromptSpec, Template, Context pack, Policy, Provider/model, Eval suite. U
 ```bash
 promptgenie fmt prompts/*.md
 promptgenie fmt prompts/*.promptgenie.yaml
-promptgenie fmt --check prompts/
+promptgenie fmt --check prompts/         # CI-safe: exits 1 if reformatting needed
+promptgenie fmt --diff prompt.md         # unified diff, no write
+cat prompt.md | promptgenie fmt -        # stdin → stdout
 ```
 
-Markdown: normalize headings, enforce section order, trim trailing whitespace, ensure final newline. YAML: stable key order, comment preservation via `ruamel.yaml`. `--check` mode exits 1 if formatting would change (CI-safe).
+Markdown: ATX heading normalisation (single space after `#`, no closing hashes), one blank line around headings, trailing-whitespace trim, blank-line-run collapse, single final newline. Fenced ```code``` blocks are preserved byte-for-byte. YAML: stable canonical key order (matching the `PromptSpec` field order, top-level + `output_contract`/`run`) plus the same whitespace normalisation; comments preserved via `ruamel.yaml` (`promptgenie[fmt]`), with a comment-safe fallback (commented files keep their key order) so the base install stays dependency-free. File arguments format in place (atomic, only changed files touched); `--check` exits 1 if formatting would change (CI-safe); `--diff` prints a unified diff; `--format json` emits a machine-readable summary; `--lang auto|markdown|yaml` forces the type. Deterministic and idempotent.
+
+**Shipped** (`promptgenie/core/formatter.py`, `promptgenie/commands/fmt_cmd.py`). 34 tests in `tests/test_formatter.py`.
 
 ---
 
@@ -206,19 +211,28 @@ Markdown: normalize headings, enforce section order, trim trailing whitespace, e
 tasks:
   lint:
     run: promptgenie lint prompts/**/*.md
+    inputs: ["prompts/**/*.md"]
   scan:
     run: promptgenie scan prompts/**/*.md
+    inputs: ["prompts/**/*.md"]
   test:
     run: promptgenie test tests/**/*.prompt-test.yaml
+    inputs: ["tests/**", "prompts/**"]
   ci:
     needs: [lint, scan, test]
 ```
 
 ```bash
+promptgenie make                              # run every task
+promptgenie make ci                           # run 'ci' and its dependencies
 promptgenie make --target ci --changed --parallel 4
+promptgenie make ci --dry-run                 # show the plan
+promptgenie make --list                       # list tasks
 ```
 
-Simple YAML task graph; dependency ordering; changed-file filtering; parallel execution; compatible with Make, just, Taskfile, and CI scripts.
+Simple YAML task graph; topological ordering; changed-file filtering on per-task `inputs:` globs (`**` supported; aggregators run only the dirty sub-tasks); bounded `--parallel N`; fail-fast by default with `--keep-going`; `--dry-run`, `--list`, `--format json`. A task's `run:` may be a single command or a list (fail-fast within the task). Compatible with Make, just, Taskfile, and CI scripts. `shell=True` execution is scoped to the author-trusted, repo-committed makefile (same trust model as a Makefile).
+
+**Shipped** (`promptgenie/core/make.py`, `promptgenie/commands/make_cmd.py`). 32 tests in `tests/test_make.py`.
 
 ---
 
@@ -281,6 +295,7 @@ Dynamic completions for `--template`, `--target`, `--provider`, `--model`, conte
 | `llm` | `openai` | `promptgenie scan --llm` |
 | `secrets` | `keyring` | `promptgenie auth login` (keyring backend) |
 | `semantic-diff` | `rapidfuzz` | `promptgenie diff --semantic` |
+| `fmt` | `ruamel.yaml>=0.18` | Comment-preserving YAML key sort for `promptgenie fmt` (whitespace + Markdown formatting work without it) |
 
 Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyyaml` — no HTTP clients, no API keys, no heavy dependencies.
 
@@ -308,6 +323,10 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 | `promptgenie tokens` — read-only savings inspector | ✅ Shipped (Unreleased) | 6 | — |
 | Pack fixes (`pack list` None crash, `pack init` location) | ✅ Shipped (Unreleased) | 10 | — |
 | Coverage uplift — Textual TUI + benchmark command (~82%→~83%) | ✅ Shipped (Unreleased) | ~20 | **1571** |
-| Phase 6 — Governance, SSO, and Cloud Sync | 🔲 Planned | — | — |
+| `promptgenie fmt` — canonical prompt + PromptSpec formatter (Phase 6) | ✅ Shipped (Unreleased) | 34 | — |
+| `promptgenie make` — YAML task-graph batch runner (Phase 6) | ✅ Shipped (Unreleased) | 32 | — |
+| Prompt registry — Phase A, local-first (Phase 6) | ✅ Shipped (Unreleased) | 41 | — |
+| Prompt registry — Phase B.1, remote OCI backend (Phase 6) | ✅ Shipped (Unreleased) | 18 | — |
+| Phase 6 — Governance, SSO, and Cloud Sync (remaining) | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*

@@ -397,7 +397,7 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 
 ## Command reference
 
-The full per-command reference — every flag and example for `generate`, `lint`, `scan`, `policy`, `diff`, `adapt`, `compress`/`optimize`, `tokens`, `test`, `benchmark`, `workflow`, `pack`, `ci`, `spec`, `run`, `context`, `provider` (incl. **Hermes**), `vars`, `evaluate`/`eval`, `analyze`, `redact`, `redteam`, `auth`, `audit`, `config`, `tui`, `wizard`, `palette`, `history`, `watch`, `template`, `lock`, `plugin` — lives in **[docs/commands.md](docs/commands.md)**. Run `promptgenie --help` for the live list.
+The full per-command reference — every flag and example for `generate`, `lint`, `scan`, `policy`, `diff`, `adapt`, `compress`/`optimize`, `tokens`, `fmt`, `make`, `test`, `benchmark`, `workflow`, `pack`, `registry`, `ci`, `spec`, `run`, `context`, `provider` (incl. **Hermes**), `vars`, `evaluate`/`eval`, `analyze`, `redact`, `redteam`, `auth`, `audit`, `config`, `tui`, `wizard`, `palette`, `history`, `watch`, `template`, `lock`, `plugin` — lives in **[docs/commands.md](docs/commands.md)**. Run `promptgenie --help` for the live list.
 
 ---
 
@@ -653,14 +653,15 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 
 ---
 
-### Phase 6 — Governance, SSO, and Cloud Sync *(planned)*
+### Phase 6 — Governance, SSO, and Cloud Sync *(in progress)*
 
+- [x] `promptgenie fmt` — canonical formatter for Markdown prompts and PromptSpec YAML: ATX heading normalisation, blank-line structure, trailing-whitespace trim, single final newline, canonical key sort; fence-aware; comment-preserving YAML reorder via optional `ruamel.yaml` (`promptgenie[fmt]`); in-place by default, `--check` (CI-safe), `--diff`, `--format json`; idempotent
+- [x] `promptgenie make` — YAML task graph (`promptgenie.make.yaml`): `needs:` dependency ordering, `--changed` filtering on per-task `inputs:` globs, `--parallel N`, fail-fast with `--keep-going`, `--dry-run`, `--list`, `--format json`; compatible with Make, just, Taskfile
+- [x] Prompt registry — `promptgenie registry push|pull|list|tags|show|verify|rm|prune|search`; content-addressable OCI-inspired store; signed manifests (minisign/cosign), fail-closed digest verification, digest pins; **Phase B.1**: remote OCI registries (`--remote`, `registry login/logout`, blob dedup, untrusted-server verification) via `promptgenie[registry-remote]`. See [docs/registry-design.md](docs/registry-design.md)
+- [ ] SSO / OIDC credential binding — `registry login --sso`; OIDC device flow; per-user audit attribution; `PROMPTGENIE_TOKEN` env var for CI *(registry Phase B.2)*
 - [ ] Team policy server — central policy fetch on every run; org-wide `disabled_rules`, allowlists, routing rules; policy version pinned in lockfile
-- [ ] SSO / OIDC credential binding — `promptgenie auth login --sso`; OIDC device flow; per-user audit attribution; `PROMPTGENIE_TOKEN` env var for CI
-- [ ] Prompt registry — `promptgenie registry push|pull`; versioned, signed, searchable; OCI-compatible layout
 - [ ] Remote eval runners — offload matrix evaluations to a cloud runner pool; cost and latency budgets enforced server-side
-- [ ] `promptgenie fmt` — normalise Markdown prompt files and PromptSpec YAML; heading order, key sort, trailing whitespace; `--check` exits 1 if formatting would change (CI-safe)
-- [ ] `promptgenie make` — YAML task graph (`promptgenie.make.yaml`); `--changed` filtering; `--parallel N`; compatible with Make, just, Taskfile
+- [ ] VSCode extension — Phase 2 (inline eval results, baseline delta badge, history sidebar, lockfile status)
 
 ---
 

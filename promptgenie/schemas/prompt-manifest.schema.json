@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://promptgenie.dev/schemas/prompt-manifest.schema.json",
+  "title": "PromptGenie Prompt Artifact Manifest",
+  "description": "An OCI-inspired manifest describing a content-addressable prompt artifact: a config blob plus the layers (spec, template, policy, context, schema) a prompt needs to run.",
+  "type": "object",
+  "required": ["schemaVersion", "mediaType", "config", "layers"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "mediaType": { "const": "application/vnd.promptgenie.prompt.manifest.v1+json" },
+    "config": { "$ref": "#/definitions/descriptor" },
+    "layers": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/descriptor" }
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "definitions": {
+    "descriptor": {
+      "type": "object",
+      "required": ["mediaType", "digest", "size"],
+      "additionalProperties": false,
+      "properties": {
+        "mediaType": { "type": "string" },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "size": { "type": "integer", "minimum": 0 },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    }
+  }
+}

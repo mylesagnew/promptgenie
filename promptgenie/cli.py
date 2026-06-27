@@ -16,12 +16,14 @@ from promptgenie.commands.diff import diff_cmd
 from promptgenie.commands.doctor import doctor_cmd
 from promptgenie.commands.eval_cmd import eval_group
 from promptgenie.commands.evaluate import evaluate_cmd
+from promptgenie.commands.fmt_cmd import fmt_cmd
 from promptgenie.commands.generate import generate
 from promptgenie.commands.graph_cmd import graph_cmd
 from promptgenie.commands.history_cmd import history_group
 from promptgenie.commands.interactive import interactive_cmd
 from promptgenie.commands.lint import lint_cmd
 from promptgenie.commands.lock_cmd import lock_cmd
+from promptgenie.commands.make_cmd import make_cmd
 from promptgenie.commands.output_cmd import output_group
 from promptgenie.commands.pack import pack_group
 from promptgenie.commands.palette_cmd import palette_cmd
@@ -30,6 +32,7 @@ from promptgenie.commands.policy import policy
 from promptgenie.commands.provider import provider_group
 from promptgenie.commands.redact import redact_cmd
 from promptgenie.commands.redteam import redteam_cmd
+from promptgenie.commands.registry_cmd import registry_group
 from promptgenie.commands.run import run_cmd
 from promptgenie.commands.scan import scan_cmd
 from promptgenie.commands.spec import spec_group
@@ -100,6 +103,8 @@ cli.add_command(compress_cmd)
 cli.add_command(optimize_cmd)
 cli.add_command(tokens_cmd)
 cli.add_command(graph_cmd)
+cli.add_command(fmt_cmd)
+cli.add_command(make_cmd)
 # Phase 3 — SecDevOps Guardrails
 cli.add_command(analyze_cmd)
 cli.add_command(redact_cmd)
@@ -119,6 +124,8 @@ cli.add_command(lock_cmd)
 cli.add_command(tui_cmd)
 cli.add_command(wizard_cmd)
 cli.add_command(palette_cmd)
+# Phase 6 — Governance, SSO, and Cloud Sync
+cli.add_command(registry_group)
 
 
 if __name__ == "__main__":

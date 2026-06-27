@@ -1499,3 +1499,110 @@ promptgenie vars inspect my-prompt.yaml --vars prod.yaml --format json
 ```
 
 ---
+
+## Phase 6 — Governance, SSO, and Cloud Sync
+
+### `fmt`
+
+A deterministic formatter for Markdown prompts and PromptSpec YAML — `gofmt`/`black` for prompt files, so reviews stay focused on content, not whitespace.
+
+```bash
+promptgenie fmt prompts/*.md            # format in place
+promptgenie fmt --check prompts/        # CI-safe: exits 1 if reformatting needed
+promptgenie fmt --diff prompt.md        # unified diff, no write
+cat prompt.md | promptgenie fmt -       # stdin → stdout
+```
+
+**Markdown** (fence-aware — fenced code preserved byte-for-byte): trims trailing whitespace, collapses blank-line runs, normalises ATX headings (single space after `#`, drops closing hashes), pads one blank line around headings, single final newline. **PromptSpec YAML**: the same whitespace normalisation plus a canonical key sort matching the `PromptSpec` field order — applied only when keys are out of order, so already-ordered files keep their styling. Comments are preserved when `ruamel.yaml` is installed (`promptgenie[fmt]`); otherwise commented specs keep their key order so a comment is never dropped. Idempotent.
+
+File arguments format **in place** by default (atomic, only changed files touched); directories are walked recursively for recognised extensions; stdin (`-`) formats to stdout.
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--check` | Don't write; exit 1 if any file would be reformatted (CI-safe) |
+| `--diff` | Print a unified diff instead of writing |
+| `--lang` | Force the document type: `auto` (default) / `markdown` / `yaml` |
+| `--format` | Report format: `text` (default) / `json` |
+
+---
+
+### `make`
+
+A small YAML task-graph batch runner — wire `lint` / `scan` / `test` / `evaluate` (or any shell command) into a dependency graph and run targets in topological order.
+
+```yaml
+# promptgenie.make.yaml
+tasks:
+  lint:
+    run: promptgenie lint prompts/**/*.md
+    inputs: ["prompts/**/*.md"]
+  scan:
+    run: promptgenie scan prompts/**/*.md
+    inputs: ["prompts/**/*.md"]
+  ci:
+    needs: [lint, scan]
+```
+
+```bash
+promptgenie make                        # run every task
+promptgenie make ci                     # run 'ci' and its dependencies
+promptgenie make ci --parallel 4 --changed
+promptgenie make ci --dry-run
+promptgenie make --list
+```
+
+`needs:` defines dependency ordering; `run:` is a shell command or a list (fail-fast within a task). `--changed` skips tasks whose `inputs:` globs (with `**`) did not match a changed file (`git diff <--base-ref>...HEAD`) — an aggregator like `ci` then runs only the dirty sub-tasks. Default is fail-fast; `--keep-going` continues independent tasks (a task whose dependency failed is always skipped).
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `-f, --file` | Makefile path (default `promptgenie.make.yaml`) |
+| `--target` | Target to run (repeatable; also accepts positional `TARGET`s) |
+| `--changed` | Skip tasks whose `inputs:` did not change |
+| `--base-ref` | Git ref to diff against for `--changed` (default `origin/main`) |
+| `-p, --parallel` | Max tasks to run concurrently (default 1) |
+| `-k, --keep-going` | Continue independent tasks after a failure |
+| `--dry-run` | Print the resolved plan without executing |
+| `--list` | List available tasks and exit |
+| `--format` | Report format: `text` (default) / `json` |
+
+---
+
+### `registry`
+
+A versioned, signed, content-addressable store for prompt artifacts — a prompt plus everything it needs to run (spec, template, policy, context, schema) bundled as digest-addressed layers under one manifest. Local-first, with a remote OCI backend.
+
+```bash
+# Push a spec (and its inputs) under a repository:tag
+promptgenie registry push prompts/auth.promptgenie.yaml --tag v1.2
+
+# Sign on push; require a valid signature on pull
+promptgenie registry push prompt.yaml --tag v1 --sign --key ~/.minisign/pg.key
+promptgenie registry pull org/auth-review:v1.2 --require-signed --pubkey pg.pub --out ./vendored
+
+# Inspect / manage
+promptgenie registry list
+promptgenie registry show org/auth-review:v1.2
+promptgenie registry verify org/auth-review:v1.2 --pubkey pg.pub
+promptgenie registry prune --dry-run
+```
+
+References are `[host/]namespace/name[:tag][@sha256:<digest>]` — default tag `latest`; a `@sha256:` digest pin is immutable. Every blob and manifest is verified by digest on read (fail-closed); pull materialisation is path-traversal-guarded. The local store lives under `~/.local/share/promptgenie/registry` (override with `--store-path` or `PROMPTGENIE_REGISTRY_PATH`, e.g. an in-project `.promptgenie/registry`).
+
+**Remote OCI registries** (Phase B.1) — push/pull against ghcr.io, Zot, Harbor, etc. over HTTPS (requires `promptgenie[registry-remote]`):
+
+```bash
+promptgenie registry login ghcr.io --token-stdin < token.txt
+promptgenie registry push auth.promptgenie.yaml --tag v1 --remote ghcr.io/myorg
+promptgenie registry pull ghcr.io/myorg/auth-review:v1 --require-signed --pubkey pg.pub
+promptgenie registry logout ghcr.io
+```
+
+A host embedded in a reference (`ghcr.io/org/x:v1`) selects the remote automatically. Blobs dedup on push (`HEAD` then upload only missing); the registry server is **untrusted** — all bytes are digest-verified client-side, so a digest pin or `--require-signed` gives end-to-end integrity regardless of the operator. HTTPS-only (SSRF-guarded; `--insecure` for http), air-gap aware (`security.airgap` blocks remote access), and audited. Tokens are stored in the keyring (or a `0600` file fallback); `PROMPTGENIE_REGISTRY_TOKEN` works for CI.
+
+**Subcommands:** `push`, `pull`, `list`, `tags`, `show`, `verify`, `rm`, `prune`, `search`, `login`, `logout`. Most accept `--format json`; `push`/`pull`/`show`/`verify`/`tags` accept `--remote` / `--insecure`. See **[docs/registry-design.md](registry-design.md)** for the artifact/manifest design.
+
+---

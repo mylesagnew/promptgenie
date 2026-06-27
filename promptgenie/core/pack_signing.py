@@ -109,6 +109,63 @@ def verify_pack_signature(
     raise ValueError(f"Unknown signing method {method!r}. Use 'minisign' or 'cosign'.")
 
 
+def sign_blob_file(
+    blob_path: str | Path,
+    secret_key: str,
+    method: str = "minisign",
+) -> Path:
+    """Sign *blob_path* and return the path to the detached signature file.
+
+    Parameters
+    ----------
+    blob_path:
+        File to sign.
+    secret_key:
+        Path to a minisign secret key, or a cosign key reference.
+    method:
+        ``"minisign"`` (writes ``<blob>.minisig``) or ``"cosign"``
+        (writes ``<blob>.cosig``).
+    """
+    blob_path = Path(blob_path)
+    if method == "minisign":
+        sig_path = Path(str(blob_path) + ".minisig")
+        try:
+            result = subprocess.run(
+                ["minisign", "-S", "-s", secret_key, "-m", str(blob_path)],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                "minisign not found in PATH. Install from https://jedisct1.github.io/minisign/"
+            ) from None
+        if result.returncode != 0:
+            raise RuntimeError(f"minisign signing failed: {result.stderr.strip()}")
+        return sig_path
+
+    if method == "cosign":
+        sig_path = Path(str(blob_path) + ".cosig")
+        try:
+            result = subprocess.run(
+                ["cosign", "sign-blob", "--yes", "--key", secret_key,
+                 "--output-signature", str(sig_path), str(blob_path)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                "cosign not found in PATH. "
+                "Install from https://docs.sigstore.dev/cosign/installation/"
+            ) from None
+        if result.returncode != 0:
+            raise RuntimeError(f"cosign signing failed: {result.stderr.strip()}")
+        return sig_path
+
+    raise ValueError(f"Unknown signing method {method!r}. Use 'minisign' or 'cosign'.")
+
+
 # ---------------------------------------------------------------------------
 # Pack diff
 # ---------------------------------------------------------------------------
