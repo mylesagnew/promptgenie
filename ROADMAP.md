@@ -316,17 +316,17 @@ Base install (`pip install promptgenie`) requires only `click`, `rich`, and `pyy
 | Phase 5 — Advanced TUI and Ecosystem | ✅ Shipped (v1.5.0) | 81 | — |
 | v1.6.0 — Internal Event Model + Policy Hardening | ✅ Shipped (v1.6.0) | 110 | — |
 | v1.7.0 — Workspace Schema + Config Validation | ✅ Shipped (v1.7.0) | 70 | — |
-| Native token compression (`compress`/`optimize`) | ✅ Shipped (Unreleased) | 30 | — |
-| NousResearch Hermes integration (profile + provider) | ✅ Shipped (Unreleased) | 11 | — |
-| Security hardening (history privacy, extension bound, SBOM attest, version-drift + gitleaks CI, threat model) | ✅ Shipped (Unreleased) | 50 | — |
-| Coverage uplift — async-provider harness + command tests (~75%→~82%) | ✅ Shipped (Unreleased) | ~130 | 1541 |
-| `promptgenie tokens` — read-only savings inspector | ✅ Shipped (Unreleased) | 6 | — |
-| Pack fixes (`pack list` None crash, `pack init` location) | ✅ Shipped (Unreleased) | 10 | — |
-| Coverage uplift — Textual TUI + benchmark command (~82%→~83%) | ✅ Shipped (Unreleased) | ~20 | **1571** |
-| `promptgenie fmt` — canonical prompt + PromptSpec formatter (Phase 6) | ✅ Shipped (Unreleased) | 34 | — |
-| `promptgenie make` — YAML task-graph batch runner (Phase 6) | ✅ Shipped (Unreleased) | 32 | — |
-| Prompt registry — Phase A, local-first (Phase 6) | ✅ Shipped (Unreleased) | 41 | — |
-| Prompt registry — Phase B.1, remote OCI backend (Phase 6) | ✅ Shipped (Unreleased) | 18 | — |
+| Native token compression (`compress`/`optimize`) | ✅ Shipped (v1.8.0) | 30 | — |
+| NousResearch Hermes integration (profile + provider) | ✅ Shipped (v1.8.0) | 11 | — |
+| Security hardening (history privacy, extension bound, SBOM attest, version-drift + gitleaks CI, threat model) | ✅ Shipped (v1.8.0) | 50 | — |
+| Coverage uplift — async-provider harness + command tests (~75%→~82%) | ✅ Shipped (v1.8.0) | ~130 | 1541 |
+| `promptgenie tokens` — read-only savings inspector | ✅ Shipped (v1.8.0) | 6 | — |
+| Pack fixes (`pack list` None crash, `pack init` location) | ✅ Shipped (v1.8.0) | 10 | — |
+| Coverage uplift — Textual TUI + benchmark command (~82%→~83%) | ✅ Shipped (v1.8.0) | ~20 | **1571** |
+| `promptgenie fmt` — canonical prompt + PromptSpec formatter (Phase 6) | ✅ Shipped (v1.8.0) | 34 | — |
+| `promptgenie make` — YAML task-graph batch runner (Phase 6) | ✅ Shipped (v1.8.0) | 32 | — |
+| Prompt registry — Phase A, local-first (Phase 6) | ✅ Shipped (v1.8.0) | 41 | — |
+| Prompt registry — Phase B.1, remote OCI backend (Phase 6) | ✅ Shipped (v1.8.0) | 18 | — |
 | Phase 6 — Governance, SSO, and Cloud Sync (remaining) | 🔲 Planned | — | — |
 
 *This roadmap is reviewed and updated as features ship. See [CHANGELOG.md](CHANGELOG.md) for shipped items and [SECURITY.md](SECURITY.md) for security policy.*
