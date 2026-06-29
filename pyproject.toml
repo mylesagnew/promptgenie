@@ -58,7 +58,7 @@ schema = [
     "jsonschema>=4.0",
 ]
 fmt = [
-    "ruamel.yaml>=0.18",
+    "ruamel.yaml>=0.19.1",
 ]
 registry-remote = [
     "httpx>=0.27",
