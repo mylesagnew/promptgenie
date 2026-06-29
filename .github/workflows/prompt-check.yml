@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload lint SARIF to GitHub code scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@66b39da20ccc656acc90dd27ea30f5d458ec33ce # v3
+        uses: github/codeql-action/upload-sarif@fca7ace96b7d713c7035871441bd52efbe39e27e # v3
         with:
           sarif_file: sarif-results/lint-combined.sarif
           category: promptgenie-lint
@@ -145,7 +145,7 @@ jobs:
 
       - name: Upload scan SARIF to GitHub code scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@66b39da20ccc656acc90dd27ea30f5d458ec33ce # v3
+        uses: github/codeql-action/upload-sarif@fca7ace96b7d713c7035871441bd52efbe39e27e # v3
         with:
           sarif_file: sarif-results/scan-combined.sarif
           category: promptgenie-scan
