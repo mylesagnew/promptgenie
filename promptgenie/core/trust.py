@@ -1,22 +1,27 @@
-"""trust.py — a trust store for PromptGenie specs (S-2).
+"""trust.py — a trust store for PromptGenie specs and makefiles (S-2).
 
 ``promptgenie run spec.yaml`` executes a spec's host-touching context sources
-(``cmd``, ``file``, ``glob``, ``env``, ``url``) automatically. A cloned malicious
-repo could therefore run code on first invocation. To mirror the trust gate the
-VS Code extension gained in F-003, the CLI records which specs the user has
-explicitly trusted, keyed by the spec's resolved absolute path *and* its content
-hash — editing a trusted spec re-prompts.
+(``cmd``, ``file``, ``glob``, ``env``, ``url``) automatically, and
+``promptgenie make`` runs a ``promptgenie.make.yaml``'s ``run:`` commands via
+``shell=True`` (see ``core/make.py::_subprocess_runner``). A cloned malicious
+repo, a generated makefile, or one fetched from the registry (``promptgenie
+registry pull``) could therefore run arbitrary shell commands on first
+invocation. To mirror the trust gate the VS Code extension gained in F-003,
+the CLI records which specs *and* makefiles the user has explicitly trusted,
+keyed by the file's resolved absolute path *and* its content hash — editing a
+trusted spec/makefile re-prompts.
 
 Trust records live in ``~/.config/promptgenie/trust.json`` (mode 0o600, parent
 dir 0o700).
 
 Public API
 ----------
-  is_trusted(spec_path)        → bool
-  add_trust(spec_path)         → None
-  revoke_trust(spec_path)      → None
-  list_trusted()               → list[dict]
-  spec_requires_trust(spec)    → bool
+  is_trusted(path)                  → bool
+  add_trust(path)                   → None
+  revoke_trust(path)                → None
+  list_trusted()                    → list[dict]
+  spec_requires_trust(spec)         → bool
+  makefile_requires_trust(makefile) → bool
 """
 
 from __future__ import annotations
@@ -124,3 +129,18 @@ def spec_requires_trust(spec: Any) -> bool:
     """
     sources = getattr(spec, "context", None) or []
     return any(getattr(s, "type", None) in _HOST_TOUCHING_TYPES for s in sources)
+
+
+def makefile_requires_trust(mf: Any) -> bool:
+    """Return True if *mf* (a :class:`~promptgenie.core.make.Makefile`) would
+    run any shell command.
+
+    Every ``run:`` entry is executed with ``shell=True`` (see
+    ``core/make.py::_subprocess_runner``), so — unlike a spec, which is only
+    dangerous when it names host-touching context sources — any task with a
+    non-empty ``run:`` makes the whole makefile untrusted-until-confirmed. A
+    makefile of pure ``needs:`` aggregators (no ``run:`` anywhere) never
+    shells out and does not require trust.
+    """
+    tasks = getattr(mf, "tasks", None) or {}
+    return any(getattr(task, "run", None) for task in tasks.values())

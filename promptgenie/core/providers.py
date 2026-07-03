@@ -49,6 +49,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import warnings
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -306,6 +307,28 @@ class BaseProvider:
 
     def _resolve_api_key(self) -> str:
         if self.config.api_key:
+            if self.config.api_key.startswith("ref:"):
+                # Not a plaintext key — a pointer into an external secret
+                # manager (see core/credentials.py::resolve_credential_ref).
+                from promptgenie.core.credentials import resolve_credential_ref
+
+                resolved = resolve_credential_ref(self.config.api_key)
+                if not resolved:
+                    raise PromptGenieError(
+                        f"Provider '{self.config.name}' has an api_key ref "
+                        f"{self.config.api_key!r} that could not be resolved.",
+                        code=EXIT_PROVIDER,
+                        hint="Check that the referenced secret exists and is accessible.",
+                    )
+                return resolved
+            warnings.warn(
+                f"SECURITY WARNING: provider {self.config.name!r} reads its API "
+                "key from a plaintext 'api_key' field in providers.yaml. This "
+                "key is stored unencrypted on disk. Use 'api_key_env' (an "
+                "environment variable) or the keyring (promptgenie auth login) "
+                "instead.",
+                stacklevel=2,
+            )
             return self.config.api_key
         if self.config.api_key_env:
             key = os.environ.get(self.config.api_key_env, "")

@@ -83,6 +83,7 @@ can contain content destined for an external provider.
 | T16 | Tampered release artifact (A4) | **OIDC Trusted Publishing**, **build-provenance attestation**, **SBOM attestation**, SHA-pinned actions, protected `release` environment | `.github/workflows/release.yml` |
 | T17 | Leaked secret committed to the repo (A4, user error) | **gitleaks** secret scan fails CI; **version-drift gate** keeps security docs honest | `.github/workflows/ci.yml` |
 | T18 | Prompt content sent to a third party by an opt-in analysis path (user error) | `scan --llm` is **off by default**, pre-redacts before send, supports `--no-external-llm`; `benchmark` requires explicit confirmation | `core/llm_analyzer.py`, `commands/benchmark.py` |
+| T19 | Arbitrary command execution via a `promptgenie.make.yaml` (A1, A4 — e.g. fetched via `registry pull`, generated, or contributed by a lower-trust PR) | **Makefile trust gate** — `run:` commands execute with `shell=True` by design (like `make`/`just`), but every non-dry-run `make` invocation requires the makefile be explicitly trusted first (path + content hash, mirrors the T1 spec trust gate); non-interactive aborts without `--trust`/`--yes` | `core/make.py` (`_subprocess_runner`), `commands/make_cmd.py` (`_make_trust_gate`), `core/trust.py` (`makefile_requires_trust`) |
 
 ---
 

@@ -47,6 +47,8 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Lint prompt files
+        env:
+          FILES: ${{ steps.find.outputs.files }}
         run: |
           FAILED=0
           mkdir -p sarif-results
@@ -59,7 +61,7 @@ jobs:
             if ! promptgenie lint "$file"; then
               FAILED=1
             fi
-          done <<< "${{ steps.find.outputs.files }}"
+          done <<< "$FILES"
           exit $FAILED
 
       - name: Merge lint SARIFs into one
@@ -115,6 +117,8 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Scan prompt files for security risks
+        env:
+          FILES: ${{ steps.find.outputs.files }}
         run: |
           FAILED=0
           mkdir -p sarif-results
@@ -127,7 +131,7 @@ jobs:
             if ! promptgenie scan "$file"; then
               FAILED=1
             fi
-          done <<< "${{ steps.find.outputs.files }}"
+          done <<< "$FILES"
           exit $FAILED
 
       - name: Merge scan SARIFs into one
@@ -180,6 +184,8 @@ jobs:
 
       - name: Run prompt test suites
         # ANTHROPIC_API_KEY intentionally not exposed — promptgenie test runs offline (lint/scan/score)
+        env:
+          FILES: ${{ steps.find.outputs.files }}
         run: |
           FAILED=0
           while IFS= read -r file; do
@@ -189,5 +195,5 @@ jobs:
             if ! promptgenie test "$file"; then
               FAILED=1
             fi
-          done <<< "${{ steps.find.outputs.files }}"
+          done <<< "$FILES"
           exit $FAILED

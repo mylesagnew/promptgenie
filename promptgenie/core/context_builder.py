@@ -828,10 +828,17 @@ def build_context(
         compression = _compress(text, techniques=techniques)
         text = compression.compressed_text
 
+    # When compression ran, reuse its token count for `total_tokens` instead of
+    # re-estimating: `_estimate_tokens` (char/4 heuristic) and the compressor's
+    # `estimate_tokens` (tiktoken-aware when available) can disagree, which
+    # made `total_tokens != compression.tokens_after` whenever tiktoken was
+    # installed.
+    total_tokens = compression.tokens_after if compression is not None else _estimate_tokens(text)
+
     return ContextManifest(
         text=text,
         entries=all_entries,
-        total_tokens=_estimate_tokens(text),
+        total_tokens=total_tokens,
         trimmed_count=trimmed,
         compression=compression,
     )

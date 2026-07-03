@@ -43,6 +43,20 @@ like ``ci`` runs only the sub-tasks whose inputs actually changed.
 
 This module is dependency-free (stdlib only) and the command runner is
 injectable, so the scheduler is fully unit-testable without spawning processes.
+
+Trust boundary
+--------------
+``run:`` commands execute via ``shell=True`` (see ``_subprocess_runner``
+below) — a makefile is treated as author-trusted, the same as a ``Makefile``.
+This module itself does **not** enforce that boundary; it trusts whatever
+``Makefile`` object it is given. Enforcement lives one layer up, in
+``commands/make_cmd.py``, which gates every non-dry-run invocation on
+``core/trust.py::is_trusted``/``add_trust`` (content-hash-keyed, same
+mechanism as the ``run`` spec trust gate) before any task reaches
+``_subprocess_runner``. See ``THREAT_MODEL.md`` (T19) for the full threat →
+control mapping. Any new caller of ``run_makefile``/``_execute_task`` must go
+through that gate — do not call them directly on an unreviewed makefile path
+(e.g. one pulled from ``promptgenie registry``).
 """
 
 from __future__ import annotations
@@ -306,10 +320,19 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
 def _subprocess_runner(command: str) -> tuple[int, str]:
     # ``shell=True`` is intentional and by design: like ``make`` / ``just`` /
     # ``Taskfile``, ``promptgenie make`` runs the commands written in a
-    # project-committed, author-trusted makefile, and those commands rely on
-    # shell features (globs such as ``prompts/**/*.md``, pipes, redirection).
-    # The makefile is part of the repository under the same trust as a Makefile;
-    # untrusted input is never routed here.
+    # makefile, and those commands rely on shell features (globs such as
+    # ``prompts/**/*.md``, pipes, redirection).
+    #
+    # The trust boundary is that a makefile is *author-trusted*, exactly like
+    # a Makefile — but unlike a Makefile, a ``promptgenie.make.yaml`` can
+    # arrive by paths that are not author-trusted: ``promptgenie registry
+    # pull``, a generated file, or a PR from a lower-trust contributor. That
+    # boundary is enforced, not just assumed: ``commands/make_cmd.py``
+    # (``_make_trust_gate``) requires each makefile to be explicitly trusted
+    # (``core/trust.py::is_trusted``/``add_trust``, keyed by path + content
+    # hash — mirroring the spec trust gate, S-2) before *any* task with a
+    # ``run:`` command reaches this function. Do not call this runner, or add
+    # a new call site for it, without going through that gate first.
     proc = subprocess.run(  # nosec B602
         command,
         shell=True,  # noqa: S602

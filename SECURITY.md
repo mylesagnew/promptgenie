@@ -4,13 +4,13 @@
 
 | Version  | Supported          |
 |----------|--------------------|
-| 1.7.x    | ✓ Active (current) |
-| 1.6.x    | ✓ Security patches |
-| ≤ 1.5.x  | ✗ End of life      |
+| 1.8.x    | ✓ Active (current) |
+| 1.7.x    | ✓ Security patches |
+| ≤ 1.6.x  | ✗ End of life      |
 
-Current release: **1.7.0**. Patch releases are the only supported channel — no LTS or legacy branch exists. Upgrade to the latest 1.7.x to receive the security fixes listed below.
+Current release: **1.8.0**. Patch releases are the only supported channel — no LTS or legacy branch exists. Upgrade to the latest 1.8.x to receive the security fixes listed below.
 
-> The run-engine and VS Code extension hardening described in this document was introduced across the 1.2.x security-audit releases (the `(v1.2.x+)` markers on the sections below indicate when each control was added) and is included in every 1.7.x release.
+> The run-engine and VS Code extension hardening described in this document was introduced across the 1.2.x security-audit releases (the `(v1.2.x+)` markers on the sections below indicate when each control was added) and is included in every 1.8.x release.
 
 ---
 
@@ -53,6 +53,25 @@ source as **untrusted until explicitly trusted**:
   Manage it with `promptgenie trust list | add <spec> | revoke <spec>`.
 - Specs containing only an inline prompt and variables (no host-touching sources) do **not** require
   trust.
+
+### Makefile trust boundary
+
+`promptgenie make` runs a `promptgenie.make.yaml`'s `run:` commands via `shell=True` — by design,
+the same trust model as `make`/`just`/`Taskfile`. A `promptgenie.make.yaml` can arrive by paths that
+are not author-trusted (`promptgenie registry pull`, a generated file, a PR from a lower-trust
+contributor), so it is treated with the same untrusted-until-trusted gate as a spec, keyed by the
+same store (`~/.config/promptgenie/trust.json`):
+
+- Only a makefile containing at least one `run:` command requires trust; a makefile of pure `needs:`
+  aggregators never shells out and is exempt, as is `--dry-run` (which never executes anything).
+- An interactive session lists every shell command the makefile would run and prompts for
+  confirmation before first execution.
+- A non-interactive session (`--no-input`, CI) aborts with `exit 2` unless `--trust` or `--yes` is
+  passed, or the makefile was pre-registered with `promptgenie trust add`.
+- Trust is keyed by the makefile's resolved path and content hash, exactly like a spec — editing a
+  trusted makefile re-prompts.
+
+See THREAT_MODEL.md (T19) for the full threat → control mapping.
 
 ### Secrets gate — hard block
 

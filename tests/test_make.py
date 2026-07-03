@@ -265,6 +265,14 @@ class TestRun:
 
 
 class TestMakeCommand:
+    @pytest.fixture(autouse=True)
+    def _isolated_trust_store(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        # A makefile with ``run:`` commands is untrusted-until-confirmed (S-2,
+        # THREAT_MODEL.md T19); keep the trust store out of the real home dir.
+        import promptgenie.core.trust as trust
+
+        monkeypatch.setattr(trust, "_TRUST_FILE", tmp_path / "trust.json")
+
     def _make(self, tmp_path: Path, body: str = MAKEFILE) -> None:
         _write(tmp_path, body)
 
@@ -273,7 +281,7 @@ class TestMakeCommand:
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path) as fs:
             (Path(fs) / "promptgenie.make.yaml").write_text(MAKEFILE, encoding="utf-8")
-            res = runner.invoke(cli, ["make", "lint"])
+            res = runner.invoke(cli, ["make", "lint", "--yes"])
         assert res.exit_code == 0
 
     def test_failure_exit_1(self, tmp_path: Path):
@@ -282,8 +290,89 @@ class TestMakeCommand:
             (Path(fs) / "promptgenie.make.yaml").write_text(
                 "tasks:\n  bad:\n    run: \"sh -c 'exit 4'\"\n", encoding="utf-8"
             )
-            res = runner.invoke(cli, ["make", "bad"])
+            res = runner.invoke(cli, ["make", "bad", "--yes"])
         assert res.exit_code == 1
+
+    def test_untrusted_makefile_noninteractive_exit_2(self, tmp_path: Path):
+        """Without --trust/--yes, a non-interactive run of a shelling-out makefile aborts (T19)."""
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path) as fs:
+            (Path(fs) / "promptgenie.make.yaml").write_text(MAKEFILE, encoding="utf-8")
+            res = runner.invoke(cli, ["make", "lint"])
+        assert res.exit_code == 2
+        assert "not trusted" in res.output
+
+    def test_trust_flag_records_trust_and_runs(self, tmp_path: Path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path) as fs:
+            (Path(fs) / "promptgenie.make.yaml").write_text(MAKEFILE, encoding="utf-8")
+            res = runner.invoke(cli, ["make", "lint", "--trust"])
+        assert res.exit_code == 0
+
+    def test_interactive_confirm_yes_trusts_makefile(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """The click.confirm() prompt path (a real TTY, no --trust/--yes/--no-input)."""
+        import promptgenie.commands.make_cmd as make_cmd
+        import promptgenie.core.trust as trust
+
+        makefile_path = _write(tmp_path, MAKEFILE)
+        mf = load_makefile(str(makefile_path))
+
+        monkeypatch.setattr(
+            make_cmd.sys, "stdin", type("FakeStdin", (), {"isatty": lambda self: True})()
+        )
+        monkeypatch.setattr(make_cmd.click, "confirm", lambda *a, **k: True)
+
+        make_cmd._make_trust_gate(
+            mf=mf,
+            makefile_path=str(makefile_path),
+            no_input=False,
+            trust_makefile=False,
+            assume_yes=False,
+        )
+        assert trust.is_trusted(makefile_path) is True
+
+    def test_interactive_confirm_no_aborts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """Declining the click.confirm() prompt raises SystemExit(EXIT_USAGE) and leaves the makefile untrusted."""
+        import promptgenie.commands.make_cmd as make_cmd
+        import promptgenie.core.trust as trust
+        from promptgenie.core.errors import EXIT_USAGE
+
+        makefile_path = _write(tmp_path, MAKEFILE)
+        mf = load_makefile(str(makefile_path))
+
+        monkeypatch.setattr(
+            make_cmd.sys, "stdin", type("FakeStdin", (), {"isatty": lambda self: True})()
+        )
+        monkeypatch.setattr(make_cmd.click, "confirm", lambda *a, **k: False)
+
+        with pytest.raises(SystemExit) as exc_info:
+            make_cmd._make_trust_gate(
+                mf=mf,
+                makefile_path=str(makefile_path),
+                no_input=False,
+                trust_makefile=False,
+                assume_yes=False,
+            )
+        assert exc_info.value.code == EXIT_USAGE
+        assert trust.is_trusted(makefile_path) is False
+
+    def test_dry_run_needs_no_trust(self, tmp_path: Path):
+        """--dry-run never shells out, so it must not require --trust/--yes."""
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path) as fs:
+            (Path(fs) / "promptgenie.make.yaml").write_text(MAKEFILE, encoding="utf-8")
+            res = runner.invoke(cli, ["make", "ci", "--dry-run"])
+        assert res.exit_code == 0
+
+    def test_aggregator_only_makefile_needs_no_trust(self, tmp_path: Path):
+        """A makefile with only 'needs:' aggregators (no run:) never shells out."""
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path) as fs:
+            (Path(fs) / "promptgenie.make.yaml").write_text(
+                "tasks:\n  a:\n    desc: noop\n  b:\n    needs: [a]\n", encoding="utf-8"
+            )
+            res = runner.invoke(cli, ["make", "b"])
+        assert res.exit_code == 0
 
     def test_list(self, tmp_path: Path):
         runner = CliRunner()
@@ -297,7 +386,7 @@ class TestMakeCommand:
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path) as fs:
             (Path(fs) / "promptgenie.make.yaml").write_text(MAKEFILE, encoding="utf-8")
-            res = runner.invoke(cli, ["make", "lint", "--format", "json"])
+            res = runner.invoke(cli, ["make", "lint", "--format", "json", "--yes"])
         assert res.exit_code == 0
         data = json.loads(res.output)
         assert data["schema_version"] == "1.0"

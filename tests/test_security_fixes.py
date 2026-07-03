@@ -772,6 +772,58 @@ class TestSpecTrust:
         assert "not trusted" not in result.output.lower()
         assert trust.is_trusted(spec_path) is True
 
+    def test_interactive_confirm_yes_trusts_spec(self, tmp_path, monkeypatch):
+        """The click.confirm() prompt path (a real TTY, no --trust/--yes/--no-input)."""
+        import promptgenie.commands.run as run_mod
+        import promptgenie.core.trust as trust
+        from promptgenie.core.spec import load_spec
+
+        monkeypatch.setattr(trust, "_TRUST_FILE", tmp_path / "trust.json")
+        spec_path = tmp_path / "spec.yaml"
+        spec_path.write_text(
+            "version: 1\nname: t\ntarget: claude-code\nprompt: hi\n"
+            "context:\n  - type: cmd\n    command: git log\n",
+            encoding="utf-8",
+        )
+        spec = load_spec(spec_path)
+
+        monkeypatch.setattr(run_mod.sys, "stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+        monkeypatch.setattr(run_mod.click, "confirm", lambda *a, **k: True)
+
+        run_mod._trust_gate(
+            spec=spec, spec_file=str(spec_path), no_input=False, trust_spec=False, assume_yes=False
+        )
+        assert trust.is_trusted(spec_path) is True
+
+    def test_interactive_confirm_no_aborts(self, tmp_path, monkeypatch):
+        """Declining the click.confirm() prompt raises SystemExit(EXIT_USAGE) and leaves the spec untrusted."""
+        import promptgenie.commands.run as run_mod
+        import promptgenie.core.trust as trust
+        from promptgenie.core.spec import load_spec
+
+        monkeypatch.setattr(trust, "_TRUST_FILE", tmp_path / "trust.json")
+        spec_path = tmp_path / "spec.yaml"
+        spec_path.write_text(
+            "version: 1\nname: t\ntarget: claude-code\nprompt: hi\n"
+            "context:\n  - type: cmd\n    command: git log\n",
+            encoding="utf-8",
+        )
+        spec = load_spec(spec_path)
+
+        monkeypatch.setattr(run_mod.sys, "stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+        monkeypatch.setattr(run_mod.click, "confirm", lambda *a, **k: False)
+
+        with pytest.raises(SystemExit) as exc_info:
+            run_mod._trust_gate(
+                spec=spec,
+                spec_file=str(spec_path),
+                no_input=False,
+                trust_spec=False,
+                assume_yes=False,
+            )
+        assert exc_info.value.code == EXIT_USAGE
+        assert trust.is_trusted(spec_path) is False
+
 
 # ---------------------------------------------------------------------------
 # S-4: run history permissions + secret redaction

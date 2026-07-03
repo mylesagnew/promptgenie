@@ -26,6 +26,7 @@ Public API
 from __future__ import annotations
 
 import os
+import warnings
 
 _KEYRING_SERVICE = "promptgenie"
 
@@ -62,6 +63,10 @@ def get_credential(provider: str) -> str | None:
     Resolution order:
     1. Environment variable (provider config's api_key_env)
     2. Keyring
+    3. Direct ``api_key`` in providers.yaml — a ``ref:`` pointer to an
+       external secret manager, or (not recommended) a raw plaintext key.
+       Reading a raw plaintext key emits a ``UserWarning`` (see below); it is
+       accepted so an existing config keeps working, but it is not silent.
     """
     from promptgenie.core.providers import load_providers_config
 
@@ -88,6 +93,13 @@ def get_credential(provider: str) -> str | None:
     if cfg and cfg.api_key:
         if cfg.api_key.startswith(_REF_PREFIX):
             return resolve_credential_ref(cfg.api_key)
+        warnings.warn(
+            f"SECURITY WARNING: provider {provider!r} reads its API key from a "
+            "plaintext 'api_key' field in providers.yaml. This key is stored "
+            "unencrypted on disk. Use 'api_key_env' (an environment variable), "
+            "the keyring (promptgenie auth login), or a 'ref:' pointer instead.",
+            stacklevel=2,
+        )
         return cfg.api_key
 
     return None

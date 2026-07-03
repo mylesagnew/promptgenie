@@ -222,6 +222,27 @@ class TestResolveApiKey:
         with pytest.raises(PromptGenieError):
             p._resolve_api_key()
 
+    def test_ref_key_resolved_via_credentials(self, monkeypatch):
+        import promptgenie.core.credentials as credentials
+
+        monkeypatch.setattr(
+            credentials, "resolve_credential_ref", lambda ref: "resolved-secret"
+        )
+        p = OpenAICompatProvider(
+            ProviderConfig(name="x", type="openai_compat", api_key="ref:1password:vault/item/field")
+        )
+        assert p._resolve_api_key() == "resolved-secret"
+
+    def test_ref_key_unresolved_raises(self, monkeypatch):
+        import promptgenie.core.credentials as credentials
+
+        monkeypatch.setattr(credentials, "resolve_credential_ref", lambda ref: None)
+        p = OpenAICompatProvider(
+            ProviderConfig(name="x", type="openai_compat", api_key="ref:1password:vault/item/field")
+        )
+        with pytest.raises(PromptGenieError):
+            p._resolve_api_key()
+
 
 # ---------------------------------------------------------------------------
 # run_engine non-dry-run send path via a fake provider

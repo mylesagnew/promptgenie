@@ -1567,7 +1567,12 @@ promptgenie make --list
 | `-k, --keep-going` | Continue independent tasks after a failure |
 | `--dry-run` | Print the resolved plan without executing |
 | `--list` | List available tasks and exit |
+| `--no-input` | Never prompt interactively — fail if the makefile is not already trusted |
+| `--trust` | Trust this makefile's shell commands without prompting (records it as trusted) |
+| `-y, --yes` | Assume yes to prompts (also trusts the makefile's shell commands) |
 | `--format` | Report format: `text` (default) / `json` |
+
+> **Makefile trust boundary** — every `run:` entry executes via `shell=True`, so a makefile is treated the same as a hand-authored `Makefile`: fine to run once you trust its source, dangerous if it arrived via `registry pull`, a generator, or a lower-trust PR. A non-dry-run `make` invocation of a makefile with any `run:` command requires the makefile be trusted first (mirrors the `run` spec trust gate — path + content hash, `~/.config/promptgenie/trust.json`). Interactive sessions list the commands and prompt; CI must pass `--trust`/`--yes` or pre-register via `promptgenie trust add`. A makefile of only `needs:` aggregators (no `run:` anywhere) never shells out and needs no trust; `--dry-run` never requires trust either.
 
 ---
 
