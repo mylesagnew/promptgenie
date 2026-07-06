@@ -49,7 +49,7 @@ providers = [
     "anthropic>=0.100",
 ]
 tui = [
-    "textual>=0.50",
+    "textual>=8.2.8",
 ]
 watch = [
     "watchfiles>=0.21",
