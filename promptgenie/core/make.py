@@ -434,8 +434,7 @@ def run_makefile(
                     continue
                 task = mf.tasks[name]
                 dep_failed = any(
-                    results.get(d) is not None and results[d].status == "fail"
-                    for d in task.needs
+                    results.get(d) is not None and results[d].status == "fail" for d in task.needs
                 )
                 # Resolve skips eagerly (no worker needed). A task whose
                 # dependency failed is always skipped — you cannot run it. The
@@ -451,7 +450,9 @@ def run_makefile(
                 if dirty is not None and not dirty[name]:
                     pending.discard(name)
                     done.add(name)
-                    finish(TaskResult(name, "skipped", reason="no changes", commands=list(task.run)))
+                    finish(
+                        TaskResult(name, "skipped", reason="no changes", commands=list(task.run))
+                    )
                     progressed = True
                     continue
                 if len(futures) >= parallel:

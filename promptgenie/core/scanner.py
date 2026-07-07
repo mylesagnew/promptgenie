@@ -46,6 +46,7 @@ def coerce_confidence(raw: str, context: str = "") -> Confidence:
         )
     return upper
 
+
 # Maximum findings emitted per rule per scan (prevents finding-flood on adversarial input).
 MAX_FINDINGS_PER_RULE: int = 5
 

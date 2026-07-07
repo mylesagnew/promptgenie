@@ -296,9 +296,7 @@ def _parse_scanner(raw: dict[str, Any]) -> ScannerConfig:
 
     overrides: dict[str, FindingRisk] = {}
     for code, level in raw.get("severity_overrides", {}).items():
-        overrides[str(code)] = coerce_finding_risk(
-            str(level), f"severity_overrides.{code}"
-        )
+        overrides[str(code)] = coerce_finding_risk(str(level), f"severity_overrides.{code}")
 
     return ScannerConfig(
         allowlist=_parse_allowlist(raw.get("allowlist", [])),

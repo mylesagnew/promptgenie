@@ -266,7 +266,9 @@ class LocalRegistryStore:
     def has_blob(self, digest: str) -> bool:
         return self.blob_path(digest).exists()
 
-    def put_blob(self, data: bytes, *, media_type: str, annotations: dict[str, str] | None = None) -> Descriptor:
+    def put_blob(
+        self, data: bytes, *, media_type: str, annotations: dict[str, str] | None = None
+    ) -> Descriptor:
         digest = compute_digest(data)
         path = self.blob_path(digest)
         if not path.exists():  # content-addressed: identical content is a no-op
@@ -298,7 +300,9 @@ class LocalRegistryStore:
         data = path.read_bytes()
         actual = compute_digest(data)
         if actual != digest:
-            raise RegistryError(f"Manifest digest mismatch for {digest}: content hashes to {actual}.")
+            raise RegistryError(
+                f"Manifest digest mismatch for {digest}: content hashes to {actual}."
+            )
         return Manifest.from_dict(json.loads(data))
 
     def manifest_digest_bytes(self, digest: str) -> bytes:

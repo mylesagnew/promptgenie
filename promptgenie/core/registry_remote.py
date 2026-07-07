@@ -112,9 +112,7 @@ class RemoteRegistryStore:
     ) -> Descriptor:
         digest = compute_digest(data)
         if not self.has_blob(digest):  # dedup — upload shared layers once
-            start = self._check(
-                self._client.post(self._url("blobs/uploads/")), ok=(201, 202)
-            )
+            start = self._check(self._client.post(self._url("blobs/uploads/")), ok=(201, 202))
             location = start.headers.get("Location")
             if not location:
                 raise RegistryError("Registry did not return an upload Location.")
@@ -163,7 +161,9 @@ class RemoteRegistryStore:
         )
 
     def set_tag(self, repository: str, tag: str, manifest_digest: str) -> None:
-        data = self._manifest_cache.get(manifest_digest) or self.manifest_digest_bytes(manifest_digest)
+        data = self._manifest_cache.get(manifest_digest) or self.manifest_digest_bytes(
+            manifest_digest
+        )
         self._put_manifest_bytes(tag, data)
 
     def _get_manifest_bytes(self, reference: str) -> bytes:
@@ -203,7 +203,9 @@ class RemoteRegistryStore:
         if resp.status_code != 200:
             return []
         body = resp.json()
-        return [RepoTag(self.repository, t, "") for t in body.get("tags", []) if not t.endswith(".sig")]
+        return [
+            RepoTag(self.repository, t, "") for t in body.get("tags", []) if not t.endswith(".sig")
+        ]
 
     def all_tags(self) -> list[RepoTag]:
         return self.list_tags(self.repository)

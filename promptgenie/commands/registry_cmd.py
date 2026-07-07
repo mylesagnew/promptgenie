@@ -82,17 +82,31 @@ def registry_group() -> None:
 
 @registry_group.command("push")
 @click.argument("source", type=click.Path(exists=True, dir_okay=False))
-@click.option("--name", "-n", default=None, help="Repository name (default: derived from the spec).")
+@click.option(
+    "--name", "-n", default=None, help="Repository name (default: derived from the spec)."
+)
 @click.option("--tag", "-t", default="latest", show_default=True, help="Tag to assign.")
 @click.option("--description", "-d", default="", help="Human description stored in the artifact.")
-@click.option("--annotate", "-a", multiple=True, metavar="K=V", help="Extra manifest annotation (repeatable).")
+@click.option(
+    "--annotate", "-a", multiple=True, metavar="K=V", help="Extra manifest annotation (repeatable)."
+)
 @click.option("--sign", is_flag=True, help="Sign the manifest after push.")
 @click.option("--key", "secret_key", default=None, help="Secret key for --sign.")
-@click.option("--method", type=click.Choice(["minisign", "cosign"]), default="minisign", show_default=True)
+@click.option(
+    "--method", type=click.Choice(["minisign", "cosign"]), default="minisign", show_default=True
+)
 @click.option("--remote", default=None, help="Push to a remote OCI registry (host[/namespace]).")
-@click.option("--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only).")
+@click.option(
+    "--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only)."
+)
 @click.option("--store-path", default=None, type=click.Path(), help="Local registry store root.")
-@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
 def registry_push(
     source: str,
     name: str | None,
@@ -124,7 +138,9 @@ def registry_push(
         store, repository = resolve_push_target(
             remote, repository, store_path=store_path, insecure=insecure
         )
-        bundle = build_artifact(src, name=repository, tag=tag, description=description, annotate=annotations)
+        bundle = build_artifact(
+            src, name=repository, tag=tag, description=description, annotate=annotations
+        )
         digest = push_bundle(store, bundle, repository, tag)
         if sign:
             if not secret_key:
@@ -156,9 +172,12 @@ def registry_push(
                 "digest": digest,
                 "signed": sign,
                 "layers": [
-                    {"kind": layer.annotations.get("org.promptgenie.kind", ""),
-                     "path": layer.annotations.get("org.promptgenie.path", ""),
-                     "digest": layer.digest, "size": layer.size}
+                    {
+                        "kind": layer.annotations.get("org.promptgenie.kind", ""),
+                        "path": layer.annotations.get("org.promptgenie.path", ""),
+                        "digest": layer.digest,
+                        "size": layer.size,
+                    }
                     for layer in manifest.layers
                 ],
                 "total_bytes": total,
@@ -180,14 +199,24 @@ def registry_push(
 
 @registry_group.command("pull")
 @click.argument("ref")
-@click.option("--out", "-o", default=None, type=click.Path(), help="Output directory (default: ./<name>).")
+@click.option(
+    "--out", "-o", default=None, type=click.Path(), help="Output directory (default: ./<name>)."
+)
 @click.option("--require-signed", is_flag=True, help="Fail unless a valid signature is present.")
 @click.option("--pubkey", default=None, help="Public key for signature verification.")
 @click.option("--method", type=click.Choice(["minisign", "cosign"]), default=None)
 @click.option("--remote", default=None, help="Pull from a remote OCI registry (host[/namespace]).")
-@click.option("--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only).")
+@click.option(
+    "--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only)."
+)
 @click.option("--store-path", default=None, type=click.Path())
-@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
 def registry_pull(
     ref: str,
     out: str | None,
@@ -259,7 +288,13 @@ def registry_pull(
 @registry_group.command("list")
 @click.option("--name", default=None, help="Restrict to a single repository.")
 @click.option("--store-path", default=None, type=click.Path())
-@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
 def registry_list(name: str | None, store_path: str | None, output_format: str) -> None:
     """List repositories and tags in the store."""
     store = _store(store_path)
@@ -269,8 +304,12 @@ def registry_list(name: str | None, store_path: str | None, output_format: str) 
             {
                 "schema_version": "1.0",
                 "artifacts": [
-                    {"repository": t.repository, "tag": t.tag, "digest": t.digest,
-                     "signed": store.has_signature(t.digest)}
+                    {
+                        "repository": t.repository,
+                        "tag": t.tag,
+                        "digest": t.digest,
+                        "signed": store.has_signature(t.digest),
+                    }
                     for t in tags
                 ],
             }
@@ -282,23 +321,35 @@ def registry_list(name: str | None, store_path: str | None, output_format: str) 
     diag_console.print("[bold]Registry[/bold]")
     for t in tags:
         sig = " [cyan]✎[/cyan]" if store.has_signature(t.digest) else ""
-        diag_console.print(f"  [bold]{t.repository}[/bold]:{t.tag}{sig}  [dim]{t.digest[:19]}…[/dim]")
+        diag_console.print(
+            f"  [bold]{t.repository}[/bold]:{t.tag}{sig}  [dim]{t.digest[:19]}…[/dim]"
+        )
     raise SystemExit(EXIT_OK)
 
 
 @registry_group.command("tags")
 @click.argument("repository")
 @click.option("--remote", default=None, help="Query a remote OCI registry (host[/namespace]).")
-@click.option("--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only).")
+@click.option(
+    "--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only)."
+)
 @click.option("--store-path", default=None, type=click.Path())
-@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
 def registry_tags(
     repository: str, remote: str | None, insecure: bool, store_path: str | None, output_format: str
 ) -> None:
     """List the tags of a repository."""
     try:
         store, ref = resolve_ref_target(
-            Reference.parse(repository if ":" in repository or "/" in repository else f"{repository}:latest"),
+            Reference.parse(
+                repository if ":" in repository or "/" in repository else f"{repository}:latest"
+            ),
             remote,
             store_path=store_path,
             insecure=insecure,
@@ -309,8 +360,13 @@ def registry_tags(
     repository = ref.repository
     tags = store.list_tags(repository)
     if is_structured_mode(output_format):
-        _emit_json({"schema_version": "1.0", "repository": repository,
-                    "tags": [{"tag": t.tag, "digest": t.digest} for t in tags]})
+        _emit_json(
+            {
+                "schema_version": "1.0",
+                "repository": repository,
+                "tags": [{"tag": t.tag, "digest": t.digest} for t in tags],
+            }
+        )
         raise SystemExit(EXIT_OK)
     if not tags:
         diag_console.print(f"[dim]No tags for {repository}.[/dim]")
@@ -323,16 +379,26 @@ def registry_tags(
 @registry_group.command("show")
 @click.argument("ref")
 @click.option("--remote", default=None, help="Query a remote OCI registry (host[/namespace]).")
-@click.option("--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only).")
+@click.option(
+    "--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only)."
+)
 @click.option("--store-path", default=None, type=click.Path())
-@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
 def registry_show(
     ref: str, remote: str | None, insecure: bool, store_path: str | None, output_format: str
 ) -> None:
     """Show a manifest, its layers, and provenance metadata."""
     try:
         reference = Reference.parse(ref)
-        store, reference = resolve_ref_target(reference, remote, store_path=store_path, insecure=insecure)
+        store, reference = resolve_ref_target(
+            reference, remote, store_path=store_path, insecure=insecure
+        )
         digest = store.resolve_ref(reference)
         manifest = store.get_manifest(digest)
         config = json.loads(store.get_blob(manifest.config.digest))
@@ -364,7 +430,9 @@ def registry_show(
     for layer in manifest.layers:
         kind = layer.annotations.get("org.promptgenie.kind", "?")
         path = layer.annotations.get("org.promptgenie.path", "")
-        diag_console.print(f"    • [bold]{kind}[/bold] {path}  [dim]{layer.size} B  {layer.digest[:19]}…[/dim]")
+        diag_console.print(
+            f"    • [bold]{kind}[/bold] {path}  [dim]{layer.size} B  {layer.digest[:19]}…[/dim]"
+        )
     raise SystemExit(EXIT_OK)
 
 
@@ -373,15 +441,24 @@ def registry_show(
 @click.option("--pubkey", required=True, help="Public key to verify against.")
 @click.option("--method", type=click.Choice(["minisign", "cosign"]), default=None)
 @click.option("--remote", default=None, help="Query a remote OCI registry (host[/namespace]).")
-@click.option("--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only).")
+@click.option(
+    "--insecure", is_flag=True, help="Allow http:// and skip TLS verification (remote only)."
+)
 @click.option("--store-path", default=None, type=click.Path())
 def registry_verify(
-    ref: str, pubkey: str, method: str | None, remote: str | None, insecure: bool, store_path: str | None
+    ref: str,
+    pubkey: str,
+    method: str | None,
+    remote: str | None,
+    insecure: bool,
+    store_path: str | None,
 ) -> None:
     """Verify an artifact's signature and re-check every layer digest."""
     try:
         reference = Reference.parse(ref)
-        store, reference = resolve_ref_target(reference, remote, store_path=store_path, insecure=insecure)
+        store, reference = resolve_ref_target(
+            reference, remote, store_path=store_path, insecure=insecure
+        )
         digest = store.resolve_ref(reference)
         sig_ok = verify_manifest(store, digest, pubkey, method=method)
         manifest = store.get_manifest(digest)  # verifies manifest digest
@@ -395,7 +472,9 @@ def registry_verify(
     if not sig_ok:
         diag_console.print(f"[red]✗ signature invalid or missing[/red] for {reference}")
         raise SystemExit(EXIT_FAILURE)
-    diag_console.print(f"[green]✓[/green] {reference}: signature valid, all {len(manifest.layers)} layer digest(s) verified.")
+    diag_console.print(
+        f"[green]✓[/green] {reference}: signature valid, all {len(manifest.layers)} layer digest(s) verified."
+    )
     raise SystemExit(EXIT_OK)
 
 
@@ -421,14 +500,26 @@ def registry_rm(ref: str, store_path: str | None) -> None:
 @registry_group.command("prune")
 @click.option("--dry-run", is_flag=True, help="Report what would be removed without deleting.")
 @click.option("--store-path", default=None, type=click.Path())
-@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
 def registry_prune(dry_run: bool, store_path: str | None, output_format: str) -> None:
     """Garbage-collect blobs/manifests no longer referenced by any tag."""
     store = _store(store_path)
     removed = store.gc(dry_run=dry_run)
     if is_structured_mode(output_format):
-        _emit_json({"schema_version": "1.0", "dry_run": dry_run,
-                    "removed": removed, "removed_count": len(removed)})
+        _emit_json(
+            {
+                "schema_version": "1.0",
+                "dry_run": dry_run,
+                "removed": removed,
+                "removed_count": len(removed),
+            }
+        )
         raise SystemExit(EXIT_OK)
     verb = "would remove" if dry_run else "removed"
     diag_console.print(f"[green]✓[/green] {verb} {len(removed)} unreferenced object(s).")
@@ -438,7 +529,13 @@ def registry_prune(dry_run: bool, store_path: str | None, output_format: str) ->
 @registry_group.command("search")
 @click.argument("query")
 @click.option("--store-path", default=None, type=click.Path())
-@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    show_default=True,
+)
 def registry_search(query: str, store_path: str | None, output_format: str) -> None:
     """Search artifacts by repository name or manifest annotations."""
     store = _store(store_path)
@@ -455,8 +552,15 @@ def registry_search(query: str, store_path: str | None, output_format: str) -> N
             hits.append(t)
 
     if is_structured_mode(output_format):
-        _emit_json({"schema_version": "1.0", "query": query,
-                    "results": [{"repository": t.repository, "tag": t.tag, "digest": t.digest} for t in hits]})
+        _emit_json(
+            {
+                "schema_version": "1.0",
+                "query": query,
+                "results": [
+                    {"repository": t.repository, "tag": t.tag, "digest": t.digest} for t in hits
+                ],
+            }
+        )
         raise SystemExit(EXIT_OK)
     if not hits:
         diag_console.print(f"[dim]No artifacts match {query!r}.[/dim]")
@@ -468,7 +572,9 @@ def registry_search(query: str, store_path: str | None, output_format: str) -> N
 
 @registry_group.command("login")
 @click.argument("remote")
-@click.option("--token", default=None, help="Bearer token (prefer --token-stdin to avoid shell history).")
+@click.option(
+    "--token", default=None, help="Bearer token (prefer --token-stdin to avoid shell history)."
+)
 @click.option("--token-stdin", "token_stdin", is_flag=True, help="Read the token from stdin.")
 def registry_login(remote: str, token: str | None, token_stdin: bool) -> None:
     """Store a bearer token for a remote registry HOST."""

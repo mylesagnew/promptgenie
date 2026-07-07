@@ -11,6 +11,7 @@ The ``@pytest.mark.integration`` marker exists so you can run this suite in
 isolation:
     pytest -m integration
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -406,6 +407,8 @@ class TestMatrixEvaluateCassette:
             respx.mock() as mock,
         ):
             mock.post(_ANTHROPIC_URL).mock(return_value=httpx.Response(200, json=data))
-            result = matrix_evaluate("What is 2+2?", models=["anthropic/claude-haiku-4-5"], timeout=5)
+            result = matrix_evaluate(
+                "What is 2+2?", models=["anthropic/claude-haiku-4-5"], timeout=5
+            )
 
         assert result.prompt == "What is 2+2?"

@@ -287,7 +287,8 @@ class TestRegistryCommand:
         self._push(runner, spec, store, "--tag", "v1.2")
         out = tmp_path / "out"
         res = runner.invoke(
-            cli, ["registry", "pull", "auth-review:v1.2", "--out", str(out), "--store-path", str(store)]
+            cli,
+            ["registry", "pull", "auth-review:v1.2", "--out", str(out), "--store-path", str(store)],
         )
         assert res.exit_code == 0
         assert (out / "templates" / "review.md").exists()
@@ -297,11 +298,13 @@ class TestRegistryCommand:
         store = tmp_path / "store"
         runner = CliRunner()
         self._push(runner, spec, store, "--tag", "v1")
-        assert "auth-review" in runner.invoke(
-            cli, ["registry", "list", "--store-path", str(store)]
-        ).output
+        assert (
+            "auth-review"
+            in runner.invoke(cli, ["registry", "list", "--store-path", str(store)]).output
+        )
         show = runner.invoke(
-            cli, ["registry", "show", "auth-review:v1", "--store-path", str(store), "--format", "json"]
+            cli,
+            ["registry", "show", "auth-review:v1", "--store-path", str(store), "--format", "json"],
         )
         data = json.loads(show.output)
         assert data["config"]["provider"] == "anthropic"
@@ -312,19 +315,27 @@ class TestRegistryCommand:
         store = tmp_path / "store"
         runner = CliRunner()
         self._push(runner, spec, store, "--tag", "v1")
-        assert "auth-review" in runner.invoke(
-            cli, ["registry", "search", "anthropic", "--store-path", str(store)]
-        ).output
+        assert (
+            "auth-review"
+            in runner.invoke(
+                cli, ["registry", "search", "anthropic", "--store-path", str(store)]
+            ).output
+        )
 
     def test_rm_and_prune(self, tmp_path: Path):
         spec = _project(tmp_path)
         store = tmp_path / "store"
         runner = CliRunner()
         self._push(runner, spec, store, "--tag", "v1")
-        assert runner.invoke(
-            cli, ["registry", "rm", "auth-review:v1", "--store-path", str(store)]
-        ).exit_code == 0
-        prune = runner.invoke(cli, ["registry", "prune", "--store-path", str(store), "--format", "json"])
+        assert (
+            runner.invoke(
+                cli, ["registry", "rm", "auth-review:v1", "--store-path", str(store)]
+            ).exit_code
+            == 0
+        )
+        prune = runner.invoke(
+            cli, ["registry", "prune", "--store-path", str(store), "--format", "json"]
+        )
         assert json.loads(prune.output)["removed_count"] > 0
 
     def test_pull_unknown_ref_exit_2(self, tmp_path: Path):
@@ -339,7 +350,16 @@ class TestRegistryCommand:
         runner = CliRunner()
         res = runner.invoke(
             cli,
-            ["registry", "push", str(spec), "--tag", "v1", "--sign", "--store-path", str(tmp_path / "store")],
+            [
+                "registry",
+                "push",
+                str(spec),
+                "--tag",
+                "v1",
+                "--sign",
+                "--store-path",
+                str(tmp_path / "store"),
+            ],
         )
         assert res.exit_code == 2
 
@@ -349,7 +369,8 @@ class TestRegistryCommand:
         runner = CliRunner()
         self._push(runner, spec, store, "--tag", "v1")
         res = runner.invoke(
-            cli, ["registry", "pull", "auth-review:v1", "--require-signed", "--store-path", str(store)]
+            cli,
+            ["registry", "pull", "auth-review:v1", "--require-signed", "--store-path", str(store)],
         )
         assert res.exit_code == 2
 
@@ -359,12 +380,21 @@ class TestRegistryCommand:
         runner = CliRunner()
         self._push(runner, spec, store, "--tag", "v1")
         show = runner.invoke(
-            cli, ["registry", "show", "auth-review:v1", "--store-path", str(store), "--format", "json"]
+            cli,
+            ["registry", "show", "auth-review:v1", "--store-path", str(store), "--format", "json"],
         )
         digest = json.loads(show.output)["digest"]
         res = runner.invoke(
             cli,
-            ["registry", "pull", f"auth-review@{digest}", "--out", str(tmp_path / "o"), "--store-path", str(store)],
+            [
+                "registry",
+                "pull",
+                f"auth-review@{digest}",
+                "--out",
+                str(tmp_path / "o"),
+                "--store-path",
+                str(store),
+            ],
         )
         assert res.exit_code == 0
 

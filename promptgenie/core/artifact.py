@@ -227,9 +227,7 @@ def _safe_rel(base: Path, target: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def push_bundle(
-    store: RegistryStore, bundle: ArtifactBundle, repository: str, tag: str
-) -> str:
+def push_bundle(store: RegistryStore, bundle: ArtifactBundle, repository: str, tag: str) -> str:
     """Write *bundle*'s blobs + manifest to *store* and point *repository:tag* at it.
 
     Returns the manifest digest.

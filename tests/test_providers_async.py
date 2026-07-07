@@ -225,9 +225,7 @@ class TestResolveApiKey:
     def test_ref_key_resolved_via_credentials(self, monkeypatch):
         import promptgenie.core.credentials as credentials
 
-        monkeypatch.setattr(
-            credentials, "resolve_credential_ref", lambda ref: "resolved-secret"
-        )
+        monkeypatch.setattr(credentials, "resolve_credential_ref", lambda ref: "resolved-secret")
         p = OpenAICompatProvider(
             ProviderConfig(name="x", type="openai_compat", api_key="ref:1password:vault/item/field")
         )

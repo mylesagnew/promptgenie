@@ -199,9 +199,7 @@ def _report_check(results: list[tuple[str, FormatResult]]) -> None:
         diag_console.print(f"[yellow]would reformat[/yellow] {name}  [dim]{rules}[/dim]")
     n = len(results)
     if changed:
-        diag_console.print(
-            f"[yellow]{len(changed)}[/yellow] of {n} file(s) would be reformatted."
-        )
+        diag_console.print(f"[yellow]{len(changed)}[/yellow] of {n} file(s) would be reformatted.")
     else:
         diag_console.print(f"[green]✓[/green] {n} file(s) already formatted.")
 

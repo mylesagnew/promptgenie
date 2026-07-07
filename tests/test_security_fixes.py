@@ -787,7 +787,9 @@ class TestSpecTrust:
         )
         spec = load_spec(spec_path)
 
-        monkeypatch.setattr(run_mod.sys, "stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+        monkeypatch.setattr(
+            run_mod.sys, "stdin", type("FakeStdin", (), {"isatty": lambda self: True})()
+        )
         monkeypatch.setattr(run_mod.click, "confirm", lambda *a, **k: True)
 
         run_mod._trust_gate(
@@ -810,7 +812,9 @@ class TestSpecTrust:
         )
         spec = load_spec(spec_path)
 
-        monkeypatch.setattr(run_mod.sys, "stdin", type("FakeStdin", (), {"isatty": lambda self: True})())
+        monkeypatch.setattr(
+            run_mod.sys, "stdin", type("FakeStdin", (), {"isatty": lambda self: True})()
+        )
         monkeypatch.setattr(run_mod.click, "confirm", lambda *a, **k: False)
 
         with pytest.raises(SystemExit) as exc_info:

@@ -148,8 +148,16 @@ def sign_blob_file(
         sig_path = Path(str(blob_path) + ".cosig")
         try:
             result = subprocess.run(
-                ["cosign", "sign-blob", "--yes", "--key", secret_key,
-                 "--output-signature", str(sig_path), str(blob_path)],
+                [
+                    "cosign",
+                    "sign-blob",
+                    "--yes",
+                    "--key",
+                    secret_key,
+                    "--output-signature",
+                    str(sig_path),
+                    str(blob_path),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -344,6 +352,7 @@ def run_pack_unit_test(pack_path: str | Path, test_path: str | Path) -> PackTest
         if not isinstance(r, dict):
             continue
         from promptgenie.core.scanner import coerce_confidence, coerce_finding_risk
+
         pack_rules.append(
             ScanRule(
                 id=str(r.get("id", "PACK_RULE")),

@@ -242,9 +242,7 @@ class TestRun:
         assert {r.status for r in run.results} == {"dry-run"}
 
     def test_parallel_runs_all(self, tmp_path: Path):
-        body = "tasks:\n" + "".join(
-            f"  t{i}:\n    run: cmd{i}\n" for i in range(6)
-        )
+        body = "tasks:\n" + "".join(f"  t{i}:\n    run: cmd{i}\n" for i in range(6))
         mf = load_makefile(_write(tmp_path, body))
         runner = FakeRunner()
         run = run_makefile(mf, [], parallel=4, runner=runner)
@@ -309,7 +307,9 @@ class TestMakeCommand:
             res = runner.invoke(cli, ["make", "lint", "--trust"])
         assert res.exit_code == 0
 
-    def test_interactive_confirm_yes_trusts_makefile(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    def test_interactive_confirm_yes_trusts_makefile(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         """The click.confirm() prompt path (a real TTY, no --trust/--yes/--no-input)."""
         import promptgenie.commands.make_cmd as make_cmd
         import promptgenie.core.trust as trust

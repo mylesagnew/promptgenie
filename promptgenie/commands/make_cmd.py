@@ -90,9 +90,7 @@ def _make_trust_gate(
         )
         raise SystemExit(EXIT_USAGE)
 
-    diag_console.print(
-        f"[yellow]⚠ {makefile_path} runs shell commands on your host:[/yellow]"
-    )
+    diag_console.print(f"[yellow]⚠ {makefile_path} runs shell commands on your host:[/yellow]")
     for line in _describe_commands(mf):
         diag_console.print(f"[yellow]{line}[/yellow]")
     if not click.confirm("Trust this makefile and run its commands?", default=False):
