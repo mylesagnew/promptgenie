@@ -129,7 +129,7 @@ class TestAnthropicHttpxCassette:
                 return_value=httpx.Response(429, json={"error": {"type": "rate_limit_error"}})
             )
             provider = _make_anthropic_provider()
-            with pytest.raises(Exception):
+            with pytest.raises(httpx.HTTPStatusError):
                 asyncio.run(
                     provider._complete_httpx(
                         [{"role": "user", "content": "Hi."}],

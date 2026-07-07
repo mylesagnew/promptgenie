@@ -209,7 +209,12 @@ def _parse_allowlist(raw_entries: list[Any]) -> list[AllowlistEntry]:
 
 
 def _parse_custom_scan_rules(raw_rules: list[Any]) -> list[ScanRule]:
-    from promptgenie.core.scanner import ScanRule, coerce_confidence, coerce_finding_risk, validate_pattern
+    from promptgenie.core.scanner import (
+        ScanRule,
+        coerce_confidence,
+        coerce_finding_risk,
+        validate_pattern,
+    )
 
     rules = []
     for entry in raw_rules:
@@ -287,7 +292,7 @@ def _parse_custom_lint_rules(raw_rules: list[Any]) -> list[LintRule]:
 
 
 def _parse_scanner(raw: dict[str, Any]) -> ScannerConfig:
-    from promptgenie.core.scanner import FindingRisk, coerce_finding_risk
+    from promptgenie.core.scanner import coerce_finding_risk
 
     overrides: dict[str, FindingRisk] = {}
     for code, level in raw.get("severity_overrides", {}).items():
