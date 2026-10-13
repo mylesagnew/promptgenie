@@ -85,7 +85,7 @@ jobs:
         run: |
           uv run cyclonedx-py environment \
             --output-format json \
-            --outfile dist/sbom.cyclonedx.json
+            --output-file dist/sbom.cyclonedx.json
           echo "SBOM generated:"
           cat dist/sbom.cyclonedx.json | python3 -c "
           import sys, json
