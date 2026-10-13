@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-10-14
+
+First release published to **PyPI** (`pip install promptgenie`). No code changes from 1.8.1.
+
+### Changed
+
+- **PyPI publishing enabled.** Releases now publish to PyPI through OIDC Trusted Publishing (no API token) from the protected `release` environment, with PEP 740 attestations, in addition to the GitHub Release (wheel, sdist, CycloneDX SBOM, SLSA provenance).
+- **README / package metadata for PyPI.** Install instructions now lead with `pipx install promptgenie`; the logo and all documentation links use absolute GitHub URLs so they render on the PyPI project page; added Changelog, Documentation and Security project URLs.
+
 ## [1.8.1] - 2026-10-14
 
 Maintenance and supply-chain hardening release. No CLI behaviour changes beyond the security items below.

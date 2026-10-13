@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="PromptGenie" width="600" />
+  <img src="https://raw.githubusercontent.com/mylesagnew/promptgenie/main/assets/logo.png" alt="PromptGenie" width="600" />
 </p>
 
 # PromptGenie
@@ -7,7 +7,7 @@
 [![CI](https://github.com/mylesagnew/promptgenie/actions/workflows/ci.yml/badge.svg)](https://github.com/mylesagnew/promptgenie/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/mylesagnew/promptgenie/actions/workflows/codeql.yml/badge.svg)](https://github.com/mylesagnew/promptgenie/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mylesagnew/promptgenie/badge)](https://scorecard.dev/viewer/?uri=github.com/mylesagnew/promptgenie)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/mylesagnew/promptgenie/blob/main/LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
 **Secure prompt engineering for AI agents and engineering teams.**
@@ -18,11 +18,11 @@ PromptGenie is a CLI that turns rough task descriptions into optimised, tool-spe
 
 ## Documentation
 
-- **[docs/commands.md](docs/commands.md)** — full command reference
-- **[docs/configuration.md](docs/configuration.md)** — `.promptgenie.yaml` and the config CLI
-- **[SECURITY.md](SECURITY.md)** — security policy and run-engine security model
-- **[THREAT_MODEL.md](THREAT_MODEL.md)** — assets, trust boundaries, and threat→control mapping
-- **[ROADMAP.md](ROADMAP.md)** · **[CONTRIBUTING.md](CONTRIBUTING.md)** · **[CHANGELOG.md](CHANGELOG.md)**
+- **[docs/commands.md](https://github.com/mylesagnew/promptgenie/blob/main/docs/commands.md)** — full command reference
+- **[docs/configuration.md](https://github.com/mylesagnew/promptgenie/blob/main/docs/configuration.md)** — `.promptgenie.yaml` and the config CLI
+- **[SECURITY.md](https://github.com/mylesagnew/promptgenie/blob/main/SECURITY.md)** — security policy and run-engine security model
+- **[THREAT_MODEL.md](https://github.com/mylesagnew/promptgenie/blob/main/THREAT_MODEL.md)** — assets, trust boundaries, and threat→control mapping
+- **[ROADMAP.md](https://github.com/mylesagnew/promptgenie/blob/main/ROADMAP.md)** · **[CONTRIBUTING.md](https://github.com/mylesagnew/promptgenie/blob/main/CONTRIBUTING.md)** · **[CHANGELOG.md](https://github.com/mylesagnew/promptgenie/blob/main/CHANGELOG.md)**
 
 ---
 
@@ -54,10 +54,7 @@ PromptGenie makes prompts:
 ## Quickstart
 
 ```bash
-git clone https://github.com/mylesagnew/promptgenie.git
-cd promptgenie
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
+pipx install promptgenie          # or: pip install promptgenie
 
 # Generate a security-checked prompt for Claude Code
 promptgenie generate "review this repo for security issues" --target claude-code
@@ -367,6 +364,21 @@ Built-in formatters implement the `EventFormatter` protocol (`format(event) → 
 
 ## Install
 
+From PyPI (Python 3.10+):
+
+```bash
+pipx install promptgenie          # isolated CLI install (recommended)
+pip install promptgenie           # or into the current environment
+```
+
+Every release is built in GitHub Actions with a CycloneDX SBOM and SLSA build-provenance attestations. To verify a downloaded wheel:
+
+```bash
+gh attestation verify promptgenie-*.whl --repo mylesagnew/promptgenie
+```
+
+From source (for development):
+
 ```bash
 git clone https://github.com/mylesagnew/promptgenie.git
 cd promptgenie
@@ -403,7 +415,7 @@ The image runs as a non-root user (`promptgenie`, uid 1001). Mount a local direc
 
 ## Command reference
 
-The full per-command reference — every flag and example for `generate`, `lint`, `scan`, `policy`, `diff`, `adapt`, `compress`/`optimize`, `tokens`, `fmt`, `make`, `test`, `benchmark`, `workflow`, `pack`, `registry`, `ci`, `spec`, `run`, `context`, `provider` (incl. **Hermes**), `vars`, `evaluate`/`eval`, `analyze`, `redact`, `redteam`, `auth`, `audit`, `config`, `tui`, `wizard`, `palette`, `history`, `watch`, `template`, `lock`, `plugin` — lives in **[docs/commands.md](docs/commands.md)**. Run `promptgenie --help` for the live list.
+The full per-command reference — every flag and example for `generate`, `lint`, `scan`, `policy`, `diff`, `adapt`, `compress`/`optimize`, `tokens`, `fmt`, `make`, `test`, `benchmark`, `workflow`, `pack`, `registry`, `ci`, `spec`, `run`, `context`, `provider` (incl. **Hermes**), `vars`, `evaluate`/`eval`, `analyze`, `redact`, `redteam`, `auth`, `audit`, `config`, `tui`, `wizard`, `palette`, `history`, `watch`, `template`, `lock`, `plugin` — lives in **[docs/commands.md](https://github.com/mylesagnew/promptgenie/blob/main/docs/commands.md)**. Run `promptgenie --help` for the live list.
 
 ---
 
@@ -560,7 +572,7 @@ promptgenie/
 
 ## Roadmap
 
-> Full roadmap with technical implementation details: **[ROADMAP.md](ROADMAP.md)**
+> Full roadmap with technical implementation details: **[ROADMAP.md](https://github.com/mylesagnew/promptgenie/blob/main/ROADMAP.md)**
 
 **Strategic position:** PromptGenie is the secure, terminal-native prompt engineering workbench for developers and DevOps teams — not just a prompt generator.
 
@@ -580,7 +592,7 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 - [x] VS Code / Cursor extension: inline diagnostics, status bar score, command palette, bounded subprocess output
 - [x] Native token compression (`compress` / `optimize`) — content-routed, fence-aware, dependency-free — plus `tokens` (read-only savings inspector)
 - [x] NousResearch Hermes integration — `hermes` target profile + built-in OpenAI-compatible provider
-- [x] Security posture: metadata-only run history by default, SBOM attestation + build provenance, CodeQL, OpenSSF Scorecard, Dependabot, and a formal [THREAT_MODEL.md](THREAT_MODEL.md)
+- [x] Security posture: metadata-only run history by default, SBOM attestation + build provenance, CodeQL, OpenSSF Scorecard, Dependabot, and a formal [THREAT_MODEL.md](https://github.com/mylesagnew/promptgenie/blob/main/THREAT_MODEL.md)
 - [x] 1,541 tests · ~82% coverage (gate 81%) · 0 ruff issues · 0 mypy errors
 
 ---
@@ -662,8 +674,8 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 ### Phase 6 — Governance, SSO, and Cloud Sync *(in progress)*
 
 - [x] `promptgenie fmt` — canonical formatter for Markdown prompts and PromptSpec YAML: ATX heading normalisation, blank-line structure, trailing-whitespace trim, single final newline, canonical key sort; fence-aware; comment-preserving YAML reorder via optional `ruamel.yaml` (`promptgenie[fmt]`); in-place by default, `--check` (CI-safe), `--diff`, `--format json`; idempotent
-- [x] `promptgenie make` — YAML task graph (`promptgenie.make.yaml`): `needs:` dependency ordering, `--changed` filtering on per-task `inputs:` globs, `--parallel N`, fail-fast with `--keep-going`, `--dry-run`, `--list`, `--format json`; compatible with Make, just, Taskfile; `run:` commands are gated behind the same trust-on-first-use prompt as `run` specs (`--trust`/`--yes`/`--no-input`, see [SECURITY.md](SECURITY.md))
-- [x] Prompt registry — `promptgenie registry push|pull|list|tags|show|verify|rm|prune|search`; content-addressable OCI-inspired store; signed manifests (minisign/cosign), fail-closed digest verification, digest pins; **Phase B.1**: remote OCI registries (`--remote`, `registry login/logout`, blob dedup, untrusted-server verification) via `promptgenie[registry-remote]`. See [docs/registry-design.md](docs/registry-design.md)
+- [x] `promptgenie make` — YAML task graph (`promptgenie.make.yaml`): `needs:` dependency ordering, `--changed` filtering on per-task `inputs:` globs, `--parallel N`, fail-fast with `--keep-going`, `--dry-run`, `--list`, `--format json`; compatible with Make, just, Taskfile; `run:` commands are gated behind the same trust-on-first-use prompt as `run` specs (`--trust`/`--yes`/`--no-input`, see [SECURITY.md](https://github.com/mylesagnew/promptgenie/blob/main/SECURITY.md))
+- [x] Prompt registry — `promptgenie registry push|pull|list|tags|show|verify|rm|prune|search`; content-addressable OCI-inspired store; signed manifests (minisign/cosign), fail-closed digest verification, digest pins; **Phase B.1**: remote OCI registries (`--remote`, `registry login/logout`, blob dedup, untrusted-server verification) via `promptgenie[registry-remote]`. See [docs/registry-design.md](https://github.com/mylesagnew/promptgenie/blob/main/docs/registry-design.md)
 - [ ] SSO / OIDC credential binding — `registry login --sso`; OIDC device flow; per-user audit attribution; `PROMPTGENIE_TOKEN` env var for CI *(registry Phase B.2)*
 - [ ] Team policy server — central policy fetch on every run; org-wide `disabled_rules`, allowlists, routing rules; policy version pinned in lockfile
 - [ ] Remote eval runners — offload matrix evaluations to a cloud runner pool; cost and latency budgets enforced server-side
@@ -673,7 +685,7 @@ Prompt lifecycle: **Author → Render → Lint → Scan → Test → Run → Eva
 
 ## Configuration
 
-See **[docs/configuration.md](docs/configuration.md)** for the full `.promptgenie.yaml` reference — scanner/linter rule config, allowlists, routing, security settings — and the `promptgenie config` commands.
+See **[docs/configuration.md](https://github.com/mylesagnew/promptgenie/blob/main/docs/configuration.md)** for the full `.promptgenie.yaml` reference — scanner/linter rule config, allowlists, routing, security settings — and the `promptgenie config` commands.
 
 ---
 
@@ -724,16 +736,16 @@ uv run cyclonedx-py environment --output-format json --outfile sbom.cyclonedx.js
 
 > **One-time setup required:** Create a `release` protected environment in GitHub Settings → Environments (add required reviewer). Configure a PyPI Trusted Publisher for this repo pointing at `.github/workflows/release.yml`.
 
-See [SECURITY.md](SECURITY.md) for the vulnerability reporting process and scanner limitations.
+See [SECURITY.md](https://github.com/mylesagnew/promptgenie/blob/main/SECURITY.md) for the vulnerability reporting process and scanner limitations.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor guide, rule authoring docs, and profile/template schema reference.
+See [CONTRIBUTING.md](https://github.com/mylesagnew/promptgenie/blob/main/CONTRIBUTING.md) for the contributor guide, rule authoring docs, and profile/template schema reference.
 
-See [CHANGELOG.md](CHANGELOG.md) for a full version history.
+See [CHANGELOG.md](https://github.com/mylesagnew/promptgenie/blob/main/CHANGELOG.md) for a full version history.
 
-See [ROADMAP.md](ROADMAP.md) for the full product roadmap with implementation details, architecture principles, and the optional extras plan.
+See [ROADMAP.md](https://github.com/mylesagnew/promptgenie/blob/main/ROADMAP.md) for the full product roadmap with implementation details, architecture principles, and the optional extras plan.
 
 ---
 
 ## License
 
-[MIT](LICENSE) © 2026 Myles Agnew
+[MIT](https://github.com/mylesagnew/promptgenie/blob/main/LICENSE) © 2026 Myles Agnew
