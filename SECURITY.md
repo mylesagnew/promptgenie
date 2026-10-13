@@ -8,7 +8,7 @@
 | 1.7.x    | ✓ Security patches |
 | ≤ 1.6.x  | ✗ End of life      |
 
-Current release: **1.8.0**. Patch releases are the only supported channel — no LTS or legacy branch exists. Upgrade to the latest 1.8.x to receive the security fixes listed below.
+Current release: **1.8.1**. Patch releases are the only supported channel — no LTS or legacy branch exists. Upgrade to the latest 1.8.x to receive the security fixes listed below.
 
 > The run-engine and VS Code extension hardening described in this document was introduced across the 1.2.x security-audit releases (the `(v1.2.x+)` markers on the sections below indicate when each control was added) and is included in every 1.8.x release.
 
@@ -314,10 +314,10 @@ Use the GitHub CLI to verify both the provenance and the SBOM attestation agains
 
 ```bash
 # Build provenance — confirms the artifact was built by this repo's release workflow
-gh attestation verify ./promptgenie-1.7.0-py3-none-any.whl --repo mylesagnew/promptgenie
+gh attestation verify ./promptgenie-1.8.1-py3-none-any.whl --repo mylesagnew/promptgenie
 
 # SBOM attestation — confirms the published SBOM corresponds to this artifact
-gh attestation verify ./promptgenie-1.7.0-py3-none-any.whl \
+gh attestation verify ./promptgenie-1.8.1-py3-none-any.whl \
   --repo mylesagnew/promptgenie --predicate-type https://cyclonedx.org/bom
 ```
 
