@@ -4,6 +4,12 @@
 
 # PromptGenie
 
+[![CI](https://github.com/mylesagnew/promptgenie/actions/workflows/ci.yml/badge.svg)](https://github.com/mylesagnew/promptgenie/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/mylesagnew/promptgenie/actions/workflows/codeql.yml/badge.svg)](https://github.com/mylesagnew/promptgenie/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mylesagnew/promptgenie/badge)](https://scorecard.dev/viewer/?uri=github.com/mylesagnew/promptgenie)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+
 **Secure prompt engineering for AI agents and engineering teams.**
 
 PromptGenie is a CLI that turns rough task descriptions into optimised, tool-specific, security-checked prompts — and executes them end-to-end. It ships a built-in linter, multi-file security scanner, diff engine, test runner, model benchmarker, context pack system, workflow engine, CI integration, quality scoring, token estimation, full UNIX-composable pipeline, and a declarative run engine that sends prompts to any provider (Anthropic, OpenAI, Ollama, LM Studio, vLLM) with streaming, variable resolution, context assembly, policy gates, and run history. v1.6.0 adds a unified `EventBus` / `EventFormatter` infrastructure so every lifecycle event — run tokens, lint findings, policy violations, eval results — flows through a single typed channel that commands, tests, and future integrations all subscribe to. v1.7.0 adds a formal JSON Schema for `.promptgenie.yaml`, `workspace:` and `defaults:` config blocks, `config validate` for CI-safe schema checking, and `config init` to scaffold a new config with editor autocomplete wired up. v1.8.0 opens Phase 6 with `promptgenie fmt` (a canonical, idempotent formatter for Markdown prompts and PromptSpec YAML), `promptgenie make` (a YAML task-graph batch runner with dependency ordering, changed-file filtering, and parallelism), and `promptgenie registry` — a signed, content-addressable store for versioning and sharing prompt artifacts locally or on any OCI registry.
@@ -730,4 +736,4 @@ See [ROADMAP.md](ROADMAP.md) for the full product roadmap with implementation de
 
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 Myles Agnew
