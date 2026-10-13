@@ -8,7 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-10-14
+
+Maintenance and supply-chain hardening release. No CLI behaviour changes beyond the security items below.
+
 ### Security
+
+- **CI — replaced unverifiable `github/codeql-action` pins ("imposter commits").** `codeql.yml`, `scorecard.yml` and `prompt-check.yml` pinned `github/codeql-action` to `b0c4fd77…` and `66b39da2…`, neither of which exists on any branch or tag of the upstream repository (OpenSSF Scorecard workflow verification rejected them). All seven uses are now pinned to `1c5b6756…` (v4.38.1), verified as an ancestor of upstream `releases/v4`; also moves off the deprecated v3 line. Every other pinned action was re-verified against its upstream repo. (#139)
+- **Dependency advisories (Python lockfile).** urllib3 2.7.0 → 2.8.0 (PYSEC-2026-4175/4176/4177), anyio 4.13.0 → 4.14.2 (PYSEC-2026-4024/4025), cryptography 49.0.0 → 50.0.0 (PYSEC-2026-3552), pip 26.1.2 → 26.2.1 (PYSEC-2026-3721); `pip-audit` is clean again. (#140)
+- **Dependency advisories (VS Code extension dev tooling).** undici 7.28.0 → 7.30.0 (GHSA-3wwx-pv8p-q78v) plus brace-expansion, js-yaml, qs; mocha 10 → 12 and @vscode/vsce 2 → 4 to clear braces/chokidar/serialize-javascript/markdown-it/linkify-it. The extension has no runtime dependencies, so none of these shipped to users. (#141)
 
 - **`promptgenie make` — Makefile trust gate (THREAT_MODEL T19).** Every `run:` entry in a `promptgenie.make.yaml` executes via `shell=True` (`core/make.py::_subprocess_runner`) — fine for a makefile you authored, but arbitrary command execution the moment one arrives by a lower-trust path (`registry pull`, a generated file, a PR). `promptgenie make` now gates every non-dry-run invocation on an explicit trust decision, mirroring the existing `run` spec trust gate (S-2): an interactive session lists the shell commands the makefile would run and prompts for confirmation before first execution; a non-interactive session (`--no-input`, CI) aborts with `exit 2` unless `--trust` or `--yes` is passed. Trust is keyed by the makefile's resolved path and a content hash (same store as spec trust, `~/.config/promptgenie/trust.json`), so editing a trusted makefile re-prompts. A makefile made up only of `needs:` aggregators (no `run:` anywhere) never shells out and does not require trust, and `--dry-run` never requires trust either. New `core/trust.py::makefile_requires_trust()`, `commands/make_cmd.py::_make_trust_gate()`, `--trust`/`--yes`/`--no-input` flags on `make`. 7 new tests in `tests/test_make.py`, including a direct-unit test of the interactive `click.confirm()` path (previously untested for either the spec or makefile trust gate, since `CliRunner`'s stdin never reports as a TTY); 2 matching interactive-path tests added to `tests/test_security_fixes.py` for the pre-existing `run` spec trust gate.
 - **`_resolve_api_key()` now resolves `ref:` credential pointers.** `BaseProvider._resolve_api_key()` — the path actually used for live provider API calls in `AnthropicProvider`/`OpenAICompatProvider` — returned a `ref:op://vault/item/field`-style pointer literally instead of resolving it, silently sending the raw placeholder string as the API key and breaking any config backed by an external secret manager (AWS SSM, GCP Secret Manager, Azure Key Vault, 1Password). It now calls `core/credentials.py::resolve_credential_ref()` for `ref:`-prefixed `api_key` values (matching `get_credential()`'s existing behaviour) and raises a `PromptGenieError` if resolution fails, instead of failing silently at the provider. 2 new tests in `tests/test_providers_async.py`.
@@ -17,7 +25,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Fixed
 
+- **CI — test collection failed on every run since 1.8.0 (`No module named 'respx'`).** `uv.lock` had drifted from `pyproject.toml`: `respx` (dev) and `ruamel.yaml` (`fmt`) were declared but never locked, so `uv sync --frozen` skipped them. Lock refreshed; required checks are green again. (#140)
+- **OpenSSF Scorecard workflow never completed.** `ossf/scorecard-action` v2.4.0 pulls its image from gcr.io, which now returns *billing required*; bumped to v2.4.3 (ghcr.io). (#138)
+- **Release workflow — GitHub Release no longer requires PyPI.** The GitHub Release (wheel, sdist, CycloneDX SBOM, provenance attestations) now runs whenever verify, build and attest succeed. PyPI publishing is skipped unless the repository variable `PYPI_PUBLISH` is `true`, so releases are not blocked before Trusted Publishing is configured.
+- VS Code extension CI job moved to Node 22 (required by @vscode/vsce 4; Node 20 is end-of-life). (#141)
+
 - **`context build`/`run --show-context` — `total_tokens` could disagree with `compression.tokens_after`.** `build_context()`'s `total_tokens` was computed with `context_builder._estimate_tokens()` (a fixed char/4 heuristic), while the compressor's own `tokens_after` uses `generator.estimate_tokens()` (tiktoken-based when installed). When `--compress`/`--compress-aggressive` was active and tiktoken was available, the two disagreed, so `ContextManifest.total_tokens` didn't match the number reported in `compression.tokens_after` (surfaced as a test failure once tiktoken was installed locally). `total_tokens` now reuses `compression.tokens_after` directly when compression ran, instead of re-estimating with a different method.
+
+### Added
+
+- `LICENSE` file (MIT, as already declared in `pyproject.toml`) and README badges for CI, CodeQL, OpenSSF Scorecard, license and Python version. (#138)
 
 ## [1.8.0] - 2026-06-28
 

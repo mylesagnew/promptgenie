@@ -1,8 +1,11 @@
 name: Release
 
 # Triggered by a semver tag pushed to main (e.g. v1.0.5).
-# Requires a protected "release" environment with required reviewer approval
-# and a PyPI Trusted Publisher configured for this repo/workflow.
+# The GitHub Release (wheel, sdist, SBOM, provenance) always runs.
+# PyPI publishing runs only when the repository variable PYPI_PUBLISH is
+# "true"; it requires a protected "release" environment with required
+# reviewer approval and a PyPI Trusted Publisher configured for this
+# repo/workflow (release.yml, environment: release).
 on:
   push:
     tags:
@@ -103,6 +106,7 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
+    if: vars.PYPI_PUBLISH == 'true'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -153,6 +157,12 @@ jobs:
   github-release:
     name: GitHub Release
     needs: [publish, attest]
+    # Run when attest succeeded and publish either succeeded or was skipped
+    # (PYPI_PUBLISH not enabled). A failed PyPI publish still blocks.
+    if: >-
+      always() &&
+      needs.attest.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required to create a release
