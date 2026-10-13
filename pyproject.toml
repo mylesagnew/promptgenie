@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "promptgenie"
-version = "1.8.1"
+version = "1.8.2"
 description = "Secure prompt engineering for AI agents and engineering teams"
 readme = "README.md"
 license = "MIT"
@@ -33,6 +33,9 @@ dependencies = [
 Homepage    = "https://github.com/mylesagnew/promptgenie"
 Repository  = "https://github.com/mylesagnew/promptgenie"
 Issues      = "https://github.com/mylesagnew/promptgenie/issues"
+Changelog   = "https://github.com/mylesagnew/promptgenie/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/mylesagnew/promptgenie/blob/main/docs/commands.md"
+Security    = "https://github.com/mylesagnew/promptgenie/blob/main/SECURITY.md"
 
 [project.scripts]
 promptgenie = "promptgenie.cli:cli"
