@@ -120,6 +120,13 @@ jobs:
           name: dist
           path: dist/
 
+      # dist/ also carries the SBOM for the GitHub Release; PyPI accepts only
+      # wheels and sdists, and twine check rejects anything else.
+      - name: Keep only Python distributions
+        run: |
+          rm -f dist/sbom.cyclonedx.json
+          ls -l dist/
+
       - name: Publish to PyPI (Trusted Publishing — no API token)
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
