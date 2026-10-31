@@ -22,7 +22,7 @@ from pathlib import Path
 import click
 
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK
-from promptgenie.renderers.rich import console
+from promptgenie.renderers import rich as renderer
 
 # ---------------------------------------------------------------------------
 # Check result data classes
@@ -356,8 +356,8 @@ def doctor_cmd(verbose: bool, output_format: str) -> None:
     # ── Rich output ──────────────────────────────────────────────────────
     from rich.panel import Panel
 
-    console.print()
-    console.print(
+    renderer.console.print()
+    renderer.console.print(
         Panel(
             f"[bold]promptgenie doctor[/bold]  v{_try_version()}",
             border_style="blue",
@@ -371,21 +371,25 @@ def doctor_cmd(verbose: bool, output_format: str) -> None:
             if not show_header:
                 continue
 
-        console.print(f"\n  [bold dim]{group.title}[/bold dim]")
+        renderer.console.print(f"\n  [bold dim]{group.title}[/bold dim]")
         for r in group.results:
             if r.passed and not r.warning:
                 if verbose:
-                    console.print(f"    [green]✓[/green]  {r.label}  [dim]{r.detail}[/dim]")
+                    renderer.console.print(
+                        f"    [green]✓[/green]  {r.label}  [dim]{r.detail}[/dim]"
+                    )
             elif r.passed and r.warning:
-                console.print(f"    [yellow]⚠[/yellow]  {r.label}  [dim]{r.detail}[/dim]")
+                renderer.console.print(f"    [yellow]⚠[/yellow]  {r.label}  [dim]{r.detail}[/dim]")
             else:
-                console.print(f"    [red]✗[/red]  [bold]{r.label}[/bold]  [dim]{r.detail}[/dim]")
+                renderer.console.print(
+                    f"    [red]✗[/red]  [bold]{r.label}[/bold]  [dim]{r.detail}[/dim]"
+                )
                 if r.remediation:
-                    console.print(f"         [dim]→ {r.remediation}[/dim]")
+                    renderer.console.print(f"         [dim]→ {r.remediation}[/dim]")
 
-    console.print()
+    renderer.console.print()
     if hard_failures:
-        console.print(
+        renderer.console.print(
             f"[red bold]{len(hard_failures)} check(s) failed.[/red bold]  "
             "Fix the issues above and re-run [cyan]promptgenie doctor[/cyan]."
         )
@@ -393,11 +397,11 @@ def doctor_cmd(verbose: bool, output_format: str) -> None:
     else:
         warnings = sum(1 for r in all_results if not r.passed and r.warning)
         if warnings:
-            console.print(
+            renderer.console.print(
                 f"[yellow]All required checks passed[/yellow] with {warnings} optional warning(s)."
             )
         else:
-            console.print("[green bold]All checks passed.[/green bold]")
+            renderer.console.print("[green bold]All checks passed.[/green bold]")
         sys.exit(EXIT_OK)
 
 

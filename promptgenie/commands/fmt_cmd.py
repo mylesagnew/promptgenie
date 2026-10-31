@@ -33,7 +33,8 @@ import click
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import safe_read_text, safe_write_text
 from promptgenie.core.formatter import FormatResult, detect_file_type, format_text
-from promptgenie.renderers.rich import diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 
 @click.command("fmt")
@@ -100,7 +101,7 @@ def fmt_cmd(
         try:
             text = safe_read_text(label)
         except (OSError, ValueError) as exc:
-            diag_console.print(f"[red]Error:[/red] Cannot read {label!r}: {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] Cannot read {label!r}: {exc}")
             raise SystemExit(EXIT_USAGE) from exc
 
         file_type = lang if lang != "auto" else detect_file_type(label)
@@ -196,22 +197,24 @@ def _report_check(results: list[tuple[str, FormatResult]]) -> None:
     for label, r in changed:
         name = "<stdin>" if label == "-" else label
         rules = ", ".join(f"{x.name}×{x.occurrences}" for x in r.rules)
-        diag_console.print(f"[yellow]would reformat[/yellow] {name}  [dim]{rules}[/dim]")
+        renderer.diag_console.print(f"[yellow]would reformat[/yellow] {name}  [dim]{rules}[/dim]")
     n = len(results)
     if changed:
-        diag_console.print(f"[yellow]{len(changed)}[/yellow] of {n} file(s) would be reformatted.")
+        renderer.diag_console.print(
+            f"[yellow]{len(changed)}[/yellow] of {n} file(s) would be reformatted."
+        )
     else:
-        diag_console.print(f"[green]✓[/green] {n} file(s) already formatted.")
+        renderer.diag_console.print(f"[green]✓[/green] {n} file(s) already formatted.")
 
 
 def _report_writes(results: list[tuple[str, FormatResult]]) -> None:
     written = [label for label, r in results if label != "-" and r.changed]
     if written:
         for label in written:
-            diag_console.print(f"[green]✓[/green] formatted {label}")
-        diag_console.print(f"[green]{len(written)}[/green] file(s) reformatted.")
+            renderer.diag_console.print(f"[green]✓[/green] formatted {label}")
+        renderer.diag_console.print(f"[green]{len(written)}[/green] file(s) reformatted.")
     elif any(label != "-" for label, _ in results):
-        diag_console.print("[green]✓[/green] all file(s) already formatted.")
+        renderer.diag_console.print("[green]✓[/green] all file(s) already formatted.")
 
 
 def _emit_json(

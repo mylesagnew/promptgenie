@@ -19,7 +19,7 @@ import click
 import yaml
 
 from promptgenie.core.errors import EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 EXIT_INVALID = 1
 
@@ -65,7 +65,7 @@ def config_show_cmd(output_format: str) -> None:
     try:
         cfg = load_config()
     except Exception as exc:
-        diag_console.print(f"[red]Config error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Config error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     data = {
@@ -86,22 +86,26 @@ def config_show_cmd(output_format: str) -> None:
     elif output_format == "yaml":
         sys.stdout.write(yaml.dump(data, default_flow_style=False))
     else:
-        console.print("[bold]Effective Configuration[/bold]")
-        console.print(f"  [cyan]security.airgap[/cyan]                = {cfg.security.airgap}")
-        console.print(
+        renderer.console.print("[bold]Effective Configuration[/bold]")
+        renderer.console.print(
+            f"  [cyan]security.airgap[/cyan]                = {cfg.security.airgap}"
+        )
+        renderer.console.print(
             f"  [cyan]security.block_secrets[/cyan]         = {cfg.security.block_secrets}"
         )
-        console.print(
+        renderer.console.print(
             f"  [cyan]security.redact_secrets[/cyan]        = {cfg.security.redact_secrets}"
         )
-        console.print(
+        renderer.console.print(
             f"  [cyan]security.store_history_content[/cyan] = {cfg.security.store_history_content}"
         )
-        console.print(f"  [cyan]routing.default[/cyan]        = {cfg.routing.default or '(none)'}")
+        renderer.console.print(
+            f"  [cyan]routing.default[/cyan]        = {cfg.routing.default or '(none)'}"
+        )
         if cfg.routing.rules:
-            console.print("  [cyan]routing.rules[/cyan]:")
+            renderer.console.print("  [cyan]routing.rules[/cyan]:")
             for r in cfg.routing.rules:
-                console.print(f"    if: {r.condition!r} → provider: {r.provider}")
+                renderer.console.print(f"    if: {r.condition!r} → provider: {r.provider}")
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +136,7 @@ def config_set_cmd(key: str, value: str) -> None:
       promptgenie config set security.block_secrets true
     """
     if key not in _KNOWN_KEYS:
-        diag_console.print(
+        renderer.diag_console.print(
             f"[red]Unknown key:[/red] {key!r}\nSupported: {', '.join(sorted(_KNOWN_KEYS))}"
         )
         raise SystemExit(EXIT_USAGE)
@@ -144,7 +148,7 @@ def config_set_cmd(key: str, value: str) -> None:
         elif value.lower() in ("false", "0", "no"):
             typed_value = False
         else:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[red]Invalid value for boolean key {key!r}:[/red] {value!r}. Use true or false."
             )
             raise SystemExit(EXIT_USAGE)
@@ -174,12 +178,12 @@ def config_set_cmd(key: str, value: str) -> None:
         yaml.dump(existing, default_flow_style=False, sort_keys=False),
         encoding="utf-8",
     )
-    console.print(
+    renderer.console.print(
         f"[green]✓[/green] Set [cyan]{key}[/cyan] = [bold]{typed_value}[/bold] in {_CONFIG_FILE}"
     )
 
     if key == "security.airgap" and typed_value:
-        console.print(
+        renderer.console.print(
             "[yellow]Air-gap mode enabled.[/yellow] "
             "External provider calls will be blocked. Local providers (Ollama etc.) still work."
         )
@@ -203,7 +207,7 @@ def config_get_cmd(key: str) -> None:
     try:
         cfg = load_config()
     except Exception as exc:
-        diag_console.print(f"[red]Config error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Config error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     # Resolve nested attribute from cfg
@@ -215,7 +219,7 @@ def config_get_cmd(key: str) -> None:
         "routing.default": cfg.routing.default,
     }
     if key not in attr_map:
-        diag_console.print(f"[red]Unknown key:[/red] {key!r}")
+        renderer.diag_console.print(f"[red]Unknown key:[/red] {key!r}")
         raise SystemExit(EXIT_USAGE)
 
     sys.stdout.write(str(attr_map[key]) + "\n")
@@ -275,7 +279,7 @@ def config_validate_cmd(config_path: str | None, output_format: str) -> None:
                     + "\n"
                 )
             else:
-                diag_console.print(f"[red]Error:[/red] File not found: {config_path}")
+                renderer.diag_console.print(f"[red]Error:[/red] File not found: {config_path}")
             raise SystemExit(EXIT_USAGE)
     else:
         found = _find_config()
@@ -295,7 +299,7 @@ def config_validate_cmd(config_path: str | None, output_format: str) -> None:
                     + "\n"
                 )
             else:
-                diag_console.print(
+                renderer.diag_console.print(
                     "[yellow]No .promptgenie.yaml found.[/yellow] "
                     "Run [bold]promptgenie config init[/bold] to create one."
                 )
@@ -314,7 +318,7 @@ def config_validate_cmd(config_path: str | None, output_format: str) -> None:
                 + "\n"
             )
         else:
-            diag_console.print(f"[red]YAML parse error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]YAML parse error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     errors, warnings = validate_workspace_config(raw)
@@ -329,18 +333,18 @@ def config_validate_cmd(config_path: str | None, output_format: str) -> None:
             + "\n"
         )
     else:
-        console.print(f"[bold]Validating:[/bold] {path}")
+        renderer.console.print(f"[bold]Validating:[/bold] {path}")
         if warnings:
             for w in warnings:
-                console.print(f"  [yellow]warning:[/yellow] {w}")
+                renderer.console.print(f"  [yellow]warning:[/yellow] {w}")
         if errors:
             for e in errors:
-                console.print(f"  [red]error:[/red]   {e}")
-            console.print(f"\n[red]✗[/red] {len(errors)} error(s) found.")
+                renderer.console.print(f"  [red]error:[/red]   {e}")
+            renderer.console.print(f"\n[red]✗[/red] {len(errors)} error(s) found.")
         else:
-            console.print("[green]✓[/green] Config is valid.")
+            renderer.console.print("[green]✓[/green] Config is valid.")
             if warnings:
-                console.print(f"  {len(warnings)} warning(s) — review above.")
+                renderer.console.print(f"  {len(warnings)} warning(s) — review above.")
 
     if not valid:
         raise SystemExit(EXIT_INVALID)
@@ -421,7 +425,7 @@ def config_init_cmd(name: str | None, force: bool) -> None:
     """
     dest = Path(".promptgenie.yaml")
     if dest.exists() and not force:
-        diag_console.print(
+        renderer.diag_console.print(
             f"[red]Error:[/red] {dest} already exists. Use [bold]--force[/bold] to overwrite."
         )
         raise SystemExit(EXIT_USAGE)
@@ -430,8 +434,8 @@ def config_init_cmd(name: str | None, force: bool) -> None:
     content = _INIT_TEMPLATE.format(schema_url=_SCHEMA_URL, project_name=project_name)
     dest.write_text(content, encoding="utf-8")
 
-    console.print(f"[green]✓[/green] Created {dest}")
-    console.print(
+    renderer.console.print(f"[green]✓[/green] Created {dest}")
+    renderer.console.print(
         f"  Schema: [cyan]{_SCHEMA_URL}[/cyan]\n"
         "  Run [bold]promptgenie config validate[/bold] to check your changes."
     )

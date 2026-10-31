@@ -30,7 +30,7 @@ import sys
 import click
 
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 # Editors we are willing to launch from $EDITOR / $VISUAL. The value of those
 # environment variables is attacker-influenceable, so we never execute an
@@ -137,7 +137,7 @@ def template_list_cmd(category: str | None, layer: str, output_format: str) -> N
         templates = [t for t in templates if t.source_layer == layer]
 
     if not templates:
-        console.print("[dim]No templates found.[/dim]")
+        renderer.console.print("[dim]No templates found.[/dim]")
         raise SystemExit(EXIT_OK)
 
     if output_format == "json":
@@ -158,8 +158,8 @@ def template_list_cmd(category: str | None, layer: str, output_format: str) -> N
     for t in sorted(templates, key=lambda x: (x.category, x.id)):
         table.add_row(t.id, t.name, t.category, t.source_layer, t.description[:60])
 
-    console.print(table)
-    console.print(f"\n[dim]{len(templates)} template(s)[/dim]")
+    renderer.console.print(table)
+    renderer.console.print(f"\n[dim]{len(templates)} template(s)[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +191,7 @@ def template_show_cmd(template_id: str, output_format: str) -> None:
 
     t = resolve_template(template_id)
     if t is None:
-        diag_console.print(f"[red]Error:[/red] Template {template_id!r} not found.")
+        renderer.diag_console.print(f"[red]Error:[/red] Template {template_id!r} not found.")
         raise SystemExit(EXIT_USAGE)
 
     if output_format == "json":
@@ -204,7 +204,7 @@ def template_show_cmd(template_id: str, output_format: str) -> None:
         sys.stdout.write(t.prompt + "\n")
         return
 
-    console.print(
+    renderer.console.print(
         Panel(
             Syntax(t.prompt, "markdown", theme="monokai", word_wrap=True),
             title=f"[bold]{t.name}[/bold]  [dim]{t.id} · {t.category} · {t.source_layer}[/dim]",
@@ -212,14 +212,14 @@ def template_show_cmd(template_id: str, output_format: str) -> None:
         )
     )
     if t.description:
-        console.print(f"[dim]{t.description}[/dim]")
+        renderer.console.print(f"[dim]{t.description}[/dim]")
     if t.variables:
-        console.print("\n[bold]Variables:[/bold]")
+        renderer.console.print("\n[bold]Variables:[/bold]")
         for v in t.variables:
             req = (
                 " [red](required)[/red]" if v.required else f" [dim](default: {v.default!r})[/dim]"
             )
-            console.print(f"  {{{{[cyan]{v.name}[/cyan]}}}}  {v.description}{req}")
+            renderer.console.print(f"  {{{{[cyan]{v.name}[/cyan]}}}}  {v.description}{req}")
 
 
 # ---------------------------------------------------------------------------
@@ -249,13 +249,13 @@ def template_render_cmd(template_id: str, variables: tuple[str, ...], out: str |
 
     t = resolve_template(template_id)
     if t is None:
-        diag_console.print(f"[red]Error:[/red] Template {template_id!r} not found.")
+        renderer.diag_console.print(f"[red]Error:[/red] Template {template_id!r} not found.")
         raise SystemExit(EXIT_USAGE)
 
     var_dict: dict[str, str] = {}
     for v in variables:
         if "=" not in v:
-            diag_console.print(f"[red]Error:[/red] --var must be KEY=VALUE, got: {v!r}")
+            renderer.diag_console.print(f"[red]Error:[/red] --var must be KEY=VALUE, got: {v!r}")
             raise SystemExit(EXIT_USAGE)
         k, val = v.split("=", 1)
         var_dict[k.strip()] = val
@@ -266,7 +266,7 @@ def template_render_cmd(template_id: str, variables: tuple[str, ...], out: str |
         from pathlib import Path
 
         Path(out).write_text(rendered, encoding="utf-8")
-        console.print(f"[green]✓[/green] Rendered to {out}")
+        renderer.console.print(f"[green]✓[/green] Rendered to {out}")
     else:
         sys.stdout.write(rendered + "\n")
 
@@ -289,19 +289,19 @@ def template_validate_cmd(template_id: str) -> None:
 
     t = resolve_template(template_id)
     if t is None:
-        diag_console.print(f"[red]Error:[/red] Template {template_id!r} not found.")
+        renderer.diag_console.print(f"[red]Error:[/red] Template {template_id!r} not found.")
         raise SystemExit(EXIT_USAGE)
 
     errors = validate_template(t)
     if errors:
-        console.print(
+        renderer.console.print(
             f"[red]✗[/red] Template [bold]{template_id}[/bold] has {len(errors)} error(s):"
         )
         for e in errors:
-            console.print(f"  [red]•[/red] {e}")
+            renderer.console.print(f"  [red]•[/red] {e}")
         raise SystemExit(EXIT_FAILURE)
     else:
-        console.print(f"[green]✓[/green] Template [bold]{template_id}[/bold] is valid.")
+        renderer.console.print(f"[green]✓[/green] Template [bold]{template_id}[/bold] is valid.")
         raise SystemExit(EXIT_OK)
 
 
@@ -355,13 +355,13 @@ def template_new_cmd(template_id: str, name: str, category: str, layer: str) -> 
     errors = validate_template(record)
     if errors:
         for e in errors:
-            diag_console.print(f"[red]Error:[/red] {e}")
+            renderer.diag_console.print(f"[red]Error:[/red] {e}")
         raise SystemExit(EXIT_USAGE)
 
     path = save_project_template(record) if layer == "project" else save_user_template(record)
 
-    console.print(f"[green]✓[/green] Template created: [bold]{path}[/bold]")
-    console.print(f"[dim]Edit it with: promptgenie template edit {template_id}[/dim]")
+    renderer.console.print(f"[green]✓[/green] Template created: [bold]{path}[/bold]")
+    renderer.console.print(f"[dim]Edit it with: promptgenie template edit {template_id}[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -388,13 +388,13 @@ def template_edit_cmd(template_id: str) -> None:
 
     t = resolve_template(template_id)
     if t is None:
-        diag_console.print(f"[red]Error:[/red] Template {template_id!r} not found.")
+        renderer.diag_console.print(f"[red]Error:[/red] Template {template_id!r} not found.")
         raise SystemExit(EXIT_USAGE)
 
     # If built-in, copy to user layer first
     if t.source_layer == "builtin":
         path = save_user_template(t)
-        console.print(f"[dim]Copied built-in template to user layer: {path}[/dim]")
+        renderer.console.print(f"[dim]Copied built-in template to user layer: {path}[/dim]")
     else:
         assert t.source_path is not None
         path = t.source_path
@@ -402,7 +402,7 @@ def template_edit_cmd(template_id: str) -> None:
     try:
         editor_cmd = _resolve_editor_command()
     except ValueError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_FAILURE) from exc
 
     # No shell is used; the program has been allowlisted by _resolve_editor_command.
@@ -414,8 +414,10 @@ def template_edit_cmd(template_id: str) -> None:
         if t2:
             errors = validate_template(t2)
             if errors:
-                console.print("[yellow]Warning:[/yellow] Template has validation errors:")
+                renderer.console.print("[yellow]Warning:[/yellow] Template has validation errors:")
                 for e in errors:
-                    console.print(f"  [yellow]•[/yellow] {e}")
+                    renderer.console.print(f"  [yellow]•[/yellow] {e}")
             else:
-                console.print(f"[green]✓[/green] Template {template_id!r} saved and valid.")
+                renderer.console.print(
+                    f"[green]✓[/green] Template {template_id!r} saved and valid."
+                )

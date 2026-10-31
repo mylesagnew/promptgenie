@@ -3,7 +3,7 @@ from rich import box
 from rich.table import Table
 
 from promptgenie.core.generator import list_targets, list_templates
-from promptgenie.renderers.rich import console
+from promptgenie.renderers import rich as renderer
 
 
 @click.command("list-targets")
@@ -18,7 +18,7 @@ def list_targets_cmd():
     for t in targets:
         strengths = ", ".join(t["strengths"][:3])
         table.add_row(t["id"], t["name"], t["category"], strengths)
-    console.print(table)
+    renderer.console.print(table)
 
 
 @click.command("list-templates")
@@ -32,4 +32,4 @@ def list_templates_cmd():
     table.add_column("Description", style="dim")
     for t in templates:
         table.add_row(t["id"], t["name"], t["category"], t["description"])
-    console.print(table)
+    renderer.console.print(table)

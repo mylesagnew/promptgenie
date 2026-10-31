@@ -24,7 +24,8 @@ from promptgenie.core.spec import (
     validate_spec,
 )
 from promptgenie.core.variables import load_vars_file, parse_cli_vars
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 
 @click.group("spec", help="Manage PromptSpec files.")
@@ -61,7 +62,7 @@ def spec_init_cmd(name: str, target: str, out: str | None, force: bool) -> None:
     """
     output_path = Path(out) if out else Path(f"{name.replace(' ', '-')}.prompt.yaml")
     if output_path.exists() and not force:
-        diag_console.print(
+        renderer.diag_console.print(
             f"[yellow]File already exists:[/yellow] {output_path}\nUse --force to overwrite."
         )
         raise SystemExit(EXIT_USAGE)
@@ -69,8 +70,8 @@ def spec_init_cmd(name: str, target: str, out: str | None, force: bool) -> None:
     content = spec_init_template(name=name, target=target)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(content, encoding="utf-8")
-    console.print(f"[green]✓[/green] Created spec: [bold]{output_path}[/bold]")
-    console.print(f"  Edit it, then run: [bold]promptgenie run {output_path}[/bold]")
+    renderer.console.print(f"[green]✓[/green] Created spec: [bold]{output_path}[/bold]")
+    renderer.console.print(f"  Edit it, then run: [bold]promptgenie run {output_path}[/bold]")
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +104,7 @@ def spec_validate_cmd(spec_file: str, output_format: str) -> None:
         spec = load_spec(spec_file)
     except PromptGenieError as exc:
         if structured:
-            console.print(
+            renderer.console.print(
                 json.dumps(
                     {
                         "valid": False,
@@ -114,12 +115,12 @@ def spec_validate_cmd(spec_file: str, output_format: str) -> None:
                 )
             )
         else:
-            diag_console.print(f"[red]✗[/red] {exc}")
+            renderer.diag_console.print(f"[red]✗[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     errors = validate_spec(spec)
     if structured:
-        console.print(
+        renderer.console.print(
             json.dumps(
                 {
                     "valid": len(errors) == 0,
@@ -131,12 +132,12 @@ def spec_validate_cmd(spec_file: str, output_format: str) -> None:
         )
     else:
         if errors:
-            diag_console.print(f"[red]✗[/red] [bold]{spec_file}[/bold] is invalid:")
+            renderer.diag_console.print(f"[red]✗[/red] [bold]{spec_file}[/bold] is invalid:")
             for err in errors:
-                diag_console.print(f"  • {err}")
+                renderer.diag_console.print(f"  • {err}")
             raise SystemExit(EXIT_USAGE)
         else:
-            console.print(
+            renderer.console.print(
                 f"[green]✓[/green] [bold]{spec_file}[/bold] is valid ([dim]{spec.name}[/dim])"
             )
 
@@ -189,7 +190,7 @@ def spec_render_cmd(
     try:
         spec = load_spec(spec_file)
     except PromptGenieError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     # Merge vars
@@ -208,7 +209,7 @@ def spec_render_cmd(
             no_input=no_input,
         )
     except Exception as exc:
-        diag_console.print(f"[red]Variable error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Variable error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     # Context
@@ -230,14 +231,14 @@ def spec_render_cmd(
         }
         if show_context:
             output["context"] = context_text
-        console.print(json.dumps(output, indent=2))
+        renderer.console.print(json.dumps(output, indent=2))
     else:
         if context_text:
-            console.print("─" * 60)
-            console.print("[bold]Context[/bold]")
-            console.print(context_text)
-            console.print("─" * 60)
-        console.print(rendered)
+            renderer.console.print("─" * 60)
+            renderer.console.print("[bold]Context[/bold]")
+            renderer.console.print(context_text)
+            renderer.console.print("─" * 60)
+        renderer.console.print(rendered)
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +268,6 @@ def spec_schema_cmd(output_format: str) -> None:
     schema_text = SPEC_SCHEMA_PATH.read_text(encoding="utf-8")
     schema_obj = json.loads(schema_text)
     if output_format == "yaml":
-        console.print(yaml.dump(schema_obj, default_flow_style=False, sort_keys=False))
+        renderer.console.print(yaml.dump(schema_obj, default_flow_style=False, sort_keys=False))
     else:
-        console.print(schema_text)
+        renderer.console.print(schema_text)

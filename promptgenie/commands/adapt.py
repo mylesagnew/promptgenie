@@ -7,7 +7,8 @@ from rich.table import Table
 
 from promptgenie.core.adapter import adapt
 from promptgenie.core.fileio import safe_write_text
-from promptgenie.renderers.rich import console, delta_ab
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import delta_ab
 
 
 @click.command(name="adapt")
@@ -49,7 +50,7 @@ def adapt_cmd(
 ):
     """Translate a prompt from one target profile to another."""
     try:
-        with console.status("[bold blue]Adapting prompt…"):
+        with renderer.console.status("[bold blue]Adapting prompt…"):
             result = adapt(
                 prompt_file,
                 from_target,
@@ -58,22 +59,22 @@ def adapt_cmd(
                 best_effort=best_effort,
             )
     except FileNotFoundError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        console.print("[dim]Use --best-effort to fall back to empty profile stubs.[/dim]")
+        renderer.console.print(f"[red]Error:[/red] {exc}")
+        renderer.console.print("[dim]Use --best-effort to fall back to empty profile stubs.[/dim]")
         sys.exit(1)
 
     from_name = result.source_target
     to_name = result.dest_target
-    console.print()
+    renderer.console.print()
 
     if show_original:
-        console.print(
+        renderer.console.print(
             Panel(
                 result.original_text, title=f"[dim]Original — {from_name}[/dim]", border_style="dim"
             )
         )
 
-    console.print(
+    renderer.console.print(
         Panel(
             result.adapted_text,
             title=f"[bold]Adapted Prompt[/bold]  [dim]{from_name}[/dim] → [cyan]{to_name}[/cyan]",
@@ -94,7 +95,7 @@ def adapt_cmd(
         color, label = ACTION_STYLE.get(change.action, ("white", change.action.upper()))
         change_lines.append(f"[{color}][{label}][/{color}]  {change.name}")
         change_lines.append(f"  [dim]{change.reason}[/dim]")
-    console.print(Panel("\n".join(change_lines), title="Change Log", border_style="dim"))
+    renderer.console.print(Panel("\n".join(change_lines), title="Change Log", border_style="dim"))
 
     summary = Table(box=box.SIMPLE, show_header=True, padding=(0, 2))
     summary.add_column("Metric", style="dim")
@@ -111,16 +112,16 @@ def adapt_cmd(
         f"{result.source_score['total']}/100",
         f"{result.adapted_score['total']}/100  {delta_ab(result.source_score['total'], result.adapted_score['total'])}",
     )
-    console.print(Panel(summary, title="Score & Token Summary", border_style="dim"))
+    renderer.console.print(Panel(summary, title="Score & Token Summary", border_style="dim"))
 
     if result.warnings:
         warn_lines = "\n".join(f"[yellow]⚠[/yellow]  {w}" for w in result.warnings)
-        console.print(Panel(warn_lines, title="Warnings", border_style="yellow"))
+        renderer.console.print(Panel(warn_lines, title="Warnings", border_style="yellow"))
 
     if out:
         try:
             safe_write_text(out, result.adapted_text, force=force)
-            console.print(f"\n[green]Adapted prompt saved to {out}[/green]")
+            renderer.console.print(f"\n[green]Adapted prompt saved to {out}[/green]")
         except FileExistsError as e:
-            console.print(f"[red]Error:[/red] {e}")
+            renderer.console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)

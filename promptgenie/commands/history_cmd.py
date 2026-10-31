@@ -27,7 +27,7 @@ import sys
 import click
 
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 
 @click.group("history", help="Browse and manage prompt run history.")
@@ -86,7 +86,7 @@ def history_list_cmd(
             )
 
     if not records:
-        console.print("[dim]No history found.[/dim]")
+        renderer.console.print("[dim]No history found.[/dim]")
         raise SystemExit(EXIT_OK)
 
     if output_format == "json":
@@ -121,8 +121,8 @@ def history_list_cmd(
             str(r.input_tokens + r.output_tokens),
         )
 
-    console.print(table)
-    console.print(f"[dim]{len(records)} run(s)[/dim]")
+    renderer.console.print(table)
+    renderer.console.print(f"[dim]{len(records)} run(s)[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +163,7 @@ def history_show_cmd(run_id: str, output_format: str, db_path: str | None) -> No
             record = db.get_run(run_id)
 
     if record is None:
-        diag_console.print(f"[red]Error:[/red] Run {run_id!r} not found.")
+        renderer.diag_console.print(f"[red]Error:[/red] Run {run_id!r} not found.")
         raise SystemExit(EXIT_USAGE)
 
     if output_format == "json":
@@ -179,7 +179,7 @@ def history_show_cmd(run_id: str, output_format: str, db_path: str | None) -> No
         sys.stdout.write(record.response_text + "\n")
         return
 
-    console.print(
+    renderer.console.print(
         Panel(
             f"[bold]ID:[/bold] {record.id}\n"
             f"[bold]Spec:[/bold] {record.spec_name or '—'}\n"
@@ -194,10 +194,14 @@ def history_show_cmd(run_id: str, output_format: str, db_path: str | None) -> No
             border_style="cyan",
         )
     )
-    console.print("\n[bold]Prompt:[/bold]")
-    console.print(record.prompt_text[:2000] + ("…" if len(record.prompt_text) > 2000 else ""))
-    console.print("\n[bold]Response:[/bold]")
-    console.print(record.response_text[:3000] + ("…" if len(record.response_text) > 3000 else ""))
+    renderer.console.print("\n[bold]Prompt:[/bold]")
+    renderer.console.print(
+        record.prompt_text[:2000] + ("…" if len(record.prompt_text) > 2000 else "")
+    )
+    renderer.console.print("\n[bold]Response:[/bold]")
+    renderer.console.print(
+        record.response_text[:3000] + ("…" if len(record.response_text) > 3000 else "")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -226,10 +230,10 @@ def history_diff_cmd(run_id_a: str, run_id_b: str, db_path: str | None) -> None:
         rb = db.get_run(run_id_b)
 
     if ra is None:
-        diag_console.print(f"[red]Error:[/red] Run {run_id_a!r} not found.")
+        renderer.diag_console.print(f"[red]Error:[/red] Run {run_id_a!r} not found.")
         raise SystemExit(EXIT_USAGE)
     if rb is None:
-        diag_console.print(f"[red]Error:[/red] Run {run_id_b!r} not found.")
+        renderer.diag_console.print(f"[red]Error:[/red] Run {run_id_b!r} not found.")
         raise SystemExit(EXIT_USAGE)
 
     diff = list(
@@ -242,12 +246,12 @@ def history_diff_cmd(run_id_a: str, run_id_b: str, db_path: str | None) -> None:
     )
 
     if not diff:
-        console.print("[green]Responses are identical.[/green]")
+        renderer.console.print("[green]Responses are identical.[/green]")
         raise SystemExit(EXIT_OK)
 
     from rich.syntax import Syntax
 
-    console.print(Syntax("".join(diff), "diff", theme="monokai"))
+    renderer.console.print(Syntax("".join(diff), "diff", theme="monokai"))
 
 
 # ---------------------------------------------------------------------------
@@ -284,19 +288,19 @@ def history_replay_cmd(
         record = db.get_run(run_id)
 
     if record is None:
-        diag_console.print(f"[red]Error:[/red] Run {run_id!r} not found.")
+        renderer.diag_console.print(f"[red]Error:[/red] Run {run_id!r} not found.")
         raise SystemExit(EXIT_USAGE)
 
     effective_provider = provider or record.provider
     effective_model = model or record.model
 
-    console.print(
+    renderer.console.print(
         f"[dim]Replaying run {run_id[:8]} via {effective_provider}/{effective_model}[/dim]"
     )
-    console.print(f"\n[bold]Prompt:[/bold]\n{record.prompt_text[:500]}")
+    renderer.console.print(f"\n[bold]Prompt:[/bold]\n{record.prompt_text[:500]}")
 
     if dry_run:
-        console.print("\n[dim]--dry-run: no provider call made.[/dim]")
+        renderer.console.print("\n[dim]--dry-run: no provider call made.[/dim]")
         raise SystemExit(EXIT_OK)
 
     try:
@@ -307,9 +311,9 @@ def history_replay_cmd(
         response = asyncio.run(
             prov.complete(messages, model=effective_model, max_tokens=1024, timeout=60)
         )
-        console.print(f"\n[bold]Response:[/bold]\n{response}")
+        renderer.console.print(f"\n[bold]Response:[/bold]\n{response}")
     except Exception as exc:
-        diag_console.print(f"[red]Provider error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Provider error:[/red] {exc}")
         raise SystemExit(EXIT_FAILURE) from None
 
 
@@ -346,7 +350,7 @@ def history_export_cmd(fmt: str, limit: int, out: str | None, db_path: str | Non
 
     if out:
         Path(out).write_text(content, encoding="utf-8")
-        console.print(f"[green]✓[/green] Exported {limit} runs to {out}")
+        renderer.console.print(f"[green]✓[/green] Exported {limit} runs to {out}")
     else:
         sys.stdout.write(content + "\n" if content and not content.endswith("\n") else content)
 
@@ -376,4 +380,4 @@ def history_clear_cmd(yes: bool, db_path: str | None) -> None:
     with open_history_db(Path(db_path) if db_path else None) as db:
         db._conn.execute("DELETE FROM runs")
         db._conn.commit()
-        console.print("[green]✓[/green] History cleared.")
+        renderer.console.print("[green]✓[/green] History cleared.")

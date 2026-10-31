@@ -8,7 +8,7 @@ import click
 
 from promptgenie.core.fileio import safe_read_yaml
 from promptgenie.models import Profile, Template, ValidationResult
-from promptgenie.renderers.rich import console
+from promptgenie.renderers import rich as renderer
 
 
 def _validate_profile(path: Path) -> ValidationResult:
@@ -188,7 +188,7 @@ def validate_cmd(paths, validate_all):
                 results.append(_validate_context_pack(path))
 
     if not results:
-        console.print("[dim]Nothing to validate. Use --all or pass file paths.[/dim]")
+        renderer.console.print("[dim]Nothing to validate. Use --all or pass file paths.[/dim]")
         return
 
     _print_results(results)
@@ -200,24 +200,24 @@ def _print_results(results: list[ValidationResult]) -> None:
     for r in results:
         color = "green" if r.valid else "red"
         status = "✓" if r.valid else "✗"
-        console.print(f"[{color}]{status}[/{color}] [{r.kind}] {r.path}")
+        renderer.console.print(f"[{color}]{status}[/{color}] [{r.kind}] {r.path}")
         for e in r.errors:
-            console.print(f"  [red]ERROR:[/red] {e}")
+            renderer.console.print(f"  [red]ERROR:[/red] {e}")
             errors_total += 1
         for w in r.warnings:
-            console.print(f"  [yellow]WARN:[/yellow]  {w}")
+            renderer.console.print(f"  [yellow]WARN:[/yellow]  {w}")
             warnings_total += 1
 
-    console.print()
+    renderer.console.print()
     if errors_total:
-        console.print(
+        renderer.console.print(
             f"[red]Validation failed:[/red] {errors_total} error(s), "
             f"{warnings_total} warning(s) across {len(results)} file(s)."
         )
         sys.exit(1)
     else:
         warn_suffix = f" ({warnings_total} warning(s))" if warnings_total else ""
-        console.print(f"[green]All {len(results)} file(s) valid.[/green]{warn_suffix}")
+        renderer.console.print(f"[green]All {len(results)} file(s) valid.[/green]{warn_suffix}")
 
 
 @click.command(name="validate-profiles")
@@ -241,10 +241,10 @@ def validate_profiles_cmd(profiles_dir: str | None, warnings: bool) -> None:
     yaml_files = sorted(target_dir.glob("*.yaml")) + sorted(target_dir.glob("*.yml"))
 
     if not yaml_files:
-        console.print(f"[yellow]No YAML files found in {target_dir}[/yellow]")
+        renderer.console.print(f"[yellow]No YAML files found in {target_dir}[/yellow]")
         return
 
-    console.print(f"Validating {len(yaml_files)} profile(s) in [dim]{target_dir}[/dim]\n")
+    renderer.console.print(f"Validating {len(yaml_files)} profile(s) in [dim]{target_dir}[/dim]\n")
     results: list[ValidationResult] = []
     for p in yaml_files:
         r = _validate_profile(p)

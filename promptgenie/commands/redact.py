@@ -24,7 +24,8 @@ import yaml
 from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import safe_read_text
 from promptgenie.core.redactor import redact
-from promptgenie.renderers.rich import diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 _ALL_CATEGORIES = {"secret", "data-leakage"}
 
@@ -84,7 +85,7 @@ def redact_cmd(
     try:
         text = safe_read_text(file)
     except (OSError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     effective_cats: set[str] | None = None
@@ -92,7 +93,7 @@ def redact_cmd(
         effective_cats = {c.strip().lower() for c in categories.split(",")}
         invalid = effective_cats - _ALL_CATEGORIES
         if invalid:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[red]Unknown categories:[/red] {', '.join(sorted(invalid))}. "
                 f"Valid: {', '.join(sorted(_ALL_CATEGORIES))}"
             )
@@ -125,19 +126,23 @@ def redact_cmd(
         if out and not dry_run:
             Path(out).parent.mkdir(parents=True, exist_ok=True)
             Path(out).write_text(text_out, encoding="utf-8")
-            diag_console.print(f"[green]✓[/green] Redacted output written to {out}")
+            renderer.diag_console.print(f"[green]✓[/green] Redacted output written to {out}")
         else:
             sys.stdout.write(text_out + "\n")
         raise SystemExit(EXIT_OK)
 
     if diff or dry_run:
         if result.count == 0:
-            diag_console.print("[green]✓[/green] No secrets or PII detected — nothing to redact.")
+            renderer.diag_console.print(
+                "[green]✓[/green] No secrets or PII detected — nothing to redact."
+            )
             raise SystemExit(EXIT_OK)
-        diag_console.print(f"[bold]Redaction summary[/bold] — {result.count} replacement(s):\n")
+        renderer.diag_console.print(
+            f"[bold]Redaction summary[/bold] — {result.count} replacement(s):\n"
+        )
         for i, r in enumerate(result.replacements, 1):
             orig_display = r.original if len(r.original) <= 40 else r.original[:40] + "…"
-            diag_console.print(
+            renderer.diag_console.print(
                 f"  {i:2}. [red]{orig_display!r}[/red] → [green]{r.placeholder}[/green]"
                 f"  [dim]({r.rule_id})[/dim]"
             )
@@ -151,7 +156,9 @@ def redact_cmd(
     if out:
         Path(out).parent.mkdir(parents=True, exist_ok=True)
         Path(out).write_text(text_out, encoding="utf-8")
-        diag_console.print(f"[green]✓[/green] Redacted {result.count} item(s) → [bold]{out}[/bold]")
+        renderer.diag_console.print(
+            f"[green]✓[/green] Redacted {result.count} item(s) → [bold]{out}[/bold]"
+        )
     else:
         sys.stdout.write(text_out)
         if not text_out.endswith("\n"):

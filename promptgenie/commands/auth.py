@@ -21,7 +21,7 @@ from promptgenie.core.credentials import (
 )
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.providers import load_providers_config
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 _EXTERNAL_SOURCES = {"1password", "aws-ssm", "gcp-secret", "azure-keyvault"}
 
@@ -107,18 +107,18 @@ def auth_login_cmd(
         try:
             store_credential_ref(provider, ref)
         except Exception as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
             raise SystemExit(EXIT_USAGE) from None
-        console.print(
+        renderer.console.print(
             f"[green]✓[/green] Credential reference for [bold]{provider}[/bold] stored: "
             f"[dim]{ref}[/dim]"
         )
-        console.print(f"[dim]The key will be resolved from {source} at runtime.[/dim]")
+        renderer.console.print(f"[dim]The key will be resolved from {source} at runtime.[/dim]")
         return
 
     # ── Keyring / env path ───────────────────────────────────────────────────
     if not is_keyring_available():
-        diag_console.print(
+        renderer.diag_console.print(
             "[yellow]⚠[/yellow] System keyring not available.\n"
             "Install it with: [bold]pip install 'promptgenie[secrets]'[/bold]\n"
             "The key will be stored in providers.yaml instead (less secure)."
@@ -129,18 +129,20 @@ def auth_login_cmd(
         env_name = env_var or click.prompt(f"Environment variable name for {provider!r}")
         key = os.environ.get(env_name)
         if not key:
-            diag_console.print(f"[red]Error:[/red] Environment variable {env_name!r} is not set.")
+            renderer.diag_console.print(
+                f"[red]Error:[/red] Environment variable {env_name!r} is not set."
+            )
             raise SystemExit(EXIT_USAGE)
     elif not key:
         key = click.prompt(f"API key for {provider!r}", hide_input=True)
 
     if not key:
-        diag_console.print("[red]Error:[/red] No API key provided.")
+        renderer.diag_console.print("[red]Error:[/red] No API key provided.")
         raise SystemExit(EXIT_USAGE)
 
     try:
         store_credential(provider, key)
-        console.print(
+        renderer.console.print(
             f"[green]✓[/green] API key for [bold]{provider}[/bold] stored in system keyring."
         )
     except ImportError:
@@ -149,14 +151,14 @@ def auth_login_cmd(
 
         providers = load_providers_config()
         if provider not in providers:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[yellow]⚠[/yellow] Provider '{provider}' not configured. "
                 f"Add it first with: promptgenie provider add {provider}"
             )
             raise SystemExit(EXIT_USAGE) from None
         providers[provider].api_key = key
         save_providers_config(providers)
-        console.print(
+        renderer.console.print(
             "[yellow]⚠[/yellow] Keyring unavailable. Key saved to providers.yaml. "
             "Install keyring for secure storage: pip install 'promptgenie[secrets]'"
         )
@@ -181,9 +183,11 @@ def auth_logout_cmd(provider: str, yes: bool) -> None:
 
     deleted = delete_credential(provider)
     if deleted:
-        console.print(f"[green]✓[/green] Credentials for [bold]{provider}[/bold] removed.")
+        renderer.console.print(f"[green]✓[/green] Credentials for [bold]{provider}[/bold] removed.")
     else:
-        diag_console.print(f"[yellow]No stored credentials found for '{provider}'.[/yellow]")
+        renderer.diag_console.print(
+            f"[yellow]No stored credentials found for '{provider}'.[/yellow]"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +208,7 @@ def auth_status_cmd() -> None:
     keyring_ok = is_keyring_available()
 
     if not providers:
-        console.print("[dim]No providers configured.[/dim]")
+        renderer.console.print("[dim]No providers configured.[/dim]")
         raise SystemExit(EXIT_OK)
 
     from rich.table import Table
@@ -256,10 +260,10 @@ def auth_status_cmd() -> None:
 
         table.add_row(name, cfg.type, env_var, env_set_str, keyring_str, status)
 
-    console.print(table)
+    renderer.console.print(table)
 
     if not keyring_ok:
-        console.print(
+        renderer.console.print(
             "\n[dim]Keyring not available. Install with: pip install 'promptgenie[secrets]'[/dim]"
         )
 

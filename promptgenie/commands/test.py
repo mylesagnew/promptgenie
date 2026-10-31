@@ -6,7 +6,7 @@ from rich.panel import Panel
 from promptgenie.core.config import PromptGenieConfig, load_config
 from promptgenie.core.errors import EXIT_OK, EXIT_TEST, EXIT_USAGE
 from promptgenie.core.tester import run_test_suite
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 
 def _resolve_config(
@@ -21,7 +21,7 @@ def _resolve_config(
         found = config_path or (str(_find_config()) if _find_config() is not None else None)
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
-        diag_console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+        renderer.diag_console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
         return PromptGenieConfig(), None
 
 
@@ -40,19 +40,19 @@ def test_cmd(test_file, verbose, config_path, no_config):
     """Run a prompt test suite (.prompt-test.yaml)."""
     cfg, cfg_file = _resolve_config(config_path, no_config)
     try:
-        with console.status("[bold blue]Running tests…"):
+        with renderer.console.status("[bold blue]Running tests…"):
             result = run_test_suite(test_file, config=cfg)
     except FileNotFoundError as e:
-        diag_console.print(f"[red]Error:[/red] {e}")
+        renderer.diag_console.print(f"[red]Error:[/red] {e}")
         sys.exit(EXIT_USAGE)
 
-    console.print()
+    renderer.console.print()
     if cfg_file:
-        diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
+        renderer.diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
 
     status_color = "green" if result.passed else "red"
     status_label = "PASSED" if result.passed else "FAILED"
-    console.print(
+    renderer.console.print(
         Panel(
             f"[bold {status_color}]{status_label}[/bold {status_color}]  "
             f"{result.pass_count}/{result.total} tests passed"
@@ -64,14 +64,14 @@ def test_cmd(test_file, verbose, config_path, no_config):
 
     for case in result.cases:
         icon = "[green]✓[/green]" if case.passed else "[red]✗[/red]"
-        console.print(f"\n  {icon}  [bold]{case.name}[/bold]")
+        renderer.console.print(f"\n  {icon}  [bold]{case.name}[/bold]")
         for assertion in case.assertions:
             if not assertion.passed:
-                console.print(f"      [red]FAIL[/red]  {assertion.detail}")
-                console.print(f"             [dim]actual: {assertion.actual}[/dim]")
+                renderer.console.print(f"      [red]FAIL[/red]  {assertion.detail}")
+                renderer.console.print(f"             [dim]actual: {assertion.actual}[/dim]")
             elif verbose:
-                console.print(f"      [green]PASS[/green]  [dim]{assertion.detail}[/dim]")
+                renderer.console.print(f"      [green]PASS[/green]  [dim]{assertion.detail}[/dim]")
 
-    console.print()
+    renderer.console.print()
     # Exit 5 (EXIT_TEST) for test assertion failures, 0 for pass
     sys.exit(EXIT_OK if result.passed else EXIT_TEST)

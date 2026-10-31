@@ -27,7 +27,7 @@ from pathlib import Path
 import click
 
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_TEST, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 
 @click.group("eval", help="Manage and run prompt eval suites.")
@@ -100,15 +100,15 @@ def eval_init_cmd(name: str, prompt_path: str, out_dir: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     dest = out / f"{safe_name}.yaml"
     if dest.exists():
-        diag_console.print(f"[red]Error:[/red] {dest} already exists.")
+        renderer.diag_console.print(f"[red]Error:[/red] {dest} already exists.")
         raise SystemExit(EXIT_USAGE)
     content = _EVAL_TEMPLATE.format(
         name=name,
         prompt_path=prompt_path or "prompts/my-prompt.md",
     )
     dest.write_text(content, encoding="utf-8")
-    console.print(f"[green]✓[/green] Created eval suite: [bold]{dest}[/bold]")
-    console.print(f"[dim]Edit the file then run: promptgenie eval run {dest}[/dim]")
+    renderer.console.print(f"[green]✓[/green] Created eval suite: [bold]{dest}[/bold]")
+    renderer.console.print(f"[dim]Edit the file then run: promptgenie eval run {dest}[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ def eval_run_cmd(
         changed_set = detect_changed_prompts(base_ref)
         changed_resolved = {p.resolve() for p in changed_set.files}
         if Path(suite_file).resolve() not in changed_resolved:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[dim]Skipping {suite_file!r} — not in changed set (--changed).[/dim]"
             )
             raise SystemExit(EXIT_OK)
@@ -207,12 +207,12 @@ def eval_run_cmd(
     try:
         suite = load_eval_suite(suite_file)
     except Exception as exc:
-        diag_console.print(f"[red]Error loading suite:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error loading suite:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     # ── Run ──────────────────────────────────────────────────────────────────
     if output_format == "rich":
-        with console.status(f"[bold blue]Running eval suite {suite.name!r}…[/bold blue]"):
+        with renderer.console.status(f"[bold blue]Running eval suite {suite.name!r}…[/bold blue]"):
             result = run_eval_suite(
                 suite,
                 provider=provider,
@@ -236,7 +236,7 @@ def eval_run_cmd(
     if compare_snapshot:
         old_snap = load_snapshot(suite.name, sdir)
         if old_snap is None:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[yellow]No snapshot found for {suite.name!r} — "
                 "saving current run as initial snapshot.[/yellow]"
             )
@@ -247,7 +247,7 @@ def eval_run_cmd(
     # ── Approve (save snapshot) ──────────────────────────────────────────────
     if approve or (compare_snapshot and diff is None):
         snap_path = save_snapshot(result, sdir)
-        diag_console.print(f"[green]✓[/green] Snapshot saved: {snap_path}")
+        renderer.diag_console.print(f"[green]✓[/green] Snapshot saved: {snap_path}")
 
     # ── Output ───────────────────────────────────────────────────────────────
     if output_format == "json":
@@ -307,18 +307,18 @@ def eval_compare_cmd(suite_file: str, snapshot_dir: str | None, output_format: s
     try:
         suite = load_eval_suite(suite_file)
     except Exception as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     old_snap = load_snapshot(suite.name, sdir)
     if old_snap is None:
-        diag_console.print(
+        renderer.diag_console.print(
             f"[yellow]No snapshot for {suite.name!r}. "
             "Run 'promptgenie eval run ... --approve' first.[/yellow]"
         )
         raise SystemExit(EXIT_USAGE)
 
-    with console.status("Running suite for comparison…"):
+    with renderer.console.status("Running suite for comparison…"):
         current = run_eval_suite(suite, dry_run=True)
 
     diff = compare_snapshots(old_snap, current)
@@ -373,15 +373,15 @@ def eval_approve_cmd(
     try:
         suite = load_eval_suite(suite_file)
     except Exception as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
-    with console.status(f"Running suite {suite.name!r}…"):
+    with renderer.console.status(f"Running suite {suite.name!r}…"):
         result = run_eval_suite(suite, provider=provider, model=model, dry_run=dry_run)
 
     snap_path = save_snapshot(result, sdir)
     _output_rich(result, diff=None, verbose=False)
-    console.print(f"\n[green]✓[/green] Approved snapshot saved: [bold]{snap_path}[/bold]")
+    renderer.console.print(f"\n[green]✓[/green] Approved snapshot saved: [bold]{snap_path}[/bold]")
     raise SystemExit(EXIT_OK if result.passed else EXIT_TEST)
 
 
@@ -398,7 +398,7 @@ def _output_rich(result: object, diff: object | None, *, verbose: bool = False) 
 
     status_color = "green" if passed else "red"
     status_label = "PASSED" if passed else "FAILED"
-    console.print(
+    renderer.console.print(
         f"\n[bold {status_color}]{status_label}[/bold {status_color}]  "
         f"[bold]{result.suite_name}[/bold]  "  # type: ignore[attr-defined]
         f"{result.pass_count}/{result.total} cases passed"  # type: ignore[attr-defined]
@@ -428,7 +428,7 @@ def _output_rich(result: object, diff: object | None, *, verbose: bool = False) 
                 msgs = f"error: {c.error}"
             table.add_row(c.case_name, "[red]FAIL[/red]", f"{c.latency_ms:.0f}ms", msgs)
 
-    console.print(table)
+    renderer.console.print(table)
 
     if diff:
         _print_diff(diff)
@@ -441,17 +441,17 @@ def _print_diff(diff: object) -> None:
     removed = diff.removed_cases  # type: ignore[attr-defined]
 
     if regs:
-        console.print(f"\n[red bold]⚠ {len(regs)} regression(s):[/red bold]")
+        renderer.console.print(f"\n[red bold]⚠ {len(regs)} regression(s):[/red bold]")
         for name in regs:
-            console.print(f"  [red]✗[/red] {name}")
+            renderer.console.print(f"  [red]✗[/red] {name}")
     if imps:
-        console.print(f"\n[green]{len(imps)} improvement(s):[/green]")
+        renderer.console.print(f"\n[green]{len(imps)} improvement(s):[/green]")
         for name in imps:
-            console.print(f"  [green]✓[/green] {name}")
+            renderer.console.print(f"  [green]✓[/green] {name}")
     if new:
-        console.print(f"\n[dim]{len(new)} new case(s): {', '.join(new)}[/dim]")
+        renderer.console.print(f"\n[dim]{len(new)} new case(s): {', '.join(new)}[/dim]")
     if removed:
-        console.print(f"[dim]{len(removed)} removed case(s): {', '.join(removed)}[/dim]")
+        renderer.console.print(f"[dim]{len(removed)} removed case(s): {', '.join(removed)}[/dim]")
 
 
 def _output_json(result: object, diff: object | None) -> None:

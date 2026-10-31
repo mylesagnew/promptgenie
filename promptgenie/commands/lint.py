@@ -8,13 +8,8 @@ from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import FileTooLargeError, safe_read_text, safe_write_text
 from promptgenie.core.formatters import lint_to_json, lint_to_sarif
 from promptgenie.core.linter import lint
-from promptgenie.renderers.rich import (
-    console,
-    diag_console,
-    format_lint_issues,
-    is_structured_mode,
-    score_color,
-)
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import format_lint_issues, is_structured_mode, score_color
 
 
 def _resolve_config(
@@ -32,7 +27,7 @@ def _resolve_config(
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
         if best_effort:
-            diag_console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+            renderer.diag_console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
             return PromptGenieConfig(), None
         raise
 
@@ -71,8 +66,8 @@ def lint_cmd(prompt_file, output_format, out, force, config_path, no_config, bes
     try:
         cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
     except (FileNotFoundError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
-        diag_console.print(
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(
             "[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]"
         )
         sys.exit(EXIT_USAGE)
@@ -81,7 +76,7 @@ def lint_cmd(prompt_file, output_format, out, force, config_path, no_config, bes
     try:
         text = safe_read_text(prompt_file)
     except FileTooLargeError as e:
-        diag_console.print(f"[red]Error:[/red] {e}")
+        renderer.diag_console.print(f"[red]Error:[/red] {e}")
         sys.exit(EXIT_USAGE)
 
     result = lint(text, config=cfg.linter)
@@ -95,15 +90,15 @@ def lint_cmd(prompt_file, output_format, out, force, config_path, no_config, bes
             try:
                 safe_write_text(out, output, force=force)
             except FileExistsError as e:
-                diag_console.print(f"[red]Error:[/red] {e}")
+                renderer.diag_console.print(f"[red]Error:[/red] {e}")
                 sys.exit(EXIT_USAGE)
         else:
             click.echo(output)
     else:
         if cfg_file:
-            diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
+            renderer.diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
         color = score_color(result.score)
-        console.print(
+        renderer.console.print(
             Panel(
                 format_lint_issues(result),
                 title=f"Lint Results  [bold {color}]{result.score}/100[/bold {color}]  [dim]{display_name}[/dim]",
@@ -113,9 +108,9 @@ def lint_cmd(prompt_file, output_format, out, force, config_path, no_config, bes
         if out:
             try:
                 safe_write_text(out, lint_to_json(result, prompt_path=display_name), force=force)
-                diag_console.print(f"[dim]Results saved to {out}[/dim]")
+                renderer.diag_console.print(f"[dim]Results saved to {out}[/dim]")
             except FileExistsError as e:
-                diag_console.print(f"[red]Error:[/red] {e}")
+                renderer.diag_console.print(f"[red]Error:[/red] {e}")
                 sys.exit(EXIT_USAGE)
 
     sys.exit(EXIT_OK if not result.by_severity("HIGH") else EXIT_FAILURE)

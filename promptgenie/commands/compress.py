@@ -34,7 +34,8 @@ from promptgenie.core.compressor import (
 )
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import safe_read_text
-from promptgenie.renderers.rich import diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 
 def _build_command(name: str) -> click.Command:
@@ -138,13 +139,13 @@ def _build_command(name: str) -> click.Command:
         try:
             text = safe_read_text(file)
         except (OSError, ValueError) as exc:
-            diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
             raise SystemExit(EXIT_USAGE) from exc
 
         try:
             result = compress(text, techniques=selected, max_tokens=max_tokens, summarise=summarise)
         except UnknownTechniqueError as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
             raise SystemExit(EXIT_USAGE) from exc
 
         pct = round(result.ratio * 100, 1)
@@ -185,7 +186,7 @@ def _build_command(name: str) -> click.Command:
             if out and not dry_run:
                 Path(out).parent.mkdir(parents=True, exist_ok=True)
                 Path(out).write_text(out_text, encoding="utf-8")
-                diag_console.print(f"[green]✓[/green] Report written to {out}")
+                renderer.diag_console.print(f"[green]✓[/green] Report written to {out}")
             else:
                 sys.stdout.write(out_text + "\n")
             raise SystemExit(_exit_for(result))
@@ -199,7 +200,7 @@ def _build_command(name: str) -> click.Command:
             if out:
                 Path(out).parent.mkdir(parents=True, exist_ok=True)
                 Path(out).write_text(out_text, encoding="utf-8")
-                diag_console.print(
+                renderer.diag_console.print(
                     f"[green]✓[/green] Compressed {result.tokens_before} → "
                     f"{result.tokens_after} tokens (−{pct}%) → [bold]{out}[/bold]"
                 )
@@ -221,39 +222,41 @@ def _exit_for(result) -> int:
 
 
 def _print_techniques() -> None:
-    diag_console.print("[bold]Compression techniques[/bold]\n")
+    renderer.diag_console.print("[bold]Compression techniques[/bold]\n")
     for name in ALL_TECHNIQUES:
         tech = TECHNIQUES[name]
         tier = "[yellow]aggressive[/yellow]" if tech.aggressive else "[green]default[/green]"
-        diag_console.print(f"  [bold]{name}[/bold]  {tier}\n    [dim]{tech.description}[/dim]")
-    diag_console.print(f"\n[dim]Default tier: {', '.join(DEFAULT_TECHNIQUES)}[/dim]")
-    diag_console.print(f"[dim]Aggressive tier: {', '.join(AGGRESSIVE_TECHNIQUES)}[/dim]")
+        renderer.diag_console.print(
+            f"  [bold]{name}[/bold]  {tier}\n    [dim]{tech.description}[/dim]"
+        )
+    renderer.diag_console.print(f"\n[dim]Default tier: {', '.join(DEFAULT_TECHNIQUES)}[/dim]")
+    renderer.diag_console.print(f"[dim]Aggressive tier: {', '.join(AGGRESSIVE_TECHNIQUES)}[/dim]")
 
 
 def _print_summary(file: str, result, pct: float) -> None:
-    diag_console.print(
+    renderer.diag_console.print(
         f"[bold]Compression summary[/bold] — {file}\n"
         f"  tokens: {result.tokens_before} → {result.tokens_after} "
         f"([green]−{result.tokens_saved}, −{pct}%[/green])\n"
         f"  chars:  {result.chars_before} → {result.chars_after}"
     )
     if result.budget_met is False:
-        diag_console.print("  [red]⚠ token budget not met[/red]")
+        renderer.diag_console.print("  [red]⚠ token budget not met[/red]")
     elif result.budget_met is True:
-        diag_console.print("  [green]✓ within token budget[/green]")
+        renderer.diag_console.print("  [green]✓ within token budget[/green]")
     if not result.applied and not result.dropped_sections:
-        diag_console.print("  [dim]No applicable techniques — already compact.[/dim]")
+        renderer.diag_console.print("  [dim]No applicable techniques — already compact.[/dim]")
         return
     if result.applied:
-        diag_console.print("  techniques applied:")
+        renderer.diag_console.print("  techniques applied:")
         for t in result.applied:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"    • {t.name}: {t.occurrences} edit(s), {t.chars_saved} char(s) saved"
             )
     if result.dropped_sections:
-        diag_console.print("  sections dropped (summarise):")
+        renderer.diag_console.print("  sections dropped (summarise):")
         for d in result.dropped_sections:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"    • {'#' * d.level} {d.heading}: −{d.tokens} token(s) [{d.reason}]"
             )
 

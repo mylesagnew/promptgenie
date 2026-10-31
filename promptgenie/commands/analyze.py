@@ -24,7 +24,8 @@ from promptgenie.core.analyze import analyze, findings_to_sarif
 from promptgenie.core.config import PromptGenieConfig, load_config
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import safe_read_text
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 _SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 _SEVERITY_COLORS = {
@@ -116,7 +117,7 @@ def analyze_cmd(
     try:
         text = safe_read_text(file)
     except (OSError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     cfg: PromptGenieConfig
@@ -149,7 +150,9 @@ def analyze_cmd(
                 )
             cfg.scanner.custom_scan_rules.extend(extra_rules)
         except Exception as exc:
-            diag_console.print(f"[yellow]Warning:[/yellow] Could not load custom rules: {exc}")
+            renderer.diag_console.print(
+                f"[yellow]Warning:[/yellow] Could not load custom rules: {exc}"
+            )
 
     result = analyze(
         text,
@@ -237,14 +240,14 @@ def _print_rich(findings: list, result: object, file: str, fail_on: str) -> None
     risk = result.overall_risk  # type: ignore[attr-defined]
 
     risk_color = _SEVERITY_COLORS.get(risk, "dim")
-    console.print(
+    renderer.console.print(
         f"\n[bold]PromptGenie Analyze[/bold]  [dim]{file}[/dim]  "
         f"Risk: [{risk_color}]{risk}[/{risk_color}]  "
         f"Lint: {score}/100"
     )
 
     if not findings:
-        console.print("[green]✓ No findings.[/green]\n")
+        renderer.console.print("[green]✓ No findings.[/green]\n")
         return
 
     table = Table(show_header=True, header_style="bold", show_lines=False)
@@ -267,7 +270,7 @@ def _print_rich(findings: list, result: object, file: str, fail_on: str) -> None
             f.source,
         )
 
-    console.print(table)
+    renderer.console.print(table)
 
     # Summary line
     parts = []
@@ -277,5 +280,5 @@ def _print_rich(findings: list, result: object, file: str, fail_on: str) -> None
             color = _SEVERITY_COLORS[sev]
             parts.append(f"[{color}]{n} {sev}[/{color}]")
     if parts:
-        console.print("  " + "  ".join(parts))
-    console.print()
+        renderer.console.print("  " + "  ".join(parts))
+    renderer.console.print()

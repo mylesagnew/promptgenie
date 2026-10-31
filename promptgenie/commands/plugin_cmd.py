@@ -29,7 +29,7 @@ from promptgenie.core.plugin import (
     list_plugins,
     scaffold_plugin,
 )
-from promptgenie.renderers.rich import console
+from promptgenie.renderers import rich as renderer
 
 
 @click.group("plugin", help="Manage PromptGenie plugins.")
@@ -72,8 +72,10 @@ def plugin_list_cmd(filter_group: str | None, output_format: str) -> None:
     plugins = list_plugins(groups)
 
     if not plugins:
-        console.print("[dim]No plugins installed.[/dim]")
-        console.print("[dim]Install a plugin with: [bold]pip install <plugin-package>[/bold][/dim]")
+        renderer.console.print("[dim]No plugins installed.[/dim]")
+        renderer.console.print(
+            "[dim]Install a plugin with: [bold]pip install <plugin-package>[/bold][/dim]"
+        )
         raise SystemExit(EXIT_OK)
 
     if output_format == "json":
@@ -114,8 +116,8 @@ def plugin_list_cmd(filter_group: str | None, output_format: str) -> None:
             p.entry_point,
         )
 
-    console.print(table)
-    console.print(f"\n[dim]Total: {len(plugins)} plugin(s)[/dim]")
+    renderer.console.print(table)
+    renderer.console.print(f"\n[dim]Total: {len(plugins)} plugin(s)[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +145,7 @@ def plugin_doctor_cmd(filter_group: str | None) -> None:
     plugins = list_plugins(groups)
 
     if not plugins:
-        console.print("[dim]No plugins installed.[/dim]")
+        renderer.console.print("[dim]No plugins installed.[/dim]")
         raise SystemExit(EXIT_OK)
 
     any_issue = False
@@ -151,11 +153,15 @@ def plugin_doctor_cmd(filter_group: str | None) -> None:
         warnings = check_plugin_compat(p)
         if warnings:
             any_issue = True
-            console.print(f"[red]✗[/red] [bold]{p.name}[/bold] ({p.group_label}) v{p.version}")
+            renderer.console.print(
+                f"[red]✗[/red] [bold]{p.name}[/bold] ({p.group_label}) v{p.version}"
+            )
             for w in warnings:
-                console.print(f"  [yellow]⚠[/yellow] {w}")
+                renderer.console.print(f"  [yellow]⚠[/yellow] {w}")
         else:
-            console.print(f"[green]✓[/green] [bold]{p.name}[/bold] ({p.group_label}) v{p.version}")
+            renderer.console.print(
+                f"[green]✓[/green] [bold]{p.name}[/bold] ({p.group_label}) v{p.version}"
+            )
 
     raise SystemExit(EXIT_FAILURE if any_issue else EXIT_OK)
 
@@ -188,8 +194,8 @@ def plugin_scaffold_cmd(name: str, group: str, out_dir: str) -> None:
     from promptgenie.core.errors import EXIT_OK
 
     path = scaffold_plugin(name, group, output_dir=out_dir)
-    console.print(f"[green]✓[/green] Plugin stub created: [bold]{path}[/bold]")
-    console.print(
+    renderer.console.print(f"[green]✓[/green] Plugin stub created: [bold]{path}[/bold]")
+    renderer.console.print(
         f'[dim]Register it in pyproject.toml under [project.entry-points."{group}"][/dim]'
     )
     raise SystemExit(EXIT_OK)
@@ -217,7 +223,7 @@ def plugin_install_cmd(packages: tuple[str, ...], upgrade: bool) -> None:
     cmd.extend(packages)
     result = subprocess.run(cmd)
     if result.returncode == 0:
-        console.print(
+        renderer.console.print(
             f"[green]✓[/green] Installed: {', '.join(packages)}. "
             "Run [bold]promptgenie plugin list[/bold] to verify."
         )

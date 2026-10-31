@@ -33,7 +33,7 @@ from pathlib import Path
 import click
 
 from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 _PROMPT_TEMPLATE = """\
 # Prompt: {objective}
@@ -91,60 +91,60 @@ def wizard_cmd(
     Example:
       promptgenie wizard --out prompts/auth.md
     """
-    console.print("[bold cyan]PromptGenie Wizard[/bold cyan]  — guided prompt builder\n")
+    renderer.console.print("[bold cyan]PromptGenie Wizard[/bold cyan]  — guided prompt builder\n")
 
     # ── Step 1: Objective ─────────────────────────────────────────────────
-    console.rule("[dim]Step 1: Objective[/dim]")
+    renderer.console.rule("[dim]Step 1: Objective[/dim]")
     objective = click.prompt(
         "What is the one-sentence goal of this prompt?\n>",
         default="",
     ).strip()
     if not objective:
-        diag_console.print("[red]Error:[/red] Objective is required.")
+        renderer.diag_console.print("[red]Error:[/red] Objective is required.")
         raise SystemExit(EXIT_USAGE)
 
     # ── Step 2: Scope ─────────────────────────────────────────────────────
-    console.rule("[dim]Step 2: Scope[/dim]")
+    renderer.console.rule("[dim]Step 2: Scope[/dim]")
     scope = click.prompt(
         "What should the AI work on / have access to?\n>",
         default="The full repository unless otherwise specified.",
     ).strip()
 
     # ── Step 3: Out-of-scope ──────────────────────────────────────────────
-    console.rule("[dim]Step 3: Out of Scope[/dim]")
+    renderer.console.rule("[dim]Step 3: Out of Scope[/dim]")
     out_of_scope = click.prompt(
         "What is explicitly out of scope?\n>",
         default="Production deployments, secrets, external API calls.",
     ).strip()
 
     # ── Step 4: Forbidden ────────────────────────────────────────────────
-    console.rule("[dim]Step 4: Forbidden Actions[/dim]")
+    renderer.console.rule("[dim]Step 4: Forbidden Actions[/dim]")
     forbidden = click.prompt(
         "What must the AI never do?\n>",
         default="Modify production configs, delete files, expose credentials.",
     ).strip()
 
     # ── Step 5: Output format ─────────────────────────────────────────────
-    console.rule("[dim]Step 5: Output Format[/dim]")
+    renderer.console.rule("[dim]Step 5: Output Format[/dim]")
     fmt_choices = ["markdown", "json", "bullet-list", "code", "plain-text", "other"]
-    console.print("Options: " + ", ".join(fmt_choices))
+    renderer.console.print("Options: " + ", ".join(fmt_choices))
     output_format = click.prompt("Output format", default="markdown").strip()
 
     # ── Step 6: Verification ──────────────────────────────────────────────
-    console.rule("[dim]Step 6: Verification / Acceptance Criteria[/dim]")
+    renderer.console.rule("[dim]Step 6: Verification / Acceptance Criteria[/dim]")
     verification = click.prompt(
         "How will you verify the output is correct?\n>",
         default="Manual review + automated tests pass.",
     ).strip()
 
     # ── Step 7: Target ────────────────────────────────────────────────────
-    console.rule("[dim]Step 7: Target Profile[/dim]")
+    renderer.console.rule("[dim]Step 7: Target Profile[/dim]")
     target_choices = ["code-review", "refactor", "documentation", "security", "testing", "custom"]
-    console.print("Options: " + ", ".join(target_choices))
+    renderer.console.print("Options: " + ", ".join(target_choices))
     click.prompt("Target profile", default="code-review").strip()
 
     # ── Step 8: Context packs ─────────────────────────────────────────────
-    console.rule("[dim]Step 8: Context Packs[/dim]")
+    renderer.console.rule("[dim]Step 8: Context Packs[/dim]")
     try:
         from promptgenie.core.context_packs import list_packs
 
@@ -155,7 +155,7 @@ def wizard_cmd(
 
     selected_packs: list[str] = []
     if pack_ids:
-        console.print(f"Available packs: {', '.join(pack_ids[:10])}")
+        renderer.console.print(f"Available packs: {', '.join(pack_ids[:10])}")
         raw = click.prompt(
             "Enter pack IDs to include (comma-separated, or blank for none)",
             default="",
@@ -163,10 +163,10 @@ def wizard_cmd(
         if raw:
             selected_packs = [p.strip() for p in raw.split(",") if p.strip()]
     else:
-        console.print("[dim]No packs available.[/dim]")
+        renderer.console.print("[dim]No packs available.[/dim]")
 
     # ── Render Markdown ───────────────────────────────────────────────────
-    console.rule()
+    renderer.console.rule()
     rendered = _PROMPT_TEMPLATE.format(
         objective=objective,
         scope=scope,
@@ -189,7 +189,7 @@ def wizard_cmd(
     prompt_path = Path(out_file)
     prompt_path.parent.mkdir(parents=True, exist_ok=True)
     prompt_path.write_text(rendered, encoding="utf-8")
-    console.print(f"[green]✓[/green] Prompt saved to [bold]{prompt_path}[/bold]")
+    renderer.console.print(f"[green]✓[/green] Prompt saved to [bold]{prompt_path}[/bold]")
 
     # ── Write PromptSpec ──────────────────────────────────────────────────
     if not no_spec:
@@ -204,12 +204,12 @@ def wizard_cmd(
         spec_path = Path(spec_path_str)
         spec_path.parent.mkdir(parents=True, exist_ok=True)
         spec_path.write_text(spec_content, encoding="utf-8")
-        console.print(f"[green]✓[/green] PromptSpec saved to [bold]{spec_path}[/bold]")
+        renderer.console.print(f"[green]✓[/green] PromptSpec saved to [bold]{spec_path}[/bold]")
 
-    console.print("\n[dim]Next steps:[/dim]")
-    console.print(f"  promptgenie lint {prompt_path}")
-    console.print(f"  promptgenie scan {prompt_path}")
+    renderer.console.print("\n[dim]Next steps:[/dim]")
+    renderer.console.print(f"  promptgenie lint {prompt_path}")
+    renderer.console.print(f"  promptgenie scan {prompt_path}")
     if not no_spec:
-        console.print(f"  promptgenie run {spec_path_str}")
+        renderer.console.print(f"  promptgenie run {spec_path_str}")
 
     raise SystemExit(EXIT_OK)

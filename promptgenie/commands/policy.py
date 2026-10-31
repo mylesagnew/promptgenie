@@ -18,7 +18,7 @@ import click
 
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE, PromptGenieError
 from promptgenie.core.fileio import safe_read_text
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 # Risk level ordering used by the inline gate helper
 _RISK_ORDER = {"NONE": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
@@ -136,10 +136,14 @@ def policy(
         try:
             pg_cfg = load_config(config_path)
         except (FileNotFoundError, OSError, ValueError) as exc:
-            diag_console.print(f"[red]Error:[/red] Cannot load config {config_path!r}: {exc}")
+            renderer.diag_console.print(
+                f"[red]Error:[/red] Cannot load config {config_path!r}: {exc}"
+            )
             raise SystemExit(EXIT_USAGE) from None
         except Exception as exc:
-            diag_console.print(f"[red]Error:[/red] Cannot load config {config_path!r}: {exc}")
+            renderer.diag_console.print(
+                f"[red]Error:[/red] Cannot load config {config_path!r}: {exc}"
+            )
             raise SystemExit(EXIT_USAGE) from None
     else:
         # Auto-discovery — fall back to defaults on error
@@ -152,7 +156,7 @@ def policy(
     try:
         prompt_text = safe_read_text(file)
     except (OSError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     # ── Load policy ─────────────────────────────────────────────────────────
@@ -166,7 +170,7 @@ def policy(
             policy_cfg = load_policy(policy_path)
             policy_source = str(policy_path)
         except PromptGenieError as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
             raise SystemExit(EXIT_USAGE) from None
     else:
         discovered = discover_policy_file()
@@ -265,13 +269,15 @@ def policy(
         # Rich text output
         status = "[green]PASSED[/green]" if evaluation.passed else "[red]FAILED[/red]"
         icon = "✅" if evaluation.passed else "❌"
-        console.print(f"\n{icon}  [bold]PromptGenie Policy — {status}[/bold]  [dim]{file}[/dim]")
-        console.print(f"[dim]Policy: {policy_source}[/dim]")
+        renderer.console.print(
+            f"\n{icon}  [bold]PromptGenie Policy — {status}[/bold]  [dim]{file}[/dim]"
+        )
+        renderer.console.print(f"[dim]Policy: {policy_source}[/dim]")
 
         # Lint score line (shown when min_score is active)
         if min_score is not None and min_score > 0:
             score_color = "green" if result.lint_score >= min_score else "red"
-            console.print(
+            renderer.console.print(
                 f"[dim]Lint score:[/dim] [{score_color}]{result.lint_score}/100[/{score_color}]"
                 f" [dim](min: {min_score})[/dim]"
             )
@@ -305,37 +311,37 @@ def policy(
                     f.category,
                     f.title,
                 )
-            console.print(tbl)
+            renderer.console.print(tbl)
 
         # Explain trace
         if explain and evaluation.explain_lines:
-            console.print("\n[bold]Policy evaluation trace:[/bold]")
+            renderer.console.print("\n[bold]Policy evaluation trace:[/bold]")
             for line in evaluation.explain_lines:
                 color = "green" if "✓" in line else "red"
-                console.print(f"  [{color}]{line}[/{color}]")
+                renderer.console.print(f"  [{color}]{line}[/{color}]")
 
         # Violations
         if evaluation.violations:
-            console.print("\n[bold red]Violations:[/bold red]")
+            renderer.console.print("\n[bold red]Violations:[/bold red]")
             for v in evaluation.violations:
                 detail = f"  [dim]{v.detail}[/dim]" if v.detail else ""
-                console.print(f"  • [bold]{v.rule}[/bold]: {v.message}{detail}")
+                renderer.console.print(f"  • [bold]{v.rule}[/bold]: {v.message}{detail}")
         else:
-            console.print("\n[green]All policy thresholds met.[/green]")
+            renderer.console.print("\n[green]All policy thresholds met.[/green]")
 
         # Allowlist warnings
         for entry in pg_cfg.scanner.allowlist:
             if entry.is_expired():
-                console.print(
+                renderer.console.print(
                     f"[yellow]⚠[/yellow] Allowlist entry '{entry.phrase}' "
                     f"expired on {entry.expires} — suppression is inactive."
                 )
 
         # Warnings
         for w in evaluation.warnings:
-            console.print(f"[yellow]⚠[/yellow] {w}")
+            renderer.console.print(f"[yellow]⚠[/yellow] {w}")
 
-        console.print()
+        renderer.console.print()
 
     raise SystemExit(EXIT_OK if evaluation.passed else EXIT_FAILURE)
 

@@ -27,7 +27,8 @@ from promptgenie.core.compressor import (
 from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
 from promptgenie.core.fileio import safe_read_text
 from promptgenie.core.generator import estimate_tokens
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 
 def _estimator_name() -> str:
@@ -63,7 +64,7 @@ def tokens_cmd(file: str, output_format: str) -> None:
     try:
         text = safe_read_text(file)
     except (OSError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     tokens = estimate_tokens(text)
@@ -117,33 +118,33 @@ def tokens_cmd(file: str, output_format: str) -> None:
         raise SystemExit(EXIT_OK)
 
     # ---- human-readable report ----
-    console.print(f"[bold]Token report[/bold] — {file}")
-    console.print(
+    renderer.console.print(f"[bold]Token report[/bold] — {file}")
+    renderer.console.print(
         f"  tokens: [cyan]{tokens}[/cyan]   chars: {chars}   "
         f"[dim]estimator: {_estimator_name()}[/dim]\n"
     )
-    console.print(
+    renderer.console.print(
         "  [bold]Potential savings by technique[/bold] [dim](applied individually)[/dim]:"
     )
     for t in per_technique:
         label = f"{t['name']:<22}"
         if t["tokens_saved"] or t["chars_saved"]:
-            console.print(
+            renderer.console.print(
                 f"    {label} [green]−{t['tokens_saved']} tok[/green]  "
                 f"[dim]({t['tier']}, {t['occurrences']} edit(s), −{t['chars_saved']} chars)[/dim]"
             )
         else:
-            console.print(f"    [dim]{label} no effect ({t['tier']})[/dim]")
+            renderer.console.print(f"    [dim]{label} no effect ({t['tier']})[/dim]")
     d, a = combined["default"], combined["all"]
-    console.print(
+    renderer.console.print(
         f"\n  default tier (combined):    [green]−{d['tokens_saved']} tok "
         f"(−{d['percent']}%)[/green] → {d['tokens_after']}"
     )
-    console.print(
+    renderer.console.print(
         f"  all techniques (combined):  [green]−{a['tokens_saved']} tok "
         f"(−{a['percent']}%)[/green] → {a['tokens_after']}"
     )
-    console.print(
+    renderer.console.print(
         "\n  [dim]Inspection only — run [bold]promptgenie compress[/bold] to apply.[/dim]"
     )
     raise SystemExit(EXIT_OK)

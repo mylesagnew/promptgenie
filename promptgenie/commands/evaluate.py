@@ -22,7 +22,7 @@ from pathlib import Path
 import click
 
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 # Exit code for regression failures (shares EXIT_FAILURE)
 EXIT_REGRESSION = EXIT_FAILURE
@@ -170,14 +170,16 @@ def evaluate_cmd(
         changed_set = detect_changed_prompts(base_ref)
         changed_resolved = {p.resolve() for p in changed_set.files}
         if Path(file).resolve() not in changed_resolved:
-            diag_console.print(f"[dim]Skipping {file!r} — not in changed set (--changed).[/dim]")
+            renderer.diag_console.print(
+                f"[dim]Skipping {file!r} — not in changed set (--changed).[/dim]"
+            )
             raise SystemExit(EXIT_OK)
 
     # ── Read prompt ──────────────────────────────────────────────────────────
     try:
         prompt_text = safe_read_text(file)
     except (OSError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
         raise SystemExit(EXIT_USAGE) from None
 
     # ── Resolve model list ───────────────────────────────────────────────────
@@ -186,7 +188,7 @@ def evaluate_cmd(
         model_specs.extend(m.strip() for m in models.split(",") if m.strip())
     model_specs.extend(extra_models)
     if not model_specs:
-        diag_console.print(
+        renderer.diag_console.print(
             "[red]Error:[/red] No models specified. Use --models claude,gpt-4.1 or --model <spec>."
         )
         raise SystemExit(EXIT_USAGE)
@@ -195,7 +197,7 @@ def evaluate_cmd(
     from promptgenie.core.evaluator import matrix_evaluate
 
     if output_format == "rich":
-        with console.status(
+        with renderer.console.status(
             f"[bold blue]Evaluating across {len(model_specs)} model(s)…[/bold blue]"
         ):
             matrix_result = matrix_evaluate(
@@ -229,7 +231,7 @@ def evaluate_cmd(
         base_path = save_baseline(
             save_baseline_name, matrix_result, scan_risk=scan_result.risk_level
         )
-        diag_console.print(
+        renderer.diag_console.print(
             f"[green]✓[/green] Baseline [bold]{save_baseline_name!r}[/bold] saved to {base_path}"
         )
 
@@ -245,7 +247,7 @@ def evaluate_cmd(
 
         baseline = load_baseline(compare_baseline_name)
         if baseline is None:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[yellow]Warning:[/yellow] No baseline named {compare_baseline_name!r} found. "
                 "Skipping regression check."
             )
@@ -323,8 +325,8 @@ def _output_rich(matrix_result: object, regression_report: object | None) -> Non
 
         table.add_row(r.display_name, status, latency, tokens, cost, rubric, safety, det)
 
-    console.print()
-    console.print(table)
+    renderer.console.print()
+    renderer.console.print(table)
 
     if regression_report:
         _print_regression_report(regression_report)
@@ -337,18 +339,18 @@ def _print_regression_report(report: object) -> None:
     baseline_name = report.baseline_name  # type: ignore[attr-defined]
 
     if regs:
-        console.print(
+        renderer.console.print(
             f"\n[red bold]⚠ {len(regs)} regression(s) vs baseline {baseline_name!r}:[/red bold]"
         )
         for r in regs:
-            console.print(f"  [red]✗[/red] {r.model} [{r.metric}] {r.message}")
+            renderer.console.print(f"  [red]✗[/red] {r.model} [{r.metric}] {r.message}")
     if imps:
-        console.print(f"\n[green]{len(imps)} improvement(s):[/green]")
+        renderer.console.print(f"\n[green]{len(imps)} improvement(s):[/green]")
         for i in imps:
-            console.print(f"  [green]✓[/green] {i}")
+            renderer.console.print(f"  [green]✓[/green] {i}")
     if warns:
         for w in warns:
-            console.print(f"  [yellow]⚠[/yellow] {w}")
+            renderer.console.print(f"  [yellow]⚠[/yellow] {w}")
 
 
 def _output_json(matrix_result: object, regression_report: object | None) -> None:
