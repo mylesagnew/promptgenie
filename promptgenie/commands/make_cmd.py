@@ -35,7 +35,8 @@ from promptgenie.core.make import (
     run_makefile,
 )
 from promptgenie.core.trust import add_trust, is_trusted, makefile_requires_trust
-from promptgenie.renderers.rich import diag_console, escape_markup, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import escape_markup, is_structured_mode
 
 _STATUS_STYLE = {
     "pass": "[green]✓ pass[/green]",
@@ -87,18 +88,20 @@ def _make_trust_gate(
 
     interactive = sys.stdin.isatty() and not no_input
     if not interactive:
-        diag_console.print(
+        renderer.diag_console.print(
             f"[red]Error:[/red] {makefile_path} runs shell commands and is not "
             "trusted. Re-run with --trust to record it as trusted, or run "
             "interactively to be prompted."
         )
         raise SystemExit(EXIT_USAGE)
 
-    diag_console.print(f"[yellow]⚠ {makefile_path} runs shell commands on your host:[/yellow]")
+    renderer.diag_console.print(
+        f"[yellow]⚠ {makefile_path} runs shell commands on your host:[/yellow]"
+    )
     for line in _describe_commands(mf):
-        diag_console.print(f"[yellow]{line}[/yellow]")
+        renderer.diag_console.print(f"[yellow]{line}[/yellow]")
     if not click.confirm("Trust this makefile and run its commands?", default=False):
-        diag_console.print("[red]Error:[/red] Makefile not trusted; aborting.")
+        renderer.diag_console.print("[red]Error:[/red] Makefile not trusted; aborting.")
         raise SystemExit(EXIT_USAGE)
     add_trust(path)
 
@@ -204,7 +207,7 @@ def make_cmd(
     try:
         mf = load_makefile(makefile)
     except MakefileError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     structured = is_structured_mode(output_format)
@@ -218,14 +221,14 @@ def make_cmd(
     changed_files: list[str] | None = None
     if changed:
         if not _is_in_git_repo():
-            diag_console.print("[red]Error:[/red] --changed requires a git repository.")
+            renderer.diag_console.print("[red]Error:[/red] --changed requires a git repository.")
             raise SystemExit(EXIT_USAGE)
         changed_files = [str(p) for p in _git_changed_files(base_ref)]
 
     try:
         order = resolve_targets(mf, requested)
     except MakefileError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     if not dry_run:
@@ -239,7 +242,7 @@ def make_cmd(
 
     if not structured and not dry_run:
         plan = " → ".join(order)
-        diag_console.print(f"[bold]make[/bold] {plan}")
+        renderer.diag_console.print(f"[bold]make[/bold] {plan}")
 
     on_complete = None if (structured or dry_run) else _live_reporter()
 
@@ -276,7 +279,7 @@ def _live_reporter():
             suffix = f" [dim](exit {result.exit_code}, {result.duration_ms} ms)[/dim]"
         elif result.status == "skipped" and result.reason:
             suffix = f" [dim]({result.reason})[/dim]"
-        diag_console.print(f"  {badge}  {result.name}{suffix}")
+        renderer.diag_console.print(f"  {badge}  {result.name}{suffix}")
         if result.status == "fail" and result.output:
             sys.stdout.write(result.output)
             if not result.output.endswith("\n"):
@@ -288,12 +291,14 @@ def _live_reporter():
 
 def _report_summary(results: list[TaskResult], *, dry_run: bool) -> None:
     if dry_run:
-        diag_console.print("[bold]Plan[/bold] (dry run):")
+        renderer.diag_console.print("[bold]Plan[/bold] (dry run):")
         for r in results:
             badge = _STATUS_STYLE.get(r.status, r.status)
             cmds = escape_markup("; ".join(r.commands)) if r.commands else "(no command)"
             note = f" [dim]({escape_markup(r.reason)})[/dim]" if r.reason else ""
-            diag_console.print(f"  {badge}  {escape_markup(r.name)}{note}\n      [dim]{cmds}[/dim]")
+            renderer.diag_console.print(
+                f"  {badge}  {escape_markup(r.name)}{note}\n      [dim]{cmds}[/dim]"
+            )
         return
 
     passed = sum(1 for r in results if r.status == "pass")
@@ -305,7 +310,9 @@ def _report_summary(results: list[TaskResult], *, dry_run: bool) -> None:
         parts.append(f"[red]{failed} failed[/red]")
     if skipped:
         parts.append(f"[dim]{skipped} skipped[/dim]")
-    diag_console.print(f"[bold]Done[/bold] — {', '.join(parts)} [dim]({total_ms} ms)[/dim]")
+    renderer.diag_console.print(
+        f"[bold]Done[/bold] — {', '.join(parts)} [dim]({total_ms} ms)[/dim]"
+    )
 
 
 def _list(mf, structured: bool) -> None:
@@ -326,11 +333,11 @@ def _list(mf, structured: bool) -> None:
         sys.stdout.write(json.dumps(data, indent=2) + "\n")
         sys.stdout.flush()
         return
-    diag_console.print("[bold]Tasks[/bold]")
+    renderer.diag_console.print("[bold]Tasks[/bold]")
     for t in mf.tasks.values():
         deps = f" [dim](needs: {', '.join(t.needs)})[/dim]" if t.needs else ""
         desc = f"  [dim]{t.description}[/dim]" if t.description else ""
-        diag_console.print(f"  [bold]{t.name}[/bold]{deps}{desc}")
+        renderer.diag_console.print(f"  [bold]{t.name}[/bold]{deps}{desc}")
 
 
 def _emit_json(results: list[TaskResult], *, changed_files: list[str] | None) -> None:

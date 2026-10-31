@@ -27,8 +27,11 @@ Fixes from a source-only review with the Cloudflare `security-audit` skill (quic
 - **VS Code extension resolves the default CLI to an absolute path.** With the default `executablePath`, a bare `promptgenie` was spawned with the workspace (or the opened file's directory) as cwd; on Windows a planted `promptgenie.exe` there could run. The extension now walks `PATH` itself, skipping relative entries and workspace/file directories, and validates the result with `isTrustedPath`. It also declares `capabilities.untrustedWorkspaces: {supported: false}`.
 - **Release attestations require the `release` environment; tags must be on main.** The `attest` job signed SLSA provenance and SBOM attestations for any pushed `v*` tag without reviewer approval. The GitHub Release, which depends on `attest`, inherited that gap. `attest` now runs in the `release` environment, and `verify` rejects a tag whose commit is not reachable from `origin/main`.
 
+- **Dependency advisories.** Python lockfile: certifi 2026.5.20 → 2026.10.23 (PYSEC-2026-4320), filelock 3.29.1 → 4.2.5 (several CVEs; 4.1.0 on Python 3.10, the newest available there) and msgpack 1.2.1 → 1.2.4 (CVE-2026-114613), all dev/transitive. The VS Code extension dev tooling gets `npm audit fix` for minimatch/glob/qs/serialize-javascript; the extension still has no runtime dependencies.
+
 ### Changed
 
+- **`run` and `make` read the Rich consoles at call time.** They imported `console`/`diag_console` by value, so the consoles `init_renderer()` rebuilds for `--color` never reached them (CodeQL *importing value of mutable attribute*). Other command modules still use the old import; that is tracked separately.
 - **Scanner key-shape rules.** `SEC_SECRET_OPENAI` now also matches hyphenated `sk-` keys (`sk-proj-…`, `sk-ant-api03-…`). `SEC_SECRET_GITHUB` also matches fine-grained `github_pat_…` tokens.
 - **Custom-rule ReDoS guard.** `validate_pattern` also parses the regex and rejects nested unbounded repeats the textual heuristic missed (e.g. `((a)+)+`, `(?:(\w+)\s?)*`), and caps patterns at 500 characters. Ambiguous alternation such as `(a|a)+` is still not detected.
 
