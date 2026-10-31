@@ -35,7 +35,7 @@ from promptgenie.core.make import (
     run_makefile,
 )
 from promptgenie.core.trust import add_trust, is_trusted, makefile_requires_trust
-from promptgenie.renderers.rich import diag_console, is_structured_mode
+from promptgenie.renderers.rich import diag_console, escape_markup, is_structured_mode
 
 _STATUS_STYLE = {
     "pass": "[green]✓ pass[/green]",
@@ -46,11 +46,15 @@ _STATUS_STYLE = {
 
 
 def _describe_commands(mf: Makefile) -> list[str]:
-    """Human-readable one-liners for every shell command the makefile would run."""
+    """Human-readable one-liners for every shell command the makefile would run.
+
+    Markup-escaped so a hostile ``run:`` string cannot hide part of itself from
+    the trust prompt (e.g. ``[conceal]...[/conceal]``) while the shell runs it.
+    """
     lines: list[str] = []
     for task in mf.tasks.values():
         for command in task.run:
-            lines.append(f"  - [{task.name}] {command}")
+            lines.append(escape_markup(f"  - [{task.name}] {command}"))
     return lines
 
 
@@ -287,9 +291,9 @@ def _report_summary(results: list[TaskResult], *, dry_run: bool) -> None:
         diag_console.print("[bold]Plan[/bold] (dry run):")
         for r in results:
             badge = _STATUS_STYLE.get(r.status, r.status)
-            cmds = "; ".join(r.commands) if r.commands else "[dim](no command)[/dim]"
-            note = f" [dim]({r.reason})[/dim]" if r.reason else ""
-            diag_console.print(f"  {badge}  {r.name}{note}\n      [dim]{cmds}[/dim]")
+            cmds = escape_markup("; ".join(r.commands)) if r.commands else "(no command)"
+            note = f" [dim]({escape_markup(r.reason)})[/dim]" if r.reason else ""
+            diag_console.print(f"  {badge}  {escape_markup(r.name)}{note}\n      [dim]{cmds}[/dim]")
         return
 
     passed = sum(1 for r in results if r.status == "pass")

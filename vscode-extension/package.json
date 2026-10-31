@@ -42,6 +42,12 @@
     "workspaceContains:**/*.promptgenie"
   ],
   "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "PromptGenie runs the promptgenie CLI on files in the workspace; it is disabled in Restricted Mode."
+    }
+  },
   "contributes": {
     "commands": [
       {

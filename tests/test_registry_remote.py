@@ -257,7 +257,19 @@ class TestAuth:
     def test_env_overrides(self, monkeypatch):
         registry_auth.store_token("ghcr.io", "filetok")
         monkeypatch.setenv(registry_auth.ENV_TOKEN, "envtok")
+        monkeypatch.setenv(registry_auth.ENV_TOKEN_HOST, "ghcr.io")
         assert registry_auth.get_token("ghcr.io") == "envtok"
+
+    def test_env_token_bound_to_its_host(self, monkeypatch):
+        monkeypatch.setenv(registry_auth.ENV_TOKEN, "envtok")
+        monkeypatch.setenv(registry_auth.ENV_TOKEN_HOST, "registry.internal.example")
+        assert registry_auth.get_token("other.example") is None
+        assert registry_auth.get_token("https://registry.internal.example/org") == "envtok"
+
+    def test_env_token_ignored_without_host_binding(self, monkeypatch):
+        monkeypatch.setenv(registry_auth.ENV_TOKEN, "envtok")
+        monkeypatch.delenv(registry_auth.ENV_TOKEN_HOST, raising=False)
+        assert registry_auth.get_token("ghcr.io") is None
 
     def test_normalize_host(self):
         assert registry_auth.normalize_host("https://ghcr.io/myorg") == "ghcr.io"

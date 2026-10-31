@@ -165,6 +165,13 @@ def spec_validate_cmd(spec_file: str, output_format: str) -> None:
     help="Output format.",
 )
 @click.option("--show-context", is_flag=True, help="Include assembled context in output.")
+@click.option(
+    "--trust",
+    "trust_spec",
+    is_flag=True,
+    help="Trust this spec's host-touching context sources (needed with --show-context).",
+)
+@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Assume yes to the trust prompt.")
 def spec_render_cmd(
     spec_file: str,
     var_list: tuple[str, ...],
@@ -172,6 +179,8 @@ def spec_render_cmd(
     no_input: bool,
     output_format: str,
     show_context: bool,
+    trust_spec: bool,
+    assume_yes: bool,
 ) -> None:
     """Render a PromptSpec — resolve variables and assemble the prompt without calling a provider.
 
@@ -214,6 +223,17 @@ def spec_render_cmd(
     # Context
     context_text = ""
     if show_context and spec.context:
+        # Gathering context runs the spec's cmd/file/glob/env sources on the host,
+        # so it needs the same trust decision as `promptgenie run` (S-2 / T1).
+        from promptgenie.commands.run import _trust_gate
+
+        _trust_gate(
+            spec=spec,
+            spec_file=spec_file,
+            no_input=no_input,
+            trust_spec=trust_spec,
+            assume_yes=assume_yes,
+        )
         base_dir = Path(spec_file).parent
         manifest = build_context(spec.context, base_dir=base_dir)
         context_text = manifest.text

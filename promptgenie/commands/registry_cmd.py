@@ -197,6 +197,18 @@ def registry_push(
 # ---------------------------------------------------------------------------
 
 
+def _signed_reference_mismatch(annotations: dict[str, str], reference: Reference) -> str | None:
+    """Return why a signed manifest's identity differs from *reference*, or None."""
+    signed_name = annotations.get("org.promptgenie.name")
+    if signed_name != reference.repository:
+        return f"signed for repository {signed_name!r}, requested {reference.repository!r}"
+    if reference.tag and not reference.digest:
+        signed_tag = annotations.get("org.promptgenie.tag")
+        if signed_tag != reference.tag:
+            return f"signed for tag {signed_tag!r}, requested {reference.tag!r}"
+    return None
+
+
 @registry_group.command("pull")
 @click.argument("ref")
 @click.option(
@@ -245,6 +257,18 @@ def registry_pull(
                 raise SystemExit(EXIT_FAILURE)
 
         manifest = store.get_manifest(digest)  # verifies manifest digest
+
+        if pubkey:
+            # The signature covers the manifest bytes, not the reference the user
+            # asked for: bind the signed name/tag annotations to the request so an
+            # untrusted registry cannot answer with another (or an older) artifact
+            # signed by the same key.
+            mismatch = _signed_reference_mismatch(manifest.annotations, reference)
+            if mismatch:
+                diag_console.print(
+                    f"[red]✗ signed artifact does not match {reference}:[/red] {mismatch}"
+                )
+                raise SystemExit(EXIT_FAILURE)
         out_dir = Path(out) if out else Path.cwd() / reference.name
         written = materialise(store, manifest, out_dir)  # verifies each layer digest
     except RegistryError as exc:

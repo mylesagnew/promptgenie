@@ -52,6 +52,44 @@ export function isTrustedPath(p: string): boolean {
   return true;
 }
 
+/**
+ * Resolve the default `promptgenie` command to an absolute path by walking
+ * *pathEnv* ourselves, instead of handing a bare name to `child_process.spawn`.
+ *
+ * On Windows a bare command name can be resolved from the child's `cwd` before
+ * PATH, and the extension spawns with the workspace (or the opened file's
+ * directory) as `cwd` — so a `promptgenie.exe` planted in an opened repository
+ * would run. Empty and relative PATH entries, and every directory in
+ * *excludeDirs*, are skipped; the result must also pass `isTrustedPath`.
+ *
+ * @returns the absolute path, or `undefined` if no acceptable binary is found.
+ */
+export function resolveOnPath(
+  pathEnv: string,
+  excludeDirs: string[],
+  platform: NodeJS.Platform = process.platform
+): string | undefined {
+  const win = platform === "win32";
+  const norm = (d: string) => {
+    const n = path.resolve(d);
+    return win ? n.toLowerCase() : n;
+  };
+  const excluded = new Set(excludeDirs.filter(Boolean).map(norm));
+  const names = win ? ["promptgenie.exe"] : ["promptgenie"];
+  for (const dir of pathEnv.split(win ? ";" : ":")) {
+    if (!dir || !path.isAbsolute(dir) || excluded.has(norm(dir))) {
+      continue;
+    }
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      if (isTrustedPath(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Check whether *resolvedPath* falls under one of the well-known trusted install prefixes. */
 export function isUnderTrustedPrefix(resolvedPath: string): boolean {
   const norm = path.normalize(resolvedPath);

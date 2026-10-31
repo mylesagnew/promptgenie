@@ -679,7 +679,12 @@ async def probe_provider(name: str) -> tuple[bool, str]:
             return False, f"API key env var {cfg.api_key_env or 'ANTHROPIC_API_KEY'} not set."
         return True, "API key present (not verified — would incur cost)."
 
-    # OpenAI-compat: hit /models endpoint
+    # OpenAI-compat: hit /models endpoint. Apply the same cleartext-credential
+    # policy as complete()/stream() before any Authorization header is sent.
+    try:
+        base_url = _validate_provider_base_url(cfg)
+    except PromptGenieError as exc:
+        return False, str(exc)
     try:
         import httpx
 
@@ -688,10 +693,10 @@ async def probe_provider(name: str) -> tuple[bool, str]:
         if key:
             headers["authorization"] = f"Bearer {key}"
         async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{cfg.base_url}/models", headers=headers)
+            resp = await client.get(f"{base_url}/models", headers=headers)
         if resp.status_code < 400:
-            return True, f"Reachable at {cfg.base_url} (HTTP {resp.status_code})."
-        return False, f"HTTP {resp.status_code} from {cfg.base_url}/models."
+            return True, f"Reachable at {base_url} (HTTP {resp.status_code})."
+        return False, f"HTTP {resp.status_code} from {base_url}/models."
     except ImportError:
         return False, "httpx not installed — cannot probe."
     except Exception as exc:

@@ -124,9 +124,12 @@ escape via `../`, absolute references, or symlink chains raise `SecurityError`.
 and validated in three layers before any process is spawned (all `subprocess.run` calls use
 `shell=False`):
 
-1. **Executable allowlist** — the basename must be one of a small set of inert, read-only
-   inspection tools (`git`, `cat`, `ls`, `grep`, `echo`, `pwd`, `date`, `uname`, `wc`, `head`,
-   `tail`, `sort`, `uniq`, `cut`, `tr`, `printenv`). Interpreters and build tools (`python`,
+1. **Executable allowlist** — the command must be a bare name (no path: `./tools/cat` or
+   `/tmp/x/git` would run a spec-shipped binary) from a small set of read-only inspection
+   tools (`git`, `cat`, `ls`, `grep`, `echo`, `pwd`, `date`, `uname`, `wc`, `head`, `tail`,
+   `sort`, `uniq`, `cut`, `tr`, `printenv`, `jq`). These tools are not sandboxed: `cat`,
+   `printenv` and `jq` can read any file or environment variable the user can, which is why
+   specs with `cmd` sources require trust. Interpreters and build tools (`python`,
    `python3`, `node`, `npm`, `make`, `env`, `awk`, `sed`, `find`, etc.) are **deliberately
    excluded** — each can execute arbitrary code despite a benign basename.
 2. **Dangerous-argument denylist** — even for an allowlisted tool, any argument that is an
@@ -136,6 +139,11 @@ and validated in three layers before any process is spawned (all `subprocess.run
    (`log`, `diff`, `show`, `status`, `branch`, `rev-parse`, `ls-files`, `blame`, `describe`,
    `tag`, `remote`, `shortlog`). Mutating subcommands (`push`, `config <key> <value>`, …) and the
    `git -c …` config-injection form (which can alias a subcommand to a shell) are rejected.
+   The subcommand must come first, so global options (`--git-dir`, `--work-tree`, `-C`,
+   `--config-env`) are rejected; so are `--output`, `--ext-diff` and `--textconv`, and
+   `branch`/`tag`/`remote` with a name argument (listing only).
+4. **Write/exec-capable options** — `sort -o`/`--output`/`--compress-program` and
+   `uniq INPUT OUTPUT` are rejected.
 
 Executables not on the allowlist (`rm`, `bash`, `sh`, `curl`, `nc`, and any other tool) raise
 `SecurityError`.

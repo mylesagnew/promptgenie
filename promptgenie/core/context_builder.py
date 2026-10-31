@@ -43,7 +43,6 @@ import socket
 import ssl
 import subprocess
 import sys
-import urllib.request
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -257,6 +256,17 @@ _DANGEROUS_ARG_FLAGS: frozenset[str] = frozenset(
     {"-c", "-e", "--eval", "-exec", "-execdir", "--exec"}
 )
 
+# git options that write files or run external programs even under a read-only
+# subcommand (``git diff --output=FILE``, ``--ext-diff``/``--textconv`` drivers).
+_GIT_DANGEROUS_OPTIONS: tuple[str, ...] = ("--output", "--ext-diff", "--textconv")
+
+# git subcommands that list by default but create/delete/rename refs or remotes
+# when given a positional argument (``git tag NAME``, ``git remote add ...``).
+_GIT_LIST_ONLY_SUBCOMMANDS: frozenset[str] = frozenset({"branch", "tag", "remote"})
+
+# ``sort`` options that write a file or run a program (GNU/BSD).
+_SORT_DANGEROUS_OPTIONS: tuple[str, ...] = ("-o", "--output", "--compress-program")
+
 
 def _validate_cmd_allowed(command: str) -> list[str]:
     """Parse *command* into an argv list and validate it is safe to run.
@@ -281,7 +291,16 @@ def _validate_cmd_allowed(command: str) -> list[str]:
     if not argv:
         raise SecurityError("Empty command in context source.", code=EXIT_USAGE)
 
-    executable = Path(argv[0]).name  # strip any path component
+    executable = Path(argv[0]).name
+    # The allowlist names system tools, not files: a path-qualified argv[0]
+    # (``./tools/cat``, ``/tmp/x/git``) would run a binary the spec ships
+    # while passing the basename check, so only bare names are accepted.
+    if argv[0] != executable or "\\" in argv[0]:
+        raise SecurityError(
+            f"Command executable {argv[0]!r} must be a bare command name from the "
+            "allowed list, not a path.",
+            code=EXIT_USAGE,
+        )
     if _CMD_ALLOWLIST is not None and executable not in _CMD_ALLOWLIST:
         raise SecurityError(
             f"Command executable {executable!r} is not in the allowed command list. "
@@ -312,13 +331,62 @@ def _validate_cmd_allowed(command: str) -> list[str]:
                     "shell via aliases. Remove the -c flag.",
                     code=EXIT_USAGE,
                 )
-        # The first non-flag argument is the subcommand — it must be read-only.
-        subcommand = next((a for a in argv[1:] if not a.startswith("-")), None)
+        # The subcommand must come first: git global options (--git-dir,
+        # --work-tree, -C, --config-env, ...) can point git at a spec-shipped
+        # config whose core.fsmonitor / diff.external run arbitrary programs.
+        subcommand = argv[1] if len(argv) > 1 else None
+        if subcommand is not None and subcommand.startswith("-"):
+            raise SecurityError(
+                f"git global option {subcommand!r} is not permitted; the "
+                "subcommand must come first (e.g. 'git log --oneline').",
+                code=EXIT_USAGE,
+            )
         if subcommand is None or subcommand not in _GIT_SUBCOMMAND_ALLOWLIST:
             raise SecurityError(
                 f"git subcommand {subcommand!r} is not in the read-only "
                 f"allowlist {sorted(_GIT_SUBCOMMAND_ALLOWLIST)}. "
                 "Only non-mutating git commands may be used as context sources.",
+                code=EXIT_USAGE,
+            )
+        for arg in argv[2:]:
+            if arg.startswith(_GIT_DANGEROUS_OPTIONS):
+                raise SecurityError(
+                    f"git option {arg!r} can write files or run external "
+                    "programs and is not permitted in context commands.",
+                    code=EXIT_USAGE,
+                )
+        if subcommand in _GIT_LIST_ONLY_SUBCOMMANDS and any(
+            not a.startswith("-") for a in argv[2:]
+        ):
+            raise SecurityError(
+                f"'git {subcommand}' with a name argument can create or delete "
+                "refs/remotes; only the listing form is permitted.",
+                code=EXIT_USAGE,
+            )
+
+    if executable == "sort":
+        for arg in argv[1:]:
+            short_cluster = arg.startswith("-") and not arg.startswith("--")
+            if arg.startswith(_SORT_DANGEROUS_OPTIONS) or (short_cluster and "o" in arg[1:]):
+                raise SecurityError(
+                    f"sort option {arg!r} can write files or run a program and "
+                    "is not permitted in context commands.",
+                    code=EXIT_USAGE,
+                )
+
+    if executable == "uniq":
+        # ``uniq INPUT OUTPUT`` writes OUTPUT; allow at most one operand.
+        operands: list[str] = []
+        args = iter(argv[1:])
+        for arg in args:
+            if arg in ("-f", "-s", "-w"):  # options that take a separate value
+                next(args, None)
+            elif not arg.startswith("-") or arg == "-":
+                operands.append(arg)
+        if len(operands) > 1:
+            raise SecurityError(
+                "uniq with an OUTPUT operand writes a file and is not permitted "
+                "in context commands.",
                 code=EXIT_USAGE,
             )
 
@@ -646,20 +714,16 @@ def _gather_url(
     # network connection is opened. Returns the validated IP(s) so we can pin
     # the connection and avoid a re-resolution TOCTOU window (S-5).
     validated_ips = _check_url_allowed(url, allow_insecure=allow_insecure)
+    if not validated_ips:
+        # Fail closed: an unpinned request would re-resolve the host and follow
+        # redirects (incl. https->http to internal IPs) with no re-validation.
+        raise PromptGenieError(
+            f"Failed to fetch URL context: could not resolve {url!r} to a validated address.",
+            code=EXIT_PROVIDER,
+        )
     try:
-        if validated_ips:
-            # Pin to the first validated IP (already confirmed non-private).
-            raw = _fetch_pinned(url, validated_ips[0], max_bytes)
-        else:
-            # No IP available to pin (e.g. resolution returned nothing); fall
-            # back to a normal request — _check_url_allowed already enforced
-            # the scheme/IP policy on whatever it could resolve.
-            req = urllib.request.Request(url, headers={"User-Agent": "PromptGenie/2.0"})
-            # scheme validated above
-            with urllib.request.urlopen(  # nosec B310
-                req, timeout=20
-            ) as resp:
-                raw = resp.read(max_bytes or 512_000)
+        # Pin to the first validated IP (already confirmed non-private).
+        raw = _fetch_pinned(url, validated_ips[0], max_bytes)
         content = raw.decode("utf-8", errors="replace")
         sha = hashlib.sha256(raw).hexdigest()
         return SourceEntry(

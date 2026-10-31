@@ -15,10 +15,12 @@ messages (config paths, status lines) are written to *stderr* via
 from __future__ import annotations
 
 import os
+import re
 from enum import Enum
 
 from rich import box  # noqa: F401  — re-exported for command modules
 from rich.console import Console
+from rich.markup import escape as _rich_escape
 from rich.panel import Panel  # noqa: F401
 from rich.table import Table  # noqa: F401
 
@@ -53,6 +55,20 @@ def _resolve_color(mode: ColorMode | str) -> bool | None:
     if "NO_COLOR" in os.environ:
         return False
     return None  # Rich auto-detects via isatty()
+
+
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def escape_markup(text: str) -> str:
+    """Make untrusted *text* print literally through a Rich console.
+
+    Escapes Rich markup tags (``[conceal]``, ``[/]`` ...) and replaces control
+    characters (ANSI ``ESC`` sequences, ``CR``) with visible ``\\xNN`` escapes, so
+    consent prompts show every byte of what will run.
+    """
+    visible = _CONTROL_CHARS_RE.sub(lambda m: f"\\x{ord(m.group()):02x}", text)
+    return _rich_escape(visible)
 
 
 def make_console(

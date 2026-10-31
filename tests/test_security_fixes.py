@@ -370,34 +370,44 @@ class TestGatherUrlSecurity:
         from promptgenie.core.context_builder import _gather_url
 
         with (
-            patch("promptgenie.core.context_builder._check_url_allowed"),
             patch(
-                "promptgenie.core.context_builder.urllib.request.urlopen",
+                "promptgenie.core.context_builder._check_url_allowed",
+                return_value=["93.184.216.34"],
+            ),
+            patch(
+                "promptgenie.core.context_builder._fetch_pinned",
                 side_effect=OSError("connection refused"),
             ),
             pytest.raises(PromptGenieError, match="Failed to fetch"),
         ):
             _gather_url("https://example.com/data.txt", "", 0, no_url=False)
 
-    def test_url_allow_insecure_passes_flag(self):
-        """allow_insecure=True is forwarded to _check_url_allowed."""
-        from unittest.mock import MagicMock, patch
+    def test_url_unresolved_fails_closed_without_unpinned_fetch(self):
+        """No validated IP (DNS failure) must not fall back to redirect-following urlopen."""
+        from unittest.mock import patch
 
         import promptgenie.core.context_builder as cb
 
-        mock_resp = MagicMock()
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_resp.read.return_value = b"hello"
+        with (
+            patch.object(cb, "_check_url_allowed", return_value=[]),
+            patch("urllib.request.urlopen") as mock_urlopen,
+            patch.object(cb, "_fetch_pinned") as mock_pinned,
+            pytest.raises(PromptGenieError, match="validated address"),
+        ):
+            cb._gather_url("https://example.com/data", "", 0, no_url=False)
+        mock_urlopen.assert_not_called()
+        mock_pinned.assert_not_called()
+
+    def test_url_allow_insecure_passes_flag(self):
+        """allow_insecure=True is forwarded to _check_url_allowed."""
+        from unittest.mock import patch
+
+        import promptgenie.core.context_builder as cb
 
         with (
-            patch.object(cb, "_check_url_allowed", return_value=[]) as mock_check,
-            patch(
-                "promptgenie.core.context_builder.urllib.request.urlopen",
-                return_value=mock_resp,
-            ),
+            patch.object(cb, "_check_url_allowed", return_value=["93.184.216.34"]) as mock_check,
+            patch.object(cb, "_fetch_pinned", return_value=b"hello"),
         ):
-            # Empty validated-IP list -> falls back to urlopen path (this test's intent).
             cb._gather_url("http://example.com/data", "lbl", 0, no_url=False, allow_insecure=True)
             mock_check.assert_called_once_with("http://example.com/data", allow_insecure=True)
 

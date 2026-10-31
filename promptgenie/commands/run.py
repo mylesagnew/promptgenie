@@ -33,18 +33,24 @@ from promptgenie.core.errors import (
 from promptgenie.core.run_engine import RunEvent, run_spec
 from promptgenie.core.spec import PromptSpec, load_spec
 from promptgenie.core.trust import add_trust, is_trusted, spec_requires_trust
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers.rich import console, diag_console, escape_markup
 
 
 def _describe_sources(spec: PromptSpec) -> list[str]:
-    """Human-readable one-liners for the host-touching context sources."""
+    """Human-readable one-liners for the host-touching context sources.
+
+    Lines are markup-escaped: they are printed through a Rich console, and the
+    trust prompt must show exactly what will run, not what the spec styles it as.
+    """
     host_types = {"cmd", "file", "glob", "env", "url"}
     lines: list[str] = []
     for s in spec.context or []:
         if s.type not in host_types:
             continue
         detail = s.command or s.path or s.pattern or s.var or s.url or ""
-        lines.append(f"  - [{s.type}] {detail}")
+        lines.append(escape_markup(f"  - [{s.type}] {detail}"))
+    for name, binding in (spec.secret_vars or {}).items():
+        lines.append(escape_markup(f"  - [secret var] {name} <- ${binding.from_env}"))
     return lines
 
 
@@ -73,7 +79,7 @@ def _trust_gate(
         handle_error(
             PromptGenieError(
                 "Spec has host-touching context sources (cmd/file/glob/env/url) "
-                "and is not trusted. Re-run with --trust to record it as trusted, "
+                "or env-bound secret vars and is not trusted. Re-run with --trust to record it as trusted, "
                 "or run interactively to be prompted.",
                 code=EXIT_USAGE,
             )
