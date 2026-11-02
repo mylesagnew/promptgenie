@@ -30,7 +30,7 @@ from __future__ import annotations
 import click
 
 from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import diag_console
+from promptgenie.renderers import rich as renderer
 
 # ---------------------------------------------------------------------------
 # CLI entry point
@@ -56,7 +56,7 @@ def tui_cmd(file: str | None, provider: str | None, model: str | None, read_only
     try:
         from textual.app import App  # noqa: F401  # verify import
     except ImportError:
-        diag_console.print(
+        renderer.diag_console.print(
             "[red]Error:[/red] Textual is not installed.\n"
             "Install the TUI extra with: [bold]pip install 'promptgenie[tui]'[/bold]"
         )

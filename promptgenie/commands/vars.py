@@ -20,7 +20,8 @@ from promptgenie.core.variables import (
     load_vars_file,
     parse_cli_vars,
 )
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 
 @click.group("vars", help="Inspect and manage PromptSpec variables.")
@@ -54,7 +55,7 @@ def vars_list_cmd(spec_file: str, output_format: str) -> None:
     try:
         spec = load_spec(spec_file)
     except PromptGenieError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     prompt_text = spec.prompt or ""
@@ -75,22 +76,22 @@ def vars_list_cmd(spec_file: str, output_format: str) -> None:
             "schema_version": "1.0",
         }
         if output_format == "yaml":
-            console.print(yaml.dump(data, default_flow_style=False))
+            renderer.console.print(yaml.dump(data, default_flow_style=False))
         else:
-            console.print(json.dumps(data, indent=2))
+            renderer.console.print(json.dumps(data, indent=2))
         return
 
     if not variables:
-        console.print(f"[dim]No {{{{variable}}}} placeholders found in {spec_file}[/dim]")
+        renderer.console.print(f"[dim]No {{{{variable}}}} placeholders found in {spec_file}[/dim]")
         return
 
-    console.print(f"[bold]Variables in {spec_file}[/bold] ([dim]{spec.name}[/dim])")
+    renderer.console.print(f"[bold]Variables in {spec_file}[/bold] ([dim]{spec.name}[/dim])")
     for v in variables:
         default = spec_defaults.get(v)
         if default is not None:
-            console.print(f"  [cyan]{v}[/cyan]  [dim]default: {default!r}[/dim]")
+            renderer.console.print(f"  [cyan]{v}[/cyan]  [dim]default: {default!r}[/dim]")
         else:
-            console.print(f"  [cyan]{v}[/cyan]  [red](required)[/red]")
+            renderer.console.print(f"  [cyan]{v}[/cyan]  [red](required)[/red]")
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +145,7 @@ def vars_inspect_cmd(
     try:
         spec = load_spec(spec_file)
     except PromptGenieError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     # Merge vars: spec defaults → vars file → CLI vars
@@ -153,7 +154,7 @@ def vars_inspect_cmd(
         try:
             merged.update(load_vars_file(vars_file))
         except Exception as exc:
-            diag_console.print(f"[red]Failed to load vars file:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Failed to load vars file:[/red] {exc}")
             raise SystemExit(EXIT_USAGE) from exc
     cli_var_dict = parse_cli_vars(list(var_list))
     merged.update(cli_var_dict)
@@ -221,13 +222,13 @@ def vars_inspect_cmd(
             "schema_version": "1.0",
         }
         if output_format == "yaml":
-            console.print(yaml.dump(data, default_flow_style=False))
+            renderer.console.print(yaml.dump(data, default_flow_style=False))
         else:
-            console.print(json.dumps(data, indent=2))
+            renderer.console.print(json.dumps(data, indent=2))
         return
 
     if not rows:
-        console.print(f"[dim]No variables found in {spec_file}[/dim]")
+        renderer.console.print(f"[dim]No variables found in {spec_file}[/dim]")
         return
 
     from rich.table import Table
@@ -248,11 +249,11 @@ def vars_inspect_cmd(
             str(row["source"]),
             status,
         )
-    console.print(table)
+    renderer.console.print(table)
 
     unresolved = [str(r["name"]) for r in rows if not r["resolved"]]
     if unresolved:
-        diag_console.print(
+        renderer.diag_console.print(
             f"\n[yellow]⚠[/yellow] {len(unresolved)} unresolved variable(s): "
             + ", ".join(unresolved)
         )

@@ -25,7 +25,8 @@ from promptgenie.core.providers import (
     probe_provider,
     save_providers_config,
 )
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 
 @click.group("provider", help="Manage AI provider configurations.")
@@ -70,13 +71,15 @@ def provider_list_cmd(output_format: str) -> None:
             for p in providers.values()
         ]
         if output_format == "yaml":
-            console.print(yaml.dump({"providers": out}, default_flow_style=False))
+            renderer.console.print(yaml.dump({"providers": out}, default_flow_style=False))
         else:
-            console.print(json.dumps({"schema_version": "1.0", "providers": out}, indent=2))
+            renderer.console.print(
+                json.dumps({"schema_version": "1.0", "providers": out}, indent=2)
+            )
         return
 
     if not providers:
-        console.print(
+        renderer.console.print(
             "[dim]No providers configured. Run 'promptgenie provider add' to add one.[/dim]"
         )
         return
@@ -99,8 +102,8 @@ def provider_list_cmd(output_format: str) -> None:
             endpoint,
             "✓" if p.local else "—",
         )
-    console.print(table)
-    console.print(f"[dim]Config: {_PROVIDERS_FILE}[/dim]")
+    renderer.console.print(table)
+    renderer.console.print(f"[dim]Config: {_PROVIDERS_FILE}[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -158,12 +161,16 @@ def provider_add_cmd(
         default_model=default_model,
         local=local,
     )
-    console.print(f"[green]✓[/green] Provider [bold]{name}[/bold] saved to {_PROVIDERS_FILE}")
+    renderer.console.print(
+        f"[green]✓[/green] Provider [bold]{name}[/bold] saved to {_PROVIDERS_FILE}"
+    )
     if base_url:
-        console.print(f"  Base URL: {base_url}")
+        renderer.console.print(f"  Base URL: {base_url}")
     if default_model:
-        console.print(f"  Default model: {default_model}")
-    console.print(f"  Run [bold]promptgenie provider doctor {name}[/bold] to test reachability.")
+        renderer.console.print(f"  Default model: {default_model}")
+    renderer.console.print(
+        f"  Run [bold]promptgenie provider doctor {name}[/bold] to test reachability."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +190,7 @@ def provider_remove_cmd(name: str, yes: bool) -> None:
     """
     providers = load_providers_config()
     if name not in providers:
-        diag_console.print(f"[red]Provider '{name}' not found.[/red]")
+        renderer.diag_console.print(f"[red]Provider '{name}' not found.[/red]")
         raise SystemExit(EXIT_USAGE)
 
     if not yes:
@@ -191,7 +198,7 @@ def provider_remove_cmd(name: str, yes: bool) -> None:
 
     del providers[name]
     save_providers_config(providers)
-    console.print(f"[green]✓[/green] Provider '{name}' removed.")
+    renderer.console.print(f"[green]✓[/green] Provider '{name}' removed.")
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +226,7 @@ def provider_show_cmd(name: str, output_format: str) -> None:
     """
     providers = load_providers_config()
     if name not in providers:
-        diag_console.print(f"[red]Provider '{name}' not found.[/red]")
+        renderer.diag_console.print(f"[red]Provider '{name}' not found.[/red]")
         raise SystemExit(EXIT_USAGE)
 
     p = providers[name]
@@ -241,19 +248,19 @@ def provider_show_cmd(name: str, output_format: str) -> None:
 
     if is_structured_mode(output_format):
         if output_format == "yaml":
-            console.print(yaml.dump(data, default_flow_style=False))
+            renderer.console.print(yaml.dump(data, default_flow_style=False))
         else:
-            console.print(json.dumps(data, indent=2))
+            renderer.console.print(json.dumps(data, indent=2))
         return
 
-    console.print(f"[bold cyan]{p.name}[/bold cyan]")
+    renderer.console.print(f"[bold cyan]{p.name}[/bold cyan]")
     for k, v in data.items():
         if k == "capabilities" and isinstance(v, dict):
-            console.print("  capabilities:")
+            renderer.console.print("  capabilities:")
             for ck, cv in v.items():
-                console.print(f"    {ck}: {cv}")
+                renderer.console.print(f"    {ck}: {cv}")
         elif v:
-            console.print(f"  {k}: {v}")
+            renderer.console.print(f"  {k}: {v}")
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +302,7 @@ def provider_doctor_cmd(name: str, output_format: str) -> None:
                 "local": cap.local,
                 "supports_tools": cap.supports_tools,
             }
-        console.print(
+        renderer.console.print(
             json.dumps(
                 {
                     "provider": name,
@@ -309,7 +316,7 @@ def provider_doctor_cmd(name: str, output_format: str) -> None:
         )
     else:
         icon = "[green]✓[/green]" if ok else "[red]✗[/red]"
-        console.print(f"{icon} [bold]{name}[/bold]: {message}")
+        renderer.console.print(f"{icon} [bold]{name}[/bold]: {message}")
         if cap:
             from rich.table import Table
 
@@ -323,6 +330,6 @@ def provider_doctor_cmd(name: str, output_format: str) -> None:
             table.add_row("supports_tools", "[green]yes[/green]" if cap.supports_tools else "no")
             table.add_row("local", "[green]yes[/green]" if cap.local else "no")
             table.add_row("max_context_tokens", f"{cap.max_context_tokens:,}")
-            console.print(table)
+            renderer.console.print(table)
 
     raise SystemExit(EXIT_OK if ok else EXIT_FAILURE)

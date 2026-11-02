@@ -17,7 +17,7 @@ import yaml
 from promptgenie.core.context_builder import build_context
 from promptgenie.core.errors import EXIT_USAGE, PromptGenieError
 from promptgenie.core.spec import ContextSource
-from promptgenie.renderers.rich import diag_console
+from promptgenie.renderers import rich as renderer
 
 
 @click.group("context", help="Assemble and inspect context sources.")
@@ -152,7 +152,7 @@ def context_build_cmd(
         sources.append(ContextSource(type="url", url=url))
 
     if not sources:
-        diag_console.print(
+        renderer.diag_console.print(
             "[yellow]No sources specified.[/yellow] "
             "Use --file, --glob, --git-diff, --stdin, or --cmd."
         )
@@ -169,18 +169,20 @@ def context_build_cmd(
             compress_aggressive=compress_aggressive,
         )
     except PromptGenieError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(exc.code) from exc
 
     comp = manifest.compression
     if comp is not None and comp.changed:
-        diag_console.print(
+        renderer.diag_console.print(
             f"[green]Compressed[/green] context "
             f"{comp.tokens_before} → {comp.tokens_after} tokens "
             f"([bold]-{comp.ratio:.0%}[/bold], {len(comp.applied)} technique(s))"
         )
     elif comp is not None:
-        diag_console.print("[dim]Compression made no change to the assembled context.[/dim]")
+        renderer.diag_console.print(
+            "[dim]Compression made no change to the assembled context.[/dim]"
+        )
 
     compression_obj = (
         {
@@ -254,12 +256,12 @@ def context_build_cmd(
     if out:
         Path(out).parent.mkdir(parents=True, exist_ok=True)
         Path(out).write_text(text_out, encoding="utf-8")
-        diag_console.print(
+        renderer.diag_console.print(
             f"[green]✓[/green] Context written to [bold]{out}[/bold] "
             f"(~{manifest.total_tokens} tokens)"
         )
         if manifest.trimmed_count:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[yellow]⚠[/yellow] {manifest.trimmed_count} source(s) trimmed by "
                 f"--max-tokens {max_tokens}"
             )

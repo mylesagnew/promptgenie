@@ -65,7 +65,10 @@ def make_console(
     if resolved is True:
         kwargs["force_terminal"] = True
     elif resolved is False:
+        # no_color alone drops colours but still emits bold/dim/underline
+        # escapes; color_system=None suppresses every ANSI sequence.
         kwargs["no_color"] = True
+        kwargs["color_system"] = None
         kwargs["highlight"] = False
     return Console(**kwargs)
 
@@ -86,8 +89,11 @@ def init_renderer(mode: ColorMode | str = ColorMode.AUTO) -> None:
     """Re-initialise both consoles for *mode*.
 
     Call this once at CLI startup after the ``--color`` flag is resolved.
-    All command modules import ``console`` / ``diag_console`` by reference,
-    so reassigning the module-level names here updates every caller.
+    This rebinds the module-level ``console`` / ``diag_console`` names, so it
+    only reaches callers that look them up on this module at call time
+    (``from promptgenie.renderers import rich as renderer`` then
+    ``renderer.console``). A ``from promptgenie.renderers.rich import console``
+    binds the import-time object and never sees the new console.
     """
     global console, diag_console  # noqa: PLW0603
     import promptgenie.renderers.rich as _self

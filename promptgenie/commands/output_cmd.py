@@ -25,7 +25,8 @@ from promptgenie.core.output_contract import (
     load_schema,
     repair_payload,
 )
-from promptgenie.renderers.rich import diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 _PAYLOAD_FORMATS = ["auto", "json", "yaml", "markdown", "text", "code"]
 
@@ -99,13 +100,13 @@ def output_repair_cmd(
     try:
         schema = load_schema(schema_path)
     except OutputContractError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     try:
         text = safe_read_text(file)
     except (OSError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     fmt = _infer_format(file, input_format)
@@ -128,7 +129,9 @@ def output_repair_cmd(
                 + "\n"
             )
         else:
-            diag_console.print(f"[red]✗[/red] Could not repair {file!r}: {result.errors[0]}")
+            renderer.diag_console.print(
+                f"[red]✗[/red] Could not repair {file!r}: {result.errors[0]}"
+            )
         raise SystemExit(EXIT_USAGE)
 
     # Emit the repaired payload.
@@ -151,22 +154,24 @@ def output_repair_cmd(
         if out:
             Path(out).parent.mkdir(parents=True, exist_ok=True)
             Path(out).write_text(result.repaired_text + "\n", encoding="utf-8")
-            diag_console.print(f"[green]✓[/green] Repaired payload written to [bold]{out}[/bold]")
+            renderer.diag_console.print(
+                f"[green]✓[/green] Repaired payload written to [bold]{out}[/bold]"
+            )
         else:
             sys.stdout.write(result.repaired_text + "\n")
             sys.stdout.flush()
 
         if result.repairs:
-            diag_console.print(f"[cyan]{len(result.repairs)} repair(s) applied:[/cyan]")
+            renderer.diag_console.print(f"[cyan]{len(result.repairs)} repair(s) applied:[/cyan]")
             for r in result.repairs:
-                diag_console.print(f"  [cyan]•[/cyan] {r}")
+                renderer.diag_console.print(f"  [cyan]•[/cyan] {r}")
         if result.valid:
-            diag_console.print("[green]✓[/green] Output now conforms to the schema.")
+            renderer.diag_console.print("[green]✓[/green] Output now conforms to the schema.")
         else:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[yellow]⚠[/yellow] {len(result.errors)} issue(s) remain after repair:"
             )
             for e in result.errors:
-                diag_console.print(f"  [yellow]•[/yellow] {e}")
+                renderer.diag_console.print(f"  [yellow]•[/yellow] {e}")
 
     raise SystemExit(EXIT_OK if result.valid else EXIT_FAILURE)

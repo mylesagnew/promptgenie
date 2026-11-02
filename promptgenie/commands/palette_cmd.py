@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import click
 
 from promptgenie.core.errors import EXIT_OK
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 # ---------------------------------------------------------------------------
 # Palette item catalogue
@@ -257,14 +257,18 @@ def _run_palette_tui(items: list[PaletteItem]) -> str | None:
 
 def _run_palette_readline(items: list[PaletteItem]) -> str | None:
     """Simple terminal picker used when Textual is not installed."""
-    console.print("[bold cyan]PromptGenie Palette[/bold cyan]  — type to filter, Enter to select\n")
+    renderer.console.print(
+        "[bold cyan]PromptGenie Palette[/bold cyan]  — type to filter, Enter to select\n"
+    )
     query = click.prompt("Filter", default="")
     filtered = _filter_items(items, query)
     if not filtered:
-        console.print("[yellow]No matches.[/yellow]")
+        renderer.console.print("[yellow]No matches.[/yellow]")
         return None
     for i, it in enumerate(filtered[:30], 1):
-        console.print(f"  [dim]{i:2}.[/dim] [{it.kind}] {it.label}  [dim]{it.description}[/dim]")
+        renderer.console.print(
+            f"  [dim]{i:2}.[/dim] [{it.kind}] {it.label}  [dim]{it.description}[/dim]"
+        )
     choice = click.prompt("Select number (0 to cancel)", default=0)
     if choice == 0 or choice > len(filtered):
         return None
@@ -307,7 +311,7 @@ def palette_cmd(no_tui: bool, print_only: bool) -> None:
 
             selected = _run_palette_tui(catalogue)
         except ImportError:
-            diag_console.print(
+            renderer.diag_console.print(
                 "[yellow]Textual not installed — using simple fallback.[/yellow]\n"
                 "Install the TUI extra: [bold]pip install 'promptgenie[tui]'[/bold]\n"
             )
@@ -319,7 +323,7 @@ def palette_cmd(no_tui: bool, print_only: bool) -> None:
     if print_only:
         click.echo(selected)
     else:
-        console.print(f"\n[bold]Selected:[/bold] {selected}\n")
+        renderer.console.print(f"\n[bold]Selected:[/bold] {selected}\n")
         click.echo(selected)
 
     raise SystemExit(EXIT_OK)

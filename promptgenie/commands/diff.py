@@ -24,12 +24,11 @@ from promptgenie.core.differ import (
     diff_to_yaml,
 )
 from promptgenie.core.errors import EXIT_USAGE
+from promptgenie.renderers import rich as renderer
 from promptgenie.renderers.rich import (
     RISK_COLORS,
     SEVERITY_COLORS,
-    console,
     delta_str,
-    diag_console,
     is_structured_mode,
     score_color,
 )
@@ -47,7 +46,7 @@ def _resolve_config(
         found = config_path or (str(_find_config()) if _find_config() is not None else None)
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
-        diag_console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+        renderer.diag_console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
         return PromptGenieConfig(), None
 
 
@@ -97,7 +96,7 @@ def diff_cmd(
         raise click.UsageError("Only one of PROMPT_A / PROMPT_B may be '-' (stdin).")
 
     cfg, cfg_file = _resolve_config(config_path, no_config)
-    with console.status("[bold blue]Diffing prompts…"):
+    with renderer.console.status("[bold blue]Diffing prompts…"):
         result = diff_prompts(prompt_a, prompt_b, target=target, config=cfg)
 
     # ── Structured output (json / yaml / markdown) ────────────────────────
@@ -116,10 +115,12 @@ def diff_cmd(
         sys.exit(0)
 
     # ── Rich terminal output ──────────────────────────────────────────────
-    console.print()
+    renderer.console.print()
     if cfg_file:
-        diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
-    console.print(f"[bold]Comparing[/bold]  [cyan]{prompt_a}[/cyan]  →  [cyan]{prompt_b}[/cyan]\n")
+        renderer.diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
+    renderer.console.print(
+        f"[bold]Comparing[/bold]  [cyan]{prompt_a}[/cyan]  →  [cyan]{prompt_b}[/cyan]\n"
+    )
 
     _render_summary_table(result)
     _render_score_table(result)
@@ -172,7 +173,7 @@ def _render_summary_table(result: DiffResult) -> None:
         str(len(result.b_scan.findings)),
         delta_str(len(result.b_scan.findings) - len(result.a_scan.findings), invert=True),
     )
-    console.print(Panel(summary, title="Summary", border_style="blue"))
+    renderer.console.print(Panel(summary, title="Summary", border_style="blue"))
 
 
 def _render_score_table(result: DiffResult) -> None:
@@ -189,7 +190,7 @@ def _render_score_table(result: DiffResult) -> None:
             f"[{score_color(b_val)}]{b_val}[/]",
             delta_str(b_val - a_val),
         )
-    console.print(Panel(score_table, title="Quality Score Breakdown", border_style="dim"))
+    renderer.console.print(Panel(score_table, title="Quality Score Breakdown", border_style="dim"))
 
 
 def _render_section_changes(result: DiffResult) -> None:
@@ -213,7 +214,9 @@ def _render_section_changes(result: DiffResult) -> None:
                 elif line.startswith("-"):
                     section_lines.append(f"  [red]{line}[/red]")
     if section_lines:
-        console.print(Panel("\n".join(section_lines), title="Section Changes", border_style="dim"))
+        renderer.console.print(
+            Panel("\n".join(section_lines), title="Section Changes", border_style="dim")
+        )
 
 
 def _render_lint_changes(result: DiffResult) -> None:
@@ -229,7 +232,9 @@ def _render_lint_changes(result: DiffResult) -> None:
             f"[red][NEW][/red]      [{color}]{issue.severity}[/{color}] [{issue.code}] {issue.message}"
         )
     if lint_lines:
-        console.print(Panel("\n".join(lint_lines), title="Lint Changes", border_style="yellow"))
+        renderer.console.print(
+            Panel("\n".join(lint_lines), title="Lint Changes", border_style="yellow")
+        )
 
 
 def _render_security_changes(result: DiffResult) -> None:
@@ -245,9 +250,11 @@ def _render_security_changes(result: DiffResult) -> None:
             f"[red][NEW][/red]      [{color}]{f.risk}[/{color}] [{f.code}] {f.message}"
         )
     if sec_lines:
-        console.print(Panel("\n".join(sec_lines), title="Security Changes", border_style="red"))
+        renderer.console.print(
+            Panel("\n".join(sec_lines), title="Security Changes", border_style="red")
+        )
     elif not result.a_scan.findings and not result.b_scan.findings:
-        console.print(
+        renderer.console.print(
             Panel(
                 "[green]No security findings in either version.[/green]",
                 title="Security Changes",
@@ -295,7 +302,7 @@ def _render_side_by_side(result: DiffResult) -> None:
             b_cell = f"[{cb}]{row.b_line}[/{cb}]" if cb else row.b_line
             tbl.add_row(a_cell, b_cell)
 
-    console.print(Panel(tbl, title="Side-by-Side", border_style="blue"))
+    renderer.console.print(Panel(tbl, title="Side-by-Side", border_style="blue"))
 
 
 def _render_unified_diff(result: DiffResult) -> None:
@@ -309,7 +316,7 @@ def _render_unified_diff(result: DiffResult) -> None:
             diff_lines.append(f"[cyan]{line}[/cyan]")
         else:
             diff_lines.append(f"[dim]{line}[/dim]")
-    console.print(Panel("\n".join(diff_lines), title="Unified Diff", border_style="dim"))
+    renderer.console.print(Panel("\n".join(diff_lines), title="Unified Diff", border_style="dim"))
 
 
 def _write_output(path: str, content: str, force: bool) -> None:
@@ -317,7 +324,7 @@ def _write_output(path: str, content: str, force: bool) -> None:
 
     try:
         safe_write_text(path, content, force=force)
-        diag_console.print(f"[dim]Output saved to {path}[/dim]")
+        renderer.diag_console.print(f"[dim]Output saved to {path}[/dim]")
     except FileExistsError as e:
-        diag_console.print(f"[red]Error:[/red] {e}")
+        renderer.diag_console.print(f"[red]Error:[/red] {e}")
         sys.exit(EXIT_USAGE)

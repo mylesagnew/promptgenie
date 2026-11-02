@@ -17,7 +17,7 @@ from __future__ import annotations
 import click
 
 from promptgenie.core.errors import EXIT_FAILURE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 
 @click.command("watch")
@@ -73,9 +73,9 @@ def watch_cmd(
     from promptgenie.core.watcher import make_pipeline, run_watch
 
     if find_spec("watchfiles") is not None:
-        console.print("[dim]watchfiles: real-time watching active.[/dim]")
+        renderer.console.print("[dim]watchfiles: real-time watching active.[/dim]")
     else:
-        console.print(
+        renderer.console.print(
             "[yellow]watchfiles not installed — using polling (1s interval).[/yellow]\n"
             "[dim]Install with: pip install 'promptgenie[watch]'[/dim]"
         )
@@ -85,7 +85,7 @@ def watch_cmd(
         try:
             pipeline_objs.append(make_pipeline(name))
         except ValueError as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
             raise SystemExit(EXIT_FAILURE) from None
 
     exit_code = run_watch(

@@ -19,13 +19,8 @@ from promptgenie.core.variables import (
     parse_cli_vars,
     resolve_variables,
 )
-from promptgenie.renderers.rich import (
-    console,
-    diag_console,
-    format_lint_issues,
-    format_scan_findings,
-    score_color,
-)
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import format_lint_issues, format_scan_findings, score_color
 
 
 def _resolve_config(
@@ -43,7 +38,7 @@ def _resolve_config(
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
         if best_effort:
-            console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+            renderer.console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
             return PromptGenieConfig(), None
         # Fail-closed: re-raise so the caller can exit with a clear message
         raise
@@ -147,8 +142,8 @@ def generate(
     try:
         cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
     except (FileNotFoundError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
-        diag_console.print(
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(
             "[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]"
         )
         sys.exit(EXIT_USAGE)
@@ -161,13 +156,13 @@ def generate(
         try:
             parsed_cli_vars = parse_cli_vars(cli_vars)
         except Exception as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
             sys.exit(EXIT_USAGE)
     if vars_file:
         try:
             vars_file_values = load_vars_file(vars_file)
         except Exception as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
             sys.exit(EXIT_USAGE)
     if vars_schema_file:
         from promptgenie.core.variables import load_schema_file
@@ -175,16 +170,16 @@ def generate(
         try:
             vars_schema = load_schema_file(vars_schema_file)
         except Exception as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
             sys.exit(EXIT_USAGE)
 
-    with console.status("[bold blue]Generating prompt…"):
+    with renderer.console.status("[bold blue]Generating prompt…"):
         if pack:
             try:
                 pack_block = render_pack(pack, mode=mode)
                 context = (context + "\n\n" + pack_block) if context else pack_block
             except FileNotFoundError as e:
-                diag_console.print(f"[red]Error:[/red] {e}")
+                renderer.diag_console.print(f"[red]Error:[/red] {e}")
                 sys.exit(EXIT_USAGE)
 
         try:
@@ -199,8 +194,10 @@ def generate(
                 best_effort=best_effort,
             )
         except FileNotFoundError as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
-            diag_console.print("[dim]Use --best-effort to fall back to built-in defaults.[/dim]")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(
+                "[dim]Use --best-effort to fall back to built-in defaults.[/dim]"
+            )
             sys.exit(EXIT_TEMPLATE)
 
     # Resolve {{variable}} placeholders in the generated prompt
@@ -215,18 +212,18 @@ def generate(
                 no_input=no_input,
             )
             if resolved:
-                diag_console.print(
+                renderer.diag_console.print(
                     f"[dim]Variables resolved: {', '.join(f'{k}={v}' for k, v in resolved.items())}[/dim]"
                 )
         except VarResolutionError as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
-            diag_console.print(f"[dim]{exc.hint}[/dim]")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[dim]{exc.hint}[/dim]")
             sys.exit(EXIT_USAGE)
     score = result["score"]
     tokens = result["token_estimate"]
 
-    console.print()
-    console.print(
+    renderer.console.print()
+    renderer.console.print(
         Panel(
             prompt_text,
             title=(
@@ -247,15 +244,15 @@ def generate(
     score_table.add_row("", "")
     score_table.add_row("[bold]Overall[/bold]", f"[{color} bold]{total}/100[/]")
     score_table.add_row("[dim]Token estimate[/dim]", f"[dim]{tokens:,}[/dim]")
-    console.print(Panel(score_table, title="Prompt Quality Score", border_style="dim"))
+    renderer.console.print(Panel(score_table, title="Prompt Quality Score", border_style="dim"))
 
     if cfg_file:
-        diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
+        renderer.diag_console.print(f"[dim]Config: {cfg_file}[/dim]")
 
     if not no_lint:
         lint_result = lint(prompt_text, config=cfg.linter)
         if lint_result.issues:
-            console.print(
+            renderer.console.print(
                 Panel(
                     format_lint_issues(lint_result),
                     title=f"Lint  [dim]score {lint_result.score}/100[/dim]",
@@ -266,7 +263,7 @@ def generate(
     if not no_scan:
         scan_result = scan(prompt_text, config=cfg.scanner)
         if scan_result.findings:
-            console.print(
+            renderer.console.print(
                 Panel(
                     format_scan_findings(scan_result),
                     title=f"Security Scan  [dim]risk level: {scan_result.risk_level}[/dim]",
@@ -277,7 +274,7 @@ def generate(
     if out:
         try:
             safe_write_text(out, prompt_text, force=force)
-            console.print(f"\n[green]Prompt saved to {out}[/green]")
+            renderer.console.print(f"\n[green]Prompt saved to {out}[/green]")
         except FileExistsError as e:
-            diag_console.print(f"[red]Error:[/red] {e}")
+            renderer.diag_console.print(f"[red]Error:[/red] {e}")
             sys.exit(EXIT_USAGE)
