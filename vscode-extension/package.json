@@ -182,7 +182,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint src --ext ts",
+    "lint": "eslint src",
     "pretest": "npm run compile",
     "test": "mocha 'out/test/**/*.test.js'",
     "package": "vsce package",
@@ -195,7 +195,7 @@
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",
     "@vscode/vsce": "^4.0.0",
-    "eslint": "^8.0.0",
+    "eslint": "^10.13.0",
     "mocha": "^12.0.2",
     "typescript": "^5.3.0"
   }
