@@ -16,7 +16,8 @@ from promptgenie.core.benchmarker import (
 )
 from promptgenie.core.fileio import safe_read_text, safe_write_text
 from promptgenie.core.scanner import scan
-from promptgenie.renderers.rich import console, score_color
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import score_color
 
 
 def _presend_check(prompt_file: str, label: str = "") -> bool:
@@ -34,18 +35,20 @@ def _presend_check(prompt_file: str, label: str = "") -> bool:
     secret_findings = [f for f in result.findings if f.code in SEC_SECRET_CODES]
     tag = f" ({label})" if label else ""
 
-    console.print(
+    renderer.console.print(
         f"\n[bold yellow]External transmission notice{tag}:[/bold yellow] "
         f"[bold]{prompt_file}[/bold] will be sent to the benchmark model and judge model."
     )
 
     if secret_findings:
-        console.print(
+        renderer.console.print(
             f"[bold red]Warning:[/bold red] {len(secret_findings)} potential secret(s) detected:"
         )
         for f in secret_findings:
-            console.print(f"  [red]•[/red] Line {f.line}: {f.message}")
-        console.print("[red]Sending this file externally may expose sensitive credentials.[/red]")
+            renderer.console.print(f"  [red]•[/red] Line {f.line}: {f.message}")
+        renderer.console.print(
+            "[red]Sending this file externally may expose sensitive credentials.[/red]"
+        )
         return True  # secrets found
 
     return False  # no secrets found
@@ -105,7 +108,7 @@ def benchmark_cmd(
             any_secrets = True
 
     if any_secrets and not allow_secrets:
-        console.print(
+        renderer.console.print(
             "\n[bold red]Aborted:[/bold red] potential secrets detected. "
             "Review the warnings above.\n"
             "To send anyway, re-run with [bold]--allow-secrets[/bold]."
@@ -118,42 +121,42 @@ def benchmark_cmd(
         except click.Abort:
             confirmed = False
         if not confirmed:
-            console.print("[yellow]Aborted.[/yellow]")
+            renderer.console.print("[yellow]Aborted.[/yellow]")
             sys.exit(0)
     else:
-        console.print("[dim]--yes passed, skipping confirmation.[/dim]")
+        renderer.console.print("[dim]--yes passed, skipping confirmation.[/dim]")
 
-    console.print()
+    renderer.console.print()
     total_calls = runs * (
         2 if not compare else 4
     )  # 2 calls per run (model + judge), doubled if comparing
-    console.print(
+    renderer.console.print(
         f"[dim]Benchmark: {total_calls} API call(s) across {runs} run(s) — model=[bold]{model}[/bold][/dim]"
     )
     try:
         provider = AnthropicProvider(api_key=api_key)
     except (ValueError, ImportError) as e:
-        console.print(f"[red]Error:[/red] {e}")
+        renderer.console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 
     try:
-        with console.status(f"[bold blue]Benchmarking {prompt_file} against {model}…"):
+        with renderer.console.status(f"[bold blue]Benchmarking {prompt_file} against {model}…"):
             results_a = run_benchmark(prompt_file, model=model, runs=runs, provider=provider)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        renderer.console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 
     if any(r.judge_parse_failed for r in results_a):
-        console.print(
+        renderer.console.print(
             "[yellow]Warning:[/yellow] judge model returned an unparseable response on one or more runs. Scores for those runs are omitted."
         )
 
     results_b = None
     if compare:
-        with console.status(f"[bold blue]Benchmarking {compare}…"):
+        with renderer.console.status(f"[bold blue]Benchmarking {compare}…"):
             results_b = run_benchmark(compare, model=model, runs=runs, provider=provider)
 
-    console.print()
+    renderer.console.print()
 
     def _render_run(run, title: str) -> None:
         score_table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
@@ -178,7 +181,7 @@ def benchmark_cmd(
                 f"[dim]{run.cache_read_tokens:,} / {run.cache_write_tokens:,}[/dim]",
             )
         score_table.add_row("[dim]Est. cost[/dim]", f"[dim]${run.estimated_cost_usd:.4f}[/dim]")
-        console.print(Panel(score_table, title=title, border_style="blue"))
+        renderer.console.print(Panel(score_table, title=title, border_style="blue"))
 
         if run.reasoning:
             reasons = [r.strip() for r in run.reasoning.split("|")]
@@ -188,16 +191,20 @@ def benchmark_cmd(
                 if r
             )
             if reason_lines:
-                console.print(Panel(reason_lines, title="Judge Reasoning", border_style="dim"))
+                renderer.console.print(
+                    Panel(reason_lines, title="Judge Reasoning", border_style="dim")
+                )
 
         if show_response:
-            console.print(Panel(run.response_text, title="Model Response", border_style="dim"))
+            renderer.console.print(
+                Panel(run.response_text, title="Model Response", border_style="dim")
+            )
         if out:
             try:
                 safe_write_text(out, run.response_text, force=force)
-                console.print(f"[green]Response saved to {out}[/green]")
+                renderer.console.print(f"[green]Response saved to {out}[/green]")
             except FileExistsError as e:
-                console.print(f"[red]Error:[/red] {e}")
+                renderer.console.print(f"[red]Error:[/red] {e}")
                 sys.exit(1)
 
     if runs == 1:
@@ -223,7 +230,7 @@ def benchmark_cmd(
         avg_table.add_row("[dim]Runs[/dim]", f"[dim]{runs}[/dim]")
         avg_table.add_row("[dim]Avg latency[/dim]", f"[dim]{avg_latency}s[/dim]")
         avg_table.add_row("[dim]Avg cost[/dim]", f"[dim]${avg_cost:.4f}[/dim]")
-        console.print(
+        renderer.console.print(
             Panel(avg_table, title=f"Benchmark  {prompt_file}  ({runs} runs)", border_style="blue")
         )
 
@@ -272,4 +279,4 @@ def benchmark_cmd(
             f"[dim]${b_avg['avg_cost']:.4f}[/dim]",
             "",
         )
-        console.print(Panel(cmp_table, title="Prompt Comparison", border_style="cyan"))
+        renderer.console.print(Panel(cmp_table, title="Prompt Comparison", border_style="cyan"))

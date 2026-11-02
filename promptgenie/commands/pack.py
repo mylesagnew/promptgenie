@@ -13,7 +13,7 @@ from promptgenie.core.context_packs import (
     render_pack,
 )
 from promptgenie.core.fileio import FileTooLargeError, safe_read_text, safe_write_text
-from promptgenie.renderers.rich import console
+from promptgenie.renderers import rich as renderer
 
 
 @click.group(name="pack")
@@ -26,7 +26,7 @@ def pack_list():
     """List all available context packs."""
     packs = list_packs()
     if not packs:
-        console.print(
+        renderer.console.print(
             "[dim]No context packs found. Run [bold]promptgenie pack init <id>[/bold] to create one.[/dim]"
         )
         return
@@ -40,7 +40,7 @@ def pack_list():
         if len(p["stack"]) > 3:
             stack += f" +{len(p['stack']) - 3} more"
         table.add_row(p["id"], p["name"], p["description"], stack)
-    console.print(table)
+    renderer.console.print(table)
 
 
 @pack_group.command(name="show")
@@ -58,9 +58,9 @@ def pack_show(pack_id, mode):
         rendered = render_pack(pack_id, mode=mode)
         pack = load_pack(pack_id)
     except FileNotFoundError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        renderer.console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
-    console.print(
+    renderer.console.print(
         Panel(
             rendered,
             title=f"Context Pack — {pack.get('name', pack_id)}  [dim]mode: {mode}[/dim]",
@@ -89,7 +89,7 @@ def pack_inject(prompt_file, pack_id, mode, out, force):
         prompt_text = safe_read_text(prompt_file)
         result = inject_pack_into_prompt(prompt_text, pack_id, mode=mode)
     except (FileNotFoundError, FileTooLargeError) as e:
-        console.print(f"[red]Error:[/red] {e}")
+        renderer.console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
     dest = out or prompt_file
     # Injecting back into the source file is always an intentional overwrite
@@ -97,10 +97,12 @@ def pack_inject(prompt_file, pack_id, mode, out, force):
     try:
         safe_write_text(dest, result, force=dest_force)
     except FileExistsError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        renderer.console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
-    console.print(Panel(result, title=f"Injected — {pack_id} → {dest}", border_style="cyan"))
-    console.print(f"[green]Saved to {dest}[/green]")
+    renderer.console.print(
+        Panel(result, title=f"Injected — {pack_id} → {dest}", border_style="cyan")
+    )
+    renderer.console.print(f"[green]Saved to {dest}[/green]")
 
 
 @pack_group.command(name="search")
@@ -119,7 +121,7 @@ def pack_search(query: str):
         ]
 
     if not entries:
-        console.print("[dim]No packs found matching your query.[/dim]")
+        renderer.console.print("[dim]No packs found matching your query.[/dim]")
         return
 
     table = Table(title="Registry Packs", box=box.ROUNDED)
@@ -130,7 +132,7 @@ def pack_search(query: str):
     table.add_column("Description", style="dim")
     for e in entries:
         table.add_row(e.id, e.name, e.version, e.type, e.description)
-    console.print(table)
+    renderer.console.print(table)
 
 
 @pack_group.command(name="install")
@@ -173,14 +175,14 @@ def pack_install(pack_id: str, timeout: int, allow_unverified: bool, expected_sh
     if is_local:
         from promptgenie.core.registry import install_from_local
 
-        console.print(f"Installing local pack from [bold]{pack_id}[/bold]…")
+        renderer.console.print(f"Installing local pack from [bold]{pack_id}[/bold]…")
         try:
             path = install_from_local(
                 pack_id, expected_sha256=expected_sha256 if not allow_unverified else None
             )
-            console.print(f"[green]✓[/green] Installed to {path}")
+            renderer.console.print(f"[green]✓[/green] Installed to {path}")
         except (FileNotFoundError, ValueError) as e:
-            console.print(f"[red]Install error:[/red] {e}")
+            renderer.console.print(f"[red]Install error:[/red] {e}")
             sys.exit(1)
         return
 
@@ -189,27 +191,27 @@ def pack_install(pack_id: str, timeout: int, allow_unverified: bool, expected_sh
     entries = load_index()
     matching = [e for e in entries if e.id == pack_id]
     if not matching:
-        console.print(f"[red]Error:[/red] Pack {pack_id!r} not found in registry.")
-        console.print(
+        renderer.console.print(f"[red]Error:[/red] Pack {pack_id!r} not found in registry.")
+        renderer.console.print(
             "[dim]Run [bold]promptgenie pack search[/bold] to list available packs.[/dim]"
         )
         sys.exit(1)
 
     entry = matching[0]
-    console.print(f"Installing [bold]{entry.name}[/bold] [dim]v{entry.version}[/dim]…")
+    renderer.console.print(f"Installing [bold]{entry.name}[/bold] [dim]v{entry.version}[/dim]…")
     if allow_unverified:
-        console.print(
+        renderer.console.print(
             "[yellow]Warning:[/yellow] --allow-unverified set — "
             "SHA-256 checksum requirement bypassed."
         )
     try:
         path = install_pack(entry, timeout=timeout, require_checksum=not allow_unverified)
-        console.print(f"[green]✓[/green] Installed to {path}")
+        renderer.console.print(f"[green]✓[/green] Installed to {path}")
     except ValueError as e:
-        console.print(f"[red]Checksum error:[/red] {e}")
+        renderer.console.print(f"[red]Checksum error:[/red] {e}")
         sys.exit(1)
     except OSError as e:
-        console.print(f"[red]Download failed:[/red] {e}")
+        renderer.console.print(f"[red]Download failed:[/red] {e}")
         sys.exit(1)
 
 
@@ -235,28 +237,28 @@ def pack_update(url: str | None, timeout: int, allow_unverified: bool):
 
     registry_url = url or DEFAULT_REGISTRY_URL
     if allow_unverified:
-        console.print(
+        renderer.console.print(
             "[yellow]Warning:[/yellow] --allow-unverified set — "
             "SHA-256 checksum requirement bypassed."
         )
-    console.print(f"[dim]Fetching registry from {registry_url}…[/dim]")
+    renderer.console.print(f"[dim]Fetching registry from {registry_url}…[/dim]")
     result = update_registry(
         url=registry_url, timeout=timeout, require_checksum=not allow_unverified
     )
 
     if result.installed:
-        console.print(f"[green]Installed:[/green] {', '.join(result.installed)}")
+        renderer.console.print(f"[green]Installed:[/green] {', '.join(result.installed)}")
     if result.updated:
-        console.print(f"[blue]Updated:[/blue]   {', '.join(result.updated)}")
+        renderer.console.print(f"[blue]Updated:[/blue]   {', '.join(result.updated)}")
     if result.skipped:
-        console.print(f"[dim]Up-to-date: {', '.join(result.skipped)}[/dim]")
+        renderer.console.print(f"[dim]Up-to-date: {', '.join(result.skipped)}[/dim]")
     if result.errors:
         for err in result.errors:
-            console.print(f"[red]Error:[/red] {err}")
+            renderer.console.print(f"[red]Error:[/red] {err}")
         sys.exit(1)
 
     if not result.installed and not result.updated and not result.errors:
-        console.print("[dim]All packs are up to date.[/dim]")
+        renderer.console.print("[dim]All packs are up to date.[/dim]")
 
 
 @pack_group.command(name="dirs")
@@ -283,7 +285,7 @@ def pack_dirs():
     for label, path in dirs:
         exists = "✓" if path.exists() else "—"
         table.add_row(label, str(path), exists)
-    console.print(table)
+    renderer.console.print(table)
 
 
 @pack_group.command(name="init")
@@ -300,11 +302,13 @@ def pack_init(pack_id, name, description, out_dir):
     """Create a new blank context pack file."""
     try:
         path = init_pack(pack_id, name=name, description=description, out_dir=out_dir)
-        console.print(f"[green]Created context pack:[/green] {path}")
-        console.print("[dim]Edit the file to fill in your project details, then use:[/dim]")
-        console.print(f'  promptgenie generate "your task" --pack {pack_id}')
+        renderer.console.print(f"[green]Created context pack:[/green] {path}")
+        renderer.console.print(
+            "[dim]Edit the file to fill in your project details, then use:[/dim]"
+        )
+        renderer.console.print(f'  promptgenie generate "your task" --pack {pack_id}')
     except FileExistsError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        renderer.console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 
 
@@ -338,7 +342,7 @@ def pack_diff(pack_a: str, pack_b: str, output_format: str):
     try:
         diff = diff_packs(pack_a, pack_b)
     except Exception as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        renderer.console.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)
 
     if output_format == "json":
@@ -358,18 +362,20 @@ def pack_diff(pack_a: str, pack_b: str, output_format: str):
         )
         return
 
-    console.print(f"Pack diff: [dim]{pack_a}[/dim] → [dim]{pack_b}[/dim]")
-    console.print(f"Version: [dim]{diff.old_version}[/dim] → [bold]{diff.new_version}[/bold]")
+    renderer.console.print(f"Pack diff: [dim]{pack_a}[/dim] → [dim]{pack_b}[/dim]")
+    renderer.console.print(
+        f"Version: [dim]{diff.old_version}[/dim] → [bold]{diff.new_version}[/bold]"
+    )
     if not diff.has_changes:
-        console.print("[green]No rule changes.[/green]")
+        renderer.console.print("[green]No rule changes.[/green]")
         return
     for r in diff.added_rules:
-        console.print(f"  [green]+[/green] {r}")
+        renderer.console.print(f"  [green]+[/green] {r}")
     for r in diff.removed_rules:
-        console.print(f"  [red]-[/red] {r}")
+        renderer.console.print(f"  [red]-[/red] {r}")
     for r in diff.modified_rules:
-        console.print(f"  [yellow]~[/yellow] {r}")
-    console.print(f"\n[dim]{diff.summary()}[/dim]")
+        renderer.console.print(f"  [yellow]~[/yellow] {r}")
+    renderer.console.print(f"\n[dim]{diff.summary()}[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -401,12 +407,12 @@ def pack_promote(pack_name: str, from_env: str, to_env: str, base_dir):
     bdir = Path(base_dir) if base_dir else None
     try:
         dest = promote_pack(pack_name, from_env, to_env, base_dir=bdir)
-        console.print(
+        renderer.console.print(
             f"[green]✓[/green] Promoted [bold]{pack_name}[/bold] "
             f"[dim]{from_env}[/dim] → [bold]{to_env}[/bold]: {dest}"
         )
     except FileNotFoundError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        renderer.console.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)
 
 
@@ -438,7 +444,7 @@ def pack_test(pack_file: str, test_file: str, output_format: str):
     try:
         result = run_pack_unit_test(pack_file, test_file)
     except Exception as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        renderer.console.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)
 
     if output_format == "json":
@@ -460,14 +466,16 @@ def pack_test(pack_file: str, test_file: str, output_format: str):
 
     status = "PASSED" if result.passed else "FAILED"
     color = "green" if result.passed else "red"
-    console.print(
+    renderer.console.print(
         f"[bold {color}]{status}[/bold {color}]  {result.pass_count}/{result.total} cases"
     )
     for c in result.cases:
         icon = "[green]✓[/green]" if c["passed"] else "[red]✗[/red]"
-        console.print(f"  {icon} {c['name']}")
+        renderer.console.print(f"  {icon} {c['name']}")
         if not c["passed"]:
-            console.print(f"    Expected: {c['expected_rules']}  Found: {c['found_rules']}")
+            renderer.console.print(
+                f"    Expected: {c['expected_rules']}  Found: {c['found_rules']}"
+            )
     sys.exit(0 if result.passed else 1)
 
 
@@ -500,10 +508,10 @@ def pack_verify(pack_file: str, pubkey: str, method: str):
     try:
         ok = verify_pack_signature(pack_file, pubkey, method=method)
         if ok:
-            console.print(f"[green]✓[/green] Signature valid ({method}): {pack_file}")
+            renderer.console.print(f"[green]✓[/green] Signature valid ({method}): {pack_file}")
         else:
-            console.print(f"[red]✗[/red] Signature INVALID ({method}): {pack_file}")
+            renderer.console.print(f"[red]✗[/red] Signature INVALID ({method}): {pack_file}")
             sys.exit(1)
     except (FileNotFoundError, RuntimeError) as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        renderer.console.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)

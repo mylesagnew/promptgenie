@@ -31,9 +31,14 @@ Fixes from a source-only review with the Cloudflare `security-audit` skill (quic
 
 ### Changed
 
-- **`run` and `make` read the Rich consoles at call time.** They imported `console`/`diag_console` by value, so the consoles `init_renderer()` rebuilds for `--color` never reached them (CodeQL *importing value of mutable attribute*). Other command modules still use the old import; that is tracked separately.
+- **`run` and `make` read the Rich consoles at call time.** They imported `console`/`diag_console` by value, so the consoles `init_renderer()` rebuilds for `--color` never reached them (CodeQL *importing value of mutable attribute*).
 - **Scanner key-shape rules.** `SEC_SECRET_OPENAI` now also matches hyphenated `sk-` keys (`sk-proj-…`, `sk-ant-api03-…`). `SEC_SECRET_GITHUB` also matches fine-grained `github_pat_…` tokens.
 - **Custom-rule ReDoS guard.** `validate_pattern` also parses the regex and rejects nested unbounded repeats the textual heuristic missed (e.g. `((a)+)+`, `(?:(\w+)\s?)*`), and caps patterns at 500 characters. Ambiguous alternation such as `(a|a)+` is still not detected.
+
+### Fixed
+
+- **`--color never` / `--color always` now apply to every command.** Command modules imported `console` / `diag_console` from `promptgenie.renderers.rich` by value, so they kept the import-time consoles and ignored the consoles `init_renderer()` builds once `--color` is resolved (for example, `FORCE_COLOR=1 promptgenie --color never lint …` still printed ANSI escapes). All command modules now look the consoles up as `renderer.console` / `renderer.diag_console` at call time. Clears the CodeQL "Importing value of mutable attribute" alerts in `promptgenie/commands/`. `run` and `make` were fixed separately in #146.
+- **`--color never` (and `NO_COLOR`) now suppress all ANSI styling.** Rich's `no_color` only drops colours, so bold/dim/underline escapes were still emitted; the no-colour console now also sets `color_system=None`.
 
 ## [1.8.2] - 2026-10-14
 

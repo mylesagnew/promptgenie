@@ -40,7 +40,8 @@ from promptgenie.core.input_handler import (
 )
 from promptgenie.core.llm_analyzer import LLMAnalysisConfig, LLMAnalysisResult, analyze_with_llm
 from promptgenie.core.scanner import ScanResult, scan
-from promptgenie.renderers.rich import console, format_scan_findings
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import format_scan_findings
 
 # ---------------------------------------------------------------------------
 # Severity ordering (for --fail-on-severity gate)
@@ -81,7 +82,7 @@ def _resolve_config(
         return cfg, found
     except (FileNotFoundError, ValueError) as exc:
         if best_effort:
-            console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
+            renderer.console.print(f"[yellow]Warning:[/yellow] could not load config: {exc}")
             return PromptGenieConfig(), None
         raise
 
@@ -205,8 +206,8 @@ def scan_cmd(
     try:
         cfg, cfg_file = _resolve_config(config_path, no_config, best_effort=best_effort)
     except (FileNotFoundError, ValueError) as exc:
-        console.print(f"[red]Error:[/red] {exc}")
-        console.print(
+        renderer.console.print(f"[red]Error:[/red] {exc}")
+        renderer.console.print(
             "[dim]Use --best-effort to fall back to defaults, or --no-config to skip.[/dim]"
         )
         sys.exit(1)
@@ -271,14 +272,14 @@ def _run_single_file(
     try:
         text = safe_read_text(prompt_file)
     except FileTooLargeError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        renderer.console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 
     result = scan(text, config=cfg.scanner)
     llm_result: LLMAnalysisResult | None = None
 
     if llm_config.enabled and not llm_config.privacy_mode:
-        with console.status("[bold blue]Running LLM semantic analysis…"):
+        with renderer.console.status("[bold blue]Running LLM semantic analysis…"):
             llm_result = analyze_with_llm(text, file_path=display_name, config=llm_config)
 
     if output_format == "json":
@@ -319,7 +320,7 @@ def _run_multi(
     show_skipped: bool,
 ) -> None:
     # ── Collect files ─────────────────────────────────────────────────────────
-    with console.status("[bold blue]Collecting files…"):
+    with renderer.console.status("[bold blue]Collecting files…"):
         collected: CollectResult = collect_files(
             path_list,
             max_files=max_files,
@@ -328,7 +329,7 @@ def _run_multi(
         )
 
     if collected.file_count == 0:
-        console.print("[yellow]No scannable files found.[/yellow]")
+        renderer.console.print("[yellow]No scannable files found.[/yellow]")
         if show_skipped and collected.skipped:
             _render_skipped_table(collected)
         sys.exit(0)
@@ -336,7 +337,7 @@ def _run_multi(
     # ── Scan each file ────────────────────────────────────────────────────────
     scan_results: list[tuple[str, ScanResult, LLMAnalysisResult | None]] = []
 
-    with console.status(f"[bold blue]Scanning {collected.file_count} files…"):
+    with renderer.console.status(f"[bold blue]Scanning {collected.file_count} files…"):
         for cf in collected.files:
             sr = scan(cf.content, config=cfg.scanner)
             lr: LLMAnalysisResult | None = None
@@ -358,7 +359,7 @@ def _run_multi(
         _output_or_write(output, out, force)
     else:
         if cfg_file:
-            console.print(f"[dim]Config: {cfg_file}[/dim]")
+            renderer.console.print(f"[dim]Config: {cfg_file}[/dim]")
         _render_multi_rich(scan_results, collected)
         if show_skipped and collected.skipped:
             _render_skipped_table(collected)
@@ -384,10 +385,10 @@ def _render_single_rich(
     cfg_file: str | None,
 ) -> None:
     if cfg_file:
-        console.print(f"[dim]Config: {cfg_file}[/dim]")
+        renderer.console.print(f"[dim]Config: {cfg_file}[/dim]")
 
     if not result.findings:
-        console.print(
+        renderer.console.print(
             Panel(
                 "[green]No heuristic security findings detected.[/green]",
                 title="Prompt Security Scan (heuristic)",
@@ -395,7 +396,7 @@ def _render_single_rich(
             )
         )
     else:
-        console.print(
+        renderer.console.print(
             Panel(
                 format_scan_findings(result),
                 title=(
@@ -410,7 +411,7 @@ def _render_single_rich(
     if llm_result is not None:
         _render_llm_result(llm_result)
 
-    console.print(
+    renderer.console.print(
         "[dim]Scanner note: static regex heuristics with Unicode-normalised (NFKC) matching. "
         "Findings indicate risk patterns, not confirmed vulnerabilities. "
         "HIGH/CRITICAL labels reflect pattern severity, not detection certainty — "
@@ -433,11 +434,11 @@ def _render_multi_rich(
         f"[green]{clean} clean[/green]  "
         f"[dim]{collected.total_bytes:,} bytes[/dim]"
     )
-    console.print(Panel(summary, title="Multi-File Scan Summary", border_style="blue"))
+    renderer.console.print(Panel(summary, title="Multi-File Scan Summary", border_style="blue"))
 
     for file_path, sr, lr in scan_results:
         if sr.findings:
-            console.print(
+            renderer.console.print(
                 Panel(
                     format_scan_findings(sr),
                     title=f"[red]{file_path}[/red]  Risk: [bold]{sr.risk_level}[/bold]",
@@ -446,13 +447,13 @@ def _render_multi_rich(
                 )
             )
         else:
-            console.print(f"  [green]✓[/green]  [dim]{file_path}[/dim]")
+            renderer.console.print(f"  [green]✓[/green]  [dim]{file_path}[/dim]")
 
         if lr is not None and not lr.skipped:
             _render_llm_result(lr)
 
     if collected.skipped_count:
-        console.print(
+        renderer.console.print(
             f"\n[dim]{collected.skipped_count} files skipped "
             f"(use --show-skipped to list them)[/dim]"
         )
@@ -461,25 +462,29 @@ def _render_multi_rich(
 def _render_llm_result(lr: LLMAnalysisResult) -> None:
     if lr.skipped:
         if lr.skip_reason not in ("llm_disabled", "privacy_mode"):
-            console.print(f"  [yellow]LLM skipped:[/yellow] {lr.skip_reason}")
+            renderer.console.print(f"  [yellow]LLM skipped:[/yellow] {lr.skip_reason}")
         return
 
     if not lr.findings:
-        console.print(f"  [green]LLM:[/green] no semantic concerns  [dim](model: {lr.model})[/dim]")
+        renderer.console.print(
+            f"  [green]LLM:[/green] no semantic concerns  [dim](model: {lr.model})[/dim]"
+        )
         return
 
     for f in lr.findings:
         colour = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "cyan", "INFO": "blue"}.get(
             f.severity, "white"
         )
-        console.print(
+        renderer.console.print(
             f"  [bold {colour}][LLM {f.severity}][/bold {colour}] [{f.category}] {f.message}"
         )
         if f.recommendation:
-            console.print(f"    [dim]→ {f.recommendation}[/dim]")
+            renderer.console.print(f"    [dim]→ {f.recommendation}[/dim]")
 
     if lr.redaction_count:
-        console.print(f"  [dim]Pre-send redaction: {lr.redaction_count} secret(s) replaced[/dim]")
+        renderer.console.print(
+            f"  [dim]Pre-send redaction: {lr.redaction_count} secret(s) replaced[/dim]"
+        )
 
 
 def _render_skipped_table(collected: CollectResult) -> None:
@@ -490,7 +495,7 @@ def _render_skipped_table(collected: CollectResult) -> None:
         table.add_row(sf.path, sf.reason)
     if len(collected.skipped) > 50:
         table.add_row(f"… {len(collected.skipped) - 50} more …", "")
-    console.print(table)
+    renderer.console.print(table)
 
 
 # ---------------------------------------------------------------------------
@@ -508,9 +513,9 @@ def _output_or_write(text: str, out: str | None, force: bool) -> None:
 def _write_output(out: str, text: str, force: bool) -> None:
     try:
         safe_write_text(out, text, force=force)
-        console.print(f"[dim]Results saved to {out}[/dim]")
+        renderer.console.print(f"[dim]Results saved to {out}[/dim]")
     except FileExistsError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        renderer.console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
 
 

@@ -6,7 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from promptgenie.core.ci import ci_status, init_ci
-from promptgenie.renderers.rich import console
+from promptgenie.renderers import rich as renderer
 
 _CI_LABELS = {
     "github_actions": "GitHub Actions workflow",
@@ -33,16 +33,18 @@ def ci_init(target_dir):
     """Scaffold GitHub Actions workflow and pre-commit hooks for prompt checks."""
     result = init_ci(target_dir)
 
-    console.print()
+    renderer.console.print()
     for key, path in result.get("created", {}).items():
-        console.print(f"  [green]Created[/green]  {_CI_LABELS.get(key, key)}: [dim]{path}[/dim]")
+        renderer.console.print(
+            f"  [green]Created[/green]  {_CI_LABELS.get(key, key)}: [dim]{path}[/dim]"
+        )
     for key, path in result.get("skipped", {}).items():
-        console.print(
+        renderer.console.print(
             f"  [yellow]Skipped[/yellow] {_CI_LABELS.get(key, key)}: already exists at [dim]{path}[/dim]"
         )
 
-    console.print()
-    console.print(
+    renderer.console.print()
+    renderer.console.print(
         Panel(
             "\n".join(
                 [
@@ -82,11 +84,13 @@ def ci_status_cmd(target_dir):
     for key, active in status.items():
         icon = "[green]✓ Active[/green]" if active else "[dim]✗ Not found[/dim]"
         table.add_row(_CI_LABELS.get(key, key), icon)
-    console.print(table)
+    renderer.console.print(table)
 
     if not status.get("is_git_repo"):
-        console.print("\n[yellow]Warning:[/yellow] No .git directory found — not a git repository.")
+        renderer.console.print(
+            "\n[yellow]Warning:[/yellow] No .git directory found — not a git repository."
+        )
     if not all(status.values()):
-        console.print(
+        renderer.console.print(
             "\n[dim]Run [bold]promptgenie ci init[/bold] to set up missing integrations.[/dim]"
         )

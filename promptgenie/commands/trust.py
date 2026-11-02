@@ -24,7 +24,7 @@ from promptgenie.core.trust import (
     list_trusted,
     revoke_trust,
 )
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 
 @click.group("trust", help="Manage trusted PromptSpecs (gates context-source execution).")
@@ -42,7 +42,9 @@ def trust_list_cmd() -> None:
     """
     records = list_trusted()
     if not records:
-        console.print("[dim]No trusted specs. Run 'promptgenie trust add <spec>' to add one.[/dim]")
+        renderer.console.print(
+            "[dim]No trusted specs. Run 'promptgenie trust add <spec>' to add one.[/dim]"
+        )
         return
 
     from rich.table import Table
@@ -57,7 +59,7 @@ def trust_list_cmd() -> None:
         when = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat() if ts else "—"
         chash = str(rec.get("content_hash", ""))[:12]
         table.add_row(str(rec.get("path", "")), chash, when)
-    console.print(table)
+    renderer.console.print(table)
 
 
 @trust_group.command("add")
@@ -71,7 +73,7 @@ def trust_add_cmd(spec_file: str) -> None:
     """
     path = Path(spec_file)
     add_trust(path)
-    console.print(f"[green]✓[/green] Trusted spec: {path.resolve()}")
+    renderer.console.print(f"[green]✓[/green] Trusted spec: {path.resolve()}")
 
 
 @trust_group.command("revoke")
@@ -87,7 +89,7 @@ def trust_revoke_cmd(spec_file: str) -> None:
     was_trusted = is_trusted(path)
     revoke_trust(path)
     if was_trusted:
-        console.print(f"[green]✓[/green] Revoked trust for: {path.resolve()}")
+        renderer.console.print(f"[green]✓[/green] Revoked trust for: {path.resolve()}")
     else:
-        diag_console.print(f"[yellow]Spec was not trusted:[/yellow] {path.resolve()}")
+        renderer.diag_console.print(f"[yellow]Spec was not trusted:[/yellow] {path.resolve()}")
         raise SystemExit(EXIT_USAGE)

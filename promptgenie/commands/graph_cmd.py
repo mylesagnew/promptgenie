@@ -22,7 +22,7 @@ import click
 
 from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
 from promptgenie.core.graph import GraphError, build_graph
-from promptgenie.renderers.rich import diag_console
+from promptgenie.renderers import rich as renderer
 
 
 @click.command("graph")
@@ -65,12 +65,14 @@ def graph_cmd(files: tuple[str, ...], output_format: str, root: str, out: str | 
     try:
         graph = build_graph(list(files), root=root)
     except GraphError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     if not graph.nodes:
         where = ", ".join(files) if files else root
-        diag_console.print(f"[yellow]No PromptSpecs or workflows found in[/yellow] {where}.")
+        renderer.diag_console.print(
+            f"[yellow]No PromptSpecs or workflows found in[/yellow] {where}."
+        )
 
     if output_format == "json":
         text = json.dumps(graph.to_json(), indent=2) + "\n"
@@ -82,7 +84,7 @@ def graph_cmd(files: tuple[str, ...], output_format: str, root: str, out: str | 
     if out:
         Path(out).parent.mkdir(parents=True, exist_ok=True)
         Path(out).write_text(text, encoding="utf-8")
-        diag_console.print(
+        renderer.diag_console.print(
             f"[green]✓[/green] Graph ({len(graph.nodes)} nodes, "
             f"{len(graph.edges)} edges) written to [bold]{out}[/bold]"
         )

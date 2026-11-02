@@ -29,7 +29,7 @@ from typing import TypedDict
 import click
 
 from promptgenie.core.errors import EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 # ---------------------------------------------------------------------------
 # Shell profiles
@@ -203,7 +203,7 @@ def install_cmd(shell: str, install_dir: str | None, skip_rc: bool) -> None:
     # Ensure completion cache is up-to-date
     cache = _build_completion_cache()
     _write_cache(cache)
-    diag_console.print(f"[dim]Completion cache written to {_CACHE_FILE}[/dim]")
+    renderer.diag_console.print(f"[dim]Completion cache written to {_CACHE_FILE}[/dim]")
 
     # Determine target directory and file
     comp_dir = (
@@ -215,31 +215,33 @@ def install_cmd(shell: str, install_dir: str | None, skip_rc: bool) -> None:
 
     if script:
         comp_file.write_text(script, encoding="utf-8")
-        console.print(f"[green]✓[/green]  Completion file written to [cyan]{comp_file}[/cyan]")
+        renderer.console.print(
+            f"[green]✓[/green]  Completion file written to [cyan]{comp_file}[/cyan]"
+        )
     else:
-        console.print(
+        renderer.console.print(
             "[yellow]Warning:[/yellow] Could not generate completion script automatically."
         )
-        console.print(f"[dim]Add the following to your {meta['rc_files'][0]}:[/dim]")
-        console.print(f"  [cyan]{meta['source_snippet']}[/cyan]")
+        renderer.console.print(f"[dim]Add the following to your {meta['rc_files'][0]}:[/dim]")
+        renderer.console.print(f"  [cyan]{meta['source_snippet']}[/cyan]")
 
     # RC file modification
     if not skip_rc and shell != "fish":
         rc_path = Path(meta["rc_files"][0]).expanduser()
         _add_to_rc(rc_path, shell, meta, comp_dir)
     elif shell == "fish":
-        console.print(
+        renderer.console.print(
             f"[dim]Fish completions are auto-loaded from {comp_dir} on next shell start.[/dim]"
         )
 
-    console.print(
+    renderer.console.print(
         f"\n[bold green]Shell completion installed for {shell}.[/bold green]  "
         "Restart your shell or run:"
     )
     if shell == "fish":
-        console.print("  [cyan]exec fish[/cyan]")
+        renderer.console.print("  [cyan]exec fish[/cyan]")
     else:
-        console.print(f"  [cyan]source {meta['rc_files'][0]}[/cyan]")
+        renderer.console.print(f"  [cyan]source {meta['rc_files'][0]}[/cyan]")
 
     sys.exit(EXIT_OK)
 
@@ -253,12 +255,12 @@ def show_cmd(shell: str) -> None:
         click.echo(script)
     else:
         meta = _SHELL_META[shell]
-        diag_console.print(
+        renderer.diag_console.print(
             "[yellow]Warning:[/yellow] Could not generate completion script. "
             "Ensure 'promptgenie' is on your PATH."
         )
-        diag_console.print("[dim]Fallback: add to your shell RC:[/dim]")
-        diag_console.print(f"  {meta['source_snippet']}")
+        renderer.diag_console.print("[dim]Fallback: add to your shell RC:[/dim]")
+        renderer.diag_console.print(f"  {meta['source_snippet']}")
         sys.exit(EXIT_USAGE)
 
 
@@ -286,7 +288,9 @@ def status_cmd() -> None:
 
     from rich.panel import Panel
 
-    console.print(Panel("\n".join(tbl_lines), title="Completion Status", border_style="dim"))
+    renderer.console.print(
+        Panel("\n".join(tbl_lines), title="Completion Status", border_style="dim")
+    )
 
     sys.exit(EXIT_OK)
 
@@ -296,9 +300,9 @@ def refresh_cache_cmd() -> None:
     """Rebuild the dynamic completion cache (targets, templates, packs)."""
     cache = _build_completion_cache()
     _write_cache(cache)
-    console.print(f"[green]✓[/green]  Cache refreshed at [cyan]{_CACHE_FILE}[/cyan]")
+    renderer.console.print(f"[green]✓[/green]  Cache refreshed at [cyan]{_CACHE_FILE}[/cyan]")
     for key, values in cache.items():
-        console.print(f"  [dim]{key}:[/dim] {len(values)} items")
+        renderer.console.print(f"  [dim]{key}:[/dim] {len(values)} items")
     sys.exit(EXIT_OK)
 
 
@@ -337,11 +341,13 @@ def _add_to_rc(rc_path: Path, shell: str, meta: _ShellMeta, comp_dir: Path) -> N
         try:
             with rc_path.open("a", encoding="utf-8") as f:
                 f.write(block)
-            console.print(
+            renderer.console.print(
                 f"[green]✓[/green]  Added completion activation to [cyan]{rc_path}[/cyan]"
             )
         except OSError as e:
-            console.print(f"[yellow]Warning:[/yellow] Could not write to {rc_path}: {e}")
-            console.print(f"[dim]Add manually:[/dim]  {snippet}")
+            renderer.console.print(f"[yellow]Warning:[/yellow] Could not write to {rc_path}: {e}")
+            renderer.console.print(f"[dim]Add manually:[/dim]  {snippet}")
     else:
-        console.print(f"[dim]  {rc_path} already contains completion setup — skipped.[/dim]")
+        renderer.console.print(
+            f"[dim]  {rc_path} already contains completion setup — skipped.[/dim]"
+        )

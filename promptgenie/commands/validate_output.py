@@ -26,7 +26,8 @@ from promptgenie.core.output_contract import (
     parse_payload,
     validate_payload,
 )
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 _PAYLOAD_FORMATS = ["auto", "json", "yaml", "markdown", "text", "code"]
 
@@ -81,13 +82,13 @@ def validate_output_cmd(file: str, schema_path: str, input_format: str, output_f
     try:
         schema = load_schema(schema_path)
     except OutputContractError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     try:
         text = safe_read_text(file)
     except (OSError, ValueError) as exc:
-        diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] Cannot read {file!r}: {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     fmt = _infer_format(file, input_format)
@@ -108,7 +109,9 @@ def validate_output_cmd(file: str, schema_path: str, input_format: str, output_f
                 + "\n"
             )
         else:
-            diag_console.print(f"[red]Error:[/red] Could not parse {file!r} as {fmt}: {parse_err}")
+            renderer.diag_console.print(
+                f"[red]Error:[/red] Could not parse {file!r} as {fmt}: {parse_err}"
+            )
         raise SystemExit(EXIT_USAGE)
 
     errors = validate_payload(obj, schema)
@@ -128,10 +131,12 @@ def validate_output_cmd(file: str, schema_path: str, input_format: str, output_f
             + "\n"
         )
     elif errors:
-        console.print(f"[red]✗[/red] {file} is [bold]invalid[/bold] — {len(errors)} error(s):")
+        renderer.console.print(
+            f"[red]✗[/red] {file} is [bold]invalid[/bold] — {len(errors)} error(s):"
+        )
         for e in errors:
-            console.print(f"  [red]•[/red] {e}")
+            renderer.console.print(f"  [red]•[/red] {e}")
     else:
-        console.print(f"[green]✓[/green] {file} conforms to the schema.")
+        renderer.console.print(f"[green]✓[/green] {file} conforms to the schema.")
 
     raise SystemExit(EXIT_FAILURE if errors else EXIT_OK)

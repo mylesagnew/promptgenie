@@ -18,7 +18,7 @@ from pathlib import Path
 import click
 
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
 
 
 @click.command("lock")
@@ -70,12 +70,12 @@ def lock_cmd(
         # --check mode: verify the lockfile
         lock_path = Path(spec_file)  # spec_file is the lockfile path in --check mode
         if not lock_path.exists():
-            diag_console.print(f"[red]Error:[/red] Lockfile not found: {lock_path}")
+            renderer.diag_console.print(f"[red]Error:[/red] Lockfile not found: {lock_path}")
             raise SystemExit(EXIT_USAGE)
 
         record = load_lockfile(lock_path)
         if record is None:
-            diag_console.print(f"[red]Error:[/red] Could not parse lockfile: {lock_path}")
+            renderer.diag_console.print(f"[red]Error:[/red] Could not parse lockfile: {lock_path}")
             raise SystemExit(EXIT_USAGE)
 
         result = check_lockfile(record)
@@ -95,14 +95,16 @@ def lock_cmd(
             )
         else:
             if result.passed:
-                console.print(f"[green]✓[/green] Lockfile is up to date: [bold]{lock_path}[/bold]")
+                renderer.console.print(
+                    f"[green]✓[/green] Lockfile is up to date: [bold]{lock_path}[/bold]"
+                )
             else:
-                console.print(f"[red]✗[/red] Lockfile is stale: [bold]{lock_path}[/bold]")
+                renderer.console.print(f"[red]✗[/red] Lockfile is stale: [bold]{lock_path}[/bold]")
                 for msg in result.stale:
-                    console.print(f"  [red]•[/red] {msg}")
+                    renderer.console.print(f"  [red]•[/red] {msg}")
                 for msg in result.missing:
                     sev = "[red]•[/red]" if strict else "[yellow]•[/yellow]"
-                    console.print(f"  {sev} {msg}")
+                    renderer.console.print(f"  {sev} {msg}")
 
         if not result.passed or (strict and result.missing):
             raise SystemExit(EXIT_FAILURE)
@@ -118,11 +120,11 @@ def lock_cmd(
 
         sys.stdout.write(json.dumps(record.to_dict(), indent=2) + "\n")
     else:
-        console.print(f"[green]✓[/green] Lockfile created: [bold]{lock_path}[/bold]")
-        console.print(f"  Spec hash:    [dim]{record.spec_hash}[/dim]")
-        console.print(f"  Locked entries: {len(record.entries)}")
+        renderer.console.print(f"[green]✓[/green] Lockfile created: [bold]{lock_path}[/bold]")
+        renderer.console.print(f"  Spec hash:    [dim]{record.spec_hash}[/dim]")
+        renderer.console.print(f"  Locked entries: {len(record.entries)}")
         for e in record.entries:
             if e.kind == "provider":
-                console.print(f"  [dim]• provider: {e.id}/{e.model}[/dim]")
+                renderer.console.print(f"  [dim]• provider: {e.id}/{e.model}[/dim]")
             else:
-                console.print(f"  [dim]• {e.kind}: {e.path}[/dim]")
+                renderer.console.print(f"  [dim]• {e.kind}: {e.path}[/dim]")

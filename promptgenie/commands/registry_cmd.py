@@ -34,7 +34,8 @@ from promptgenie.core.registry_store import (
     Reference,
     RegistryError,
 )
-from promptgenie.renderers.rich import diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 _SPEC_SUFFIXES = {".yaml", ".yml", ".json"}
 
@@ -128,7 +129,7 @@ def registry_push(
     annotations: dict[str, str] = {}
     for item in annotate:
         if "=" not in item:
-            diag_console.print(f"[red]Error:[/red] --annotate must be K=V, got {item!r}")
+            renderer.diag_console.print(f"[red]Error:[/red] --annotate must be K=V, got {item!r}")
             raise SystemExit(EXIT_USAGE)
         k, _, v = item.partition("=")
         annotations[k.strip()] = v.strip()
@@ -144,14 +145,14 @@ def registry_push(
         digest = push_bundle(store, bundle, repository, tag)
         if sign:
             if not secret_key:
-                diag_console.print("[red]Error:[/red] --sign requires --key.")
+                renderer.diag_console.print("[red]Error:[/red] --sign requires --key.")
                 raise SystemExit(EXIT_USAGE)
             sign_manifest(store, digest, secret_key, method=method)
     except (RegistryError, PromptGenieError) as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
     except RuntimeError as exc:  # signing tool missing/failed
-        diag_console.print(f"[red]Signing failed:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Signing failed:[/red] {exc}")
         raise SystemExit(EXIT_FAILURE) from exc
 
     manifest = bundle.manifest()
@@ -184,11 +185,11 @@ def registry_push(
             }
         )
     else:
-        diag_console.print(
+        renderer.diag_console.print(
             f"[green]✓[/green] pushed [bold]{repository}:{tag}[/bold]  "
             f"{len(manifest.layers)} layer(s), {total} bytes{'  [cyan](signed)[/cyan]' if sign else ''}"
         )
-        diag_console.print(f"  digest: [dim]{digest}[/dim]")
+        renderer.diag_console.print(f"  digest: [dim]{digest}[/dim]")
     raise SystemExit(EXIT_OK)
 
 
@@ -250,10 +251,12 @@ def registry_pull(
 
         if require_signed or pubkey:
             if not pubkey:
-                diag_console.print("[red]Error:[/red] --require-signed needs --pubkey.")
+                renderer.diag_console.print("[red]Error:[/red] --require-signed needs --pubkey.")
                 raise SystemExit(EXIT_USAGE)
             if not verify_manifest(store, digest, pubkey, method=method):
-                diag_console.print(f"[red]✗ signature verification failed[/red] for {reference}")
+                renderer.diag_console.print(
+                    f"[red]✗ signature verification failed[/red] for {reference}"
+                )
                 raise SystemExit(EXIT_FAILURE)
 
         manifest = store.get_manifest(digest)  # verifies manifest digest
@@ -265,14 +268,14 @@ def registry_pull(
             # signed by the same key.
             mismatch = _signed_reference_mismatch(manifest.annotations, reference)
             if mismatch:
-                diag_console.print(
+                renderer.diag_console.print(
                     f"[red]✗ signed artifact does not match {reference}:[/red] {mismatch}"
                 )
                 raise SystemExit(EXIT_FAILURE)
         out_dir = Path(out) if out else Path.cwd() / reference.name
         written = materialise(store, manifest, out_dir)  # verifies each layer digest
     except RegistryError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     _audit(
@@ -295,12 +298,12 @@ def registry_pull(
         )
     else:
         verified = "  [cyan](signature verified)[/cyan]" if pubkey else ""
-        diag_console.print(
+        renderer.diag_console.print(
             f"[green]✓[/green] pulled [bold]{reference}[/bold] → {out_dir}  "
             f"{len(written)} file(s){verified}"
         )
         for p in written:
-            diag_console.print(f"  [dim]{p}[/dim]")
+            renderer.diag_console.print(f"  [dim]{p}[/dim]")
     raise SystemExit(EXIT_OK)
 
 
@@ -340,12 +343,12 @@ def registry_list(name: str | None, store_path: str | None, output_format: str) 
         )
         raise SystemExit(EXIT_OK)
     if not tags:
-        diag_console.print("[dim]No artifacts in the registry.[/dim]")
+        renderer.diag_console.print("[dim]No artifacts in the registry.[/dim]")
         raise SystemExit(EXIT_OK)
-    diag_console.print("[bold]Registry[/bold]")
+    renderer.diag_console.print("[bold]Registry[/bold]")
     for t in tags:
         sig = " [cyan]✎[/cyan]" if store.has_signature(t.digest) else ""
-        diag_console.print(
+        renderer.diag_console.print(
             f"  [bold]{t.repository}[/bold]:{t.tag}{sig}  [dim]{t.digest[:19]}…[/dim]"
         )
     raise SystemExit(EXIT_OK)
@@ -379,7 +382,7 @@ def registry_tags(
             insecure=insecure,
         )
     except RegistryError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
     repository = ref.repository
     tags = store.list_tags(repository)
@@ -393,10 +396,10 @@ def registry_tags(
         )
         raise SystemExit(EXIT_OK)
     if not tags:
-        diag_console.print(f"[dim]No tags for {repository}.[/dim]")
+        renderer.diag_console.print(f"[dim]No tags for {repository}.[/dim]")
         raise SystemExit(EXIT_OK)
     for t in tags:
-        diag_console.print(f"  {t.tag}  [dim]{t.digest[:19]}…[/dim]")
+        renderer.diag_console.print(f"  {t.tag}  [dim]{t.digest[:19]}…[/dim]")
     raise SystemExit(EXIT_OK)
 
 
@@ -427,7 +430,7 @@ def registry_show(
         manifest = store.get_manifest(digest)
         config = json.loads(store.get_blob(manifest.config.digest))
     except (RegistryError, json.JSONDecodeError) as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
 
     if is_structured_mode(output_format):
@@ -442,19 +445,19 @@ def registry_show(
             }
         )
         raise SystemExit(EXIT_OK)
-    diag_console.print(f"[bold]{reference}[/bold]")
-    diag_console.print(f"  digest: [dim]{digest}[/dim]")
-    diag_console.print(f"  signed: {'yes' if store.has_signature(digest) else 'no'}")
+    renderer.diag_console.print(f"[bold]{reference}[/bold]")
+    renderer.diag_console.print(f"  digest: [dim]{digest}[/dim]")
+    renderer.diag_console.print(f"  signed: {'yes' if store.has_signature(digest) else 'no'}")
     for key in ("provider", "model", "target", "classification"):
         if config.get(key):
-            diag_console.print(f"  {key}: {config[key]}")
+            renderer.diag_console.print(f"  {key}: {config[key]}")
     if config.get("dynamic_context"):
-        diag_console.print(f"  dynamic context: {', '.join(config['dynamic_context'])}")
-    diag_console.print("  layers:")
+        renderer.diag_console.print(f"  dynamic context: {', '.join(config['dynamic_context'])}")
+    renderer.diag_console.print("  layers:")
     for layer in manifest.layers:
         kind = layer.annotations.get("org.promptgenie.kind", "?")
         path = layer.annotations.get("org.promptgenie.path", "")
-        diag_console.print(
+        renderer.diag_console.print(
             f"    • [bold]{kind}[/bold] {path}  [dim]{layer.size} B  {layer.digest[:19]}…[/dim]"
         )
     raise SystemExit(EXIT_OK)
@@ -490,13 +493,13 @@ def registry_verify(
             store.get_blob(layer.digest)  # verifies each layer digest (raises on mismatch)
         store.get_blob(manifest.config.digest)
     except RegistryError as exc:
-        diag_console.print(f"[red]✗[/red] integrity check failed: {exc}")
+        renderer.diag_console.print(f"[red]✗[/red] integrity check failed: {exc}")
         raise SystemExit(EXIT_FAILURE) from exc
 
     if not sig_ok:
-        diag_console.print(f"[red]✗ signature invalid or missing[/red] for {reference}")
+        renderer.diag_console.print(f"[red]✗ signature invalid or missing[/red] for {reference}")
         raise SystemExit(EXIT_FAILURE)
-    diag_console.print(
+    renderer.diag_console.print(
         f"[green]✓[/green] {reference}: signature valid, all {len(manifest.layers)} layer digest(s) verified."
     )
     raise SystemExit(EXIT_OK)
@@ -510,14 +513,14 @@ def registry_rm(ref: str, store_path: str | None) -> None:
     try:
         reference = Reference.parse(ref)
         if not reference.tag:
-            diag_console.print("[red]Error:[/red] rm requires a tag (repository:tag).")
+            renderer.diag_console.print("[red]Error:[/red] rm requires a tag (repository:tag).")
             raise SystemExit(EXIT_USAGE)
         store = _store(store_path)
         store.remove_tag(reference.repository, reference.tag)
     except RegistryError as exc:
-        diag_console.print(f"[red]Error:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Error:[/red] {exc}")
         raise SystemExit(EXIT_USAGE) from exc
-    diag_console.print(f"[green]✓[/green] removed {reference.repository}:{reference.tag}")
+    renderer.diag_console.print(f"[green]✓[/green] removed {reference.repository}:{reference.tag}")
     raise SystemExit(EXIT_OK)
 
 
@@ -546,7 +549,7 @@ def registry_prune(dry_run: bool, store_path: str | None, output_format: str) ->
         )
         raise SystemExit(EXIT_OK)
     verb = "would remove" if dry_run else "removed"
-    diag_console.print(f"[green]✓[/green] {verb} {len(removed)} unreferenced object(s).")
+    renderer.diag_console.print(f"[green]✓[/green] {verb} {len(removed)} unreferenced object(s).")
     raise SystemExit(EXIT_OK)
 
 
@@ -587,10 +590,12 @@ def registry_search(query: str, store_path: str | None, output_format: str) -> N
         )
         raise SystemExit(EXIT_OK)
     if not hits:
-        diag_console.print(f"[dim]No artifacts match {query!r}.[/dim]")
+        renderer.diag_console.print(f"[dim]No artifacts match {query!r}.[/dim]")
         raise SystemExit(EXIT_OK)
     for t in hits:
-        diag_console.print(f"  [bold]{t.repository}[/bold]:{t.tag}  [dim]{t.digest[:19]}…[/dim]")
+        renderer.diag_console.print(
+            f"  [bold]{t.repository}[/bold]:{t.tag}  [dim]{t.digest[:19]}…[/dim]"
+        )
     raise SystemExit(EXIT_OK)
 
 
@@ -607,12 +612,14 @@ def registry_login(remote: str, token: str | None, token_stdin: bool) -> None:
     if token_stdin:
         token = sys.stdin.readline().strip()
     if not token:
-        diag_console.print("[red]Error:[/red] provide a token via --token or --token-stdin.")
+        renderer.diag_console.print(
+            "[red]Error:[/red] provide a token via --token or --token-stdin."
+        )
         raise SystemExit(EXIT_USAGE)
     host = normalize_host(remote)
     where = store_token(host, token)
     _audit(command="registry login", extra={"host": host, "stored": where})
-    diag_console.print(f"[green]✓[/green] stored token for [bold]{host}[/bold] ({where}).")
+    renderer.diag_console.print(f"[green]✓[/green] stored token for [bold]{host}[/bold] ({where}).")
     raise SystemExit(EXIT_OK)
 
 
@@ -625,9 +632,9 @@ def registry_logout(remote: str) -> None:
     host = normalize_host(remote)
     removed = delete_token(host)
     if removed:
-        diag_console.print(f"[green]✓[/green] removed token for [bold]{host}[/bold].")
+        renderer.diag_console.print(f"[green]✓[/green] removed token for [bold]{host}[/bold].")
     else:
-        diag_console.print(f"[dim]No stored token for {host}.[/dim]")
+        renderer.diag_console.print(f"[dim]No stored token for {host}.[/dim]")
     raise SystemExit(EXIT_OK)
 
 

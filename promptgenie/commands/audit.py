@@ -24,7 +24,8 @@ from promptgenie.core.audit import (
     verify_chain,
 )
 from promptgenie.core.errors import EXIT_FAILURE, EXIT_OK, EXIT_USAGE
-from promptgenie.renderers.rich import console, diag_console, is_structured_mode
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import is_structured_mode
 
 
 @click.group("audit", help="Inspect and export the run audit log.")
@@ -62,9 +63,11 @@ def audit_list_cmd(limit: int, command: str | None, output_format: str) -> None:
 
     if not events:
         if not _AUDIT_DB.exists():
-            diag_console.print("[dim]No audit log found. Run a command to create one.[/dim]")
+            renderer.diag_console.print(
+                "[dim]No audit log found. Run a command to create one.[/dim]"
+            )
         else:
-            diag_console.print("[dim]No events found.[/dim]")
+            renderer.diag_console.print("[dim]No events found.[/dim]")
         raise SystemExit(EXIT_OK)
 
     if is_structured_mode(output_format):
@@ -122,8 +125,8 @@ def audit_list_cmd(limit: int, command: str | None, output_format: str) -> None:
             ext_flag,
             f"[{status_color}]{e.status}[/{status_color}]",
         )
-    console.print(table)
-    console.print(f"[dim]Audit DB: {_AUDIT_DB}[/dim]")
+    renderer.console.print(table)
+    renderer.console.print(f"[dim]Audit DB: {_AUDIT_DB}[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +152,7 @@ def audit_show_cmd(event_id: int, output_format: str) -> None:
     """
     event = load_audit_event(event_id)
     if not event:
-        diag_console.print(f"[red]Audit event {event_id} not found.[/red]")
+        renderer.diag_console.print(f"[red]Audit event {event_id} not found.[/red]")
         raise SystemExit(EXIT_USAGE)
 
     data = {
@@ -177,15 +180,15 @@ def audit_show_cmd(event_id: int, output_format: str) -> None:
             sys.stdout.write(json.dumps(data, indent=2) + "\n")
         return
 
-    console.print(f"\n[bold]Audit Event #{event.id}[/bold]")
+    renderer.console.print(f"\n[bold]Audit Event #{event.id}[/bold]")
     for k, v in data.items():
         if k == "extra" and isinstance(v, dict):
-            console.print("  extra:")
+            renderer.console.print("  extra:")
             for ek, ev in v.items():
-                console.print(f"    {ek}: {ev}")
+                renderer.console.print(f"    {ek}: {ev}")
         elif v or v == 0:
-            console.print(f"  {k}: {v}")
-    console.print()
+            renderer.console.print(f"  {k}: {v}")
+    renderer.console.print()
 
 
 # ---------------------------------------------------------------------------
@@ -216,12 +219,12 @@ def audit_export_cmd(output_file: str, output_format: str, limit: int) -> None:
     """
     try:
         export_audit(output_file, fmt=output_format, limit=limit)
-        console.print(
+        renderer.console.print(
             f"[green]✓[/green] Exported up to {limit} events to "
             f"[bold]{output_file}[/bold] ({output_format})"
         )
     except Exception as exc:
-        diag_console.print(f"[red]Export failed:[/red] {exc}")
+        renderer.diag_console.print(f"[red]Export failed:[/red] {exc}")
         raise SystemExit(EXIT_FAILURE) from None
 
 
@@ -261,9 +264,9 @@ def audit_verify_cmd(output_format: str) -> None:
         )
     else:
         if ok:
-            console.print("[green]✓[/green] Audit chain is intact.")
+            renderer.console.print("[green]✓[/green] Audit chain is intact.")
         else:
-            console.print(
+            renderer.console.print(
                 f"[red]✗[/red] Audit chain broken at event ID {broken_id}. "
                 "Possible tampering detected."
             )
