@@ -2,7 +2,7 @@
 .vscode-test/**
 src/**
 .gitignore
-.eslintrc.json
+eslint.config.mjs
 tsconfig.json
 **/*.map
 **/*.ts
