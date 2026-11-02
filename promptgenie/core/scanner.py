@@ -55,6 +55,51 @@ MAX_FINDINGS_PER_RULE: int = 5
 # e.g. (a+)+  (a*)*  (a+)?  (\w+){2,}  — before it can reach the regex engine.
 _NESTED_QUANTIFIER_RE = re.compile(r"\([^)]*[+*?{][^)]*\)\s*[+*?{]")
 
+# Upper bound on user-supplied pattern length (matches tester._MAX_REGEX_LEN).
+_MAX_PATTERN_LEN = 500
+
+try:  # Python 3.11+
+    from re import _parser as _sre_parse  # type: ignore[attr-defined]
+except ImportError:  # pragma: no cover - Python 3.10
+    import sre_parse as _sre_parse
+
+
+def _has_nested_repeat(pattern: str) -> bool:
+    """Return True if a repeat of more than one item contains another such repeat.
+
+    Works on the parsed regex, so it sees through nesting that the textual
+    heuristic misses, e.g. ``((a)+)+`` or ``(?:\\w+\\s?)*``.
+    """
+    try:
+        tree = _sre_parse.parse(pattern)
+    except Exception:
+        return False
+    repeat_ops = {_sre_parse.MAX_REPEAT, _sre_parse.MIN_REPEAT}
+    if hasattr(_sre_parse, "POSSESSIVE_REPEAT"):
+        repeat_ops.add(_sre_parse.POSSESSIVE_REPEAT)
+
+    def walk(items, inside_repeat: bool) -> bool:
+        for op, av in items:
+            if op in repeat_ops:
+                _lo, hi, sub = av
+                unbounded = hi == _sre_parse.MAXREPEAT or hi > 1
+                if unbounded and inside_repeat:
+                    return True
+                if walk(sub, inside_repeat or unbounded):
+                    return True
+            elif op == _sre_parse.SUBPATTERN:
+                if walk(av[-1], inside_repeat):
+                    return True
+            elif op == _sre_parse.BRANCH:
+                if any(walk(b, inside_repeat) for b in av[1]):
+                    return True
+            elif op in (_sre_parse.ASSERT, _sre_parse.ASSERT_NOT):
+                if walk(av[1], inside_repeat):
+                    return True
+        return False
+
+    return walk(tree, False)
+
 
 def validate_pattern(pattern: str, rule_id: str) -> None:
     """Raise ``ValueError`` if *pattern* is syntactically invalid or contains
@@ -63,11 +108,15 @@ def validate_pattern(pattern: str, rule_id: str) -> None:
     Called at rule-pack load time so malicious patterns from user config or
     registry downloads are rejected before they reach the scan hot-loop.
     """
+    if len(pattern) > _MAX_PATTERN_LEN:
+        raise ValueError(
+            f"Rule {rule_id!r}: pattern is {len(pattern)} chars (max {_MAX_PATTERN_LEN})."
+        )
     try:
         re.compile(pattern)
     except re.error as exc:
         raise ValueError(f"Rule {rule_id!r}: invalid regex: {exc}") from exc
-    if _NESTED_QUANTIFIER_RE.search(pattern):
+    if _NESTED_QUANTIFIER_RE.search(pattern) or _has_nested_repeat(pattern):
         raise ValueError(
             f"Rule {rule_id!r}: pattern contains a nested quantifier which can cause "
             f"catastrophic backtracking (ReDoS). Rewrite to use atomic groups or "
@@ -190,7 +239,8 @@ SCAN_RULES: list[ScanRule] = [
     ScanRule(
         id="SEC_SECRET_OPENAI",
         category="secret",
-        pattern=r"sk-[A-Za-z0-9]{20,}",
+        # Also covers hyphenated key families (sk-proj-…, sk-ant-api03-…).
+        pattern=r"sk-(?:[a-z0-9]+-){0,2}[A-Za-z0-9_\-]{20,}",
         risk="CRITICAL",
         confidence="HIGH",
         message="Possible OpenAI API key embedded in prompt.",
@@ -230,7 +280,7 @@ SCAN_RULES: list[ScanRule] = [
     ScanRule(
         id="SEC_SECRET_GITHUB",
         category="secret",
-        pattern=r"ghp_[A-Za-z0-9]{36}",
+        pattern=r"(?:ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{60,})",
         risk="CRITICAL",
         confidence="HIGH",
         message="Possible GitHub personal access token embedded in prompt.",

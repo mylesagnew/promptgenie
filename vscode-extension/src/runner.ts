@@ -10,7 +10,7 @@ import * as cp from "child_process";
 import * as path from "path";
 import * as vscode from "vscode";
 import type { LintOutput, ScanOutput } from "./types";
-import { isTrustedPath, isUnderTrustedPrefix, pathTrustKey } from "./runner-utils";
+import { isTrustedPath, isUnderTrustedPrefix, pathTrustKey, resolveOnPath } from "./runner-utils";
 
 export { isTrustedPath } from "./runner-utils";
 
@@ -70,12 +70,24 @@ function getConfig(): vscode.WorkspaceConfiguration {
  *
  * @throws `Error` if the configured path is unsafe or untrusted.
  */
-async function resolvedCliPath(): Promise<string> {
+async function resolvedCliPath(filePath: string): Promise<string> {
   const configured = getConfig().get<string>("executablePath") || getConfig().get<string>("cliPath") || "";
 
-  // Default / empty — use PATH lookup (no trust check required).
+  // Default / empty — resolve on PATH ourselves, never from the workspace or
+  // the opened file's directory, and never spawn a bare name (CWE-427).
   if (!configured || configured === "promptgenie") {
-    return "promptgenie";
+    const workspaceDirs = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+    const resolved = resolveOnPath(process.env.PATH ?? "", [
+      ...workspaceDirs,
+      path.dirname(filePath),
+    ]);
+    if (!resolved) {
+      throw new Error(
+        "PromptGenie: could not find the promptgenie CLI on PATH (workspace folders are " +
+          "ignored). Install it, or set promptgenie.executablePath to its absolute path."
+      );
+    }
+    return resolved;
   }
 
   // A custom path was configured — validate it before use.
@@ -134,7 +146,7 @@ async function runCli(
   additionalArgs: string[] = []
 ): Promise<string> {
   // Resolve and validate the CLI path before spawning.
-  const cli = await resolvedCliPath();
+  const cli = await resolvedCliPath(filePath);
 
   return new Promise((resolve, reject) => {
     const args = [command, filePath, "--format", "json", ...additionalArgs];

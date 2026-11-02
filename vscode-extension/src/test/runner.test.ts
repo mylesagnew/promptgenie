@@ -2,7 +2,7 @@ import * as assert from "assert";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { isTrustedPath, isUnderTrustedPrefix, pathTrustKey } from "../runner-utils";
+import { isTrustedPath, isUnderTrustedPrefix, pathTrustKey, resolveOnPath } from "../runner-utils";
 
 describe("isTrustedPath", () => {
   it("rejects relative paths", () => {
@@ -87,5 +87,52 @@ describe("pathTrustKey", () => {
       pathTrustKey("/usr/local/bin/promptgenie"),
       pathTrustKey("/usr/bin/promptgenie")
     );
+  });
+});
+
+describe("resolveOnPath", () => {
+  const exe = process.platform === "win32" ? "promptgenie.exe" : "promptgenie";
+  const sep = process.platform === "win32" ? ";" : ":";
+
+  function mkBin(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pg-path-"));
+    fs.writeFileSync(path.join(dir, exe), "#!/bin/sh\necho ok\n");
+    return dir;
+  }
+
+  it("returns an absolute path from PATH, never a bare name", () => {
+    const dir = mkBin();
+    try {
+      const got = resolveOnPath(dir, []);
+      assert.strictEqual(got, path.join(dir, exe));
+      assert.ok(got && path.isAbsolute(got));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("skips workspace / opened-file directories even when they are on PATH", () => {
+    const workspace = mkBin();
+    const real = mkBin();
+    try {
+      const got = resolveOnPath([workspace, real].join(sep), [workspace]);
+      assert.strictEqual(got, path.join(real, exe));
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+      fs.rmSync(real, { recursive: true, force: true });
+    }
+  });
+
+  it("skips empty and relative PATH entries", () => {
+    assert.strictEqual(resolveOnPath(["", ".", "bin"].join(sep), []), undefined);
+  });
+
+  it("returns undefined when nothing acceptable is found", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pg-path-"));
+    try {
+      assert.strictEqual(resolveOnPath(dir, []), undefined);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

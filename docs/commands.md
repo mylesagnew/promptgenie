@@ -1606,7 +1606,7 @@ promptgenie registry pull ghcr.io/myorg/auth-review:v1 --require-signed --pubkey
 promptgenie registry logout ghcr.io
 ```
 
-A host embedded in a reference (`ghcr.io/org/x:v1`) selects the remote automatically. Blobs dedup on push (`HEAD` then upload only missing); the registry server is **untrusted** — all bytes are digest-verified client-side, so a digest pin or `--require-signed` gives end-to-end integrity regardless of the operator. HTTPS-only (SSRF-guarded; `--insecure` for http), air-gap aware (`security.airgap` blocks remote access), and audited. Tokens are stored in the keyring (or a `0600` file fallback); `PROMPTGENIE_REGISTRY_TOKEN` works for CI.
+A host embedded in a reference (`ghcr.io/org/x:v1`) selects the remote automatically. Blobs dedup on push (`HEAD` then upload only missing); the registry server is **untrusted** — all bytes are digest-verified client-side, so a digest pin or `--require-signed` gives end-to-end integrity regardless of the operator. HTTPS-only (SSRF-guarded; `--insecure` for http), air-gap aware (`security.airgap` blocks remote access), and audited. Tokens are stored in the keyring (or a `0600` file fallback); for CI set `PROMPTGENIE_REGISTRY_TOKEN` **and** `PROMPTGENIE_REGISTRY_HOST` (the registry the token was issued for) — the env token is never sent to any other host, and an upload `Location` on a different origin is refused.
 
 **Subcommands:** `push`, `pull`, `list`, `tags`, `show`, `verify`, `rm`, `prune`, `search`, `login`, `logout`. Most accept `--format json`; `push`/`pull`/`show`/`verify`/`tags` accept `--remote` / `--insecure`. See **[docs/registry-design.md](registry-design.md)** for the artifact/manifest design.
 

@@ -101,6 +101,25 @@ class RemoteRegistryStore:
             )
         return resp
 
+    def _same_origin_location(self, location: str) -> str:
+        """Return *location* as a path on this registry, rejecting other origins.
+
+        The client sends ``Authorization`` on every request, so an absolute
+        upload ``Location`` on another scheme/host would hand the token to it.
+        """
+        from urllib.parse import urlsplit
+
+        loc = urlsplit(location)
+        if not loc.scheme and not loc.netloc:
+            return location
+        base = urlsplit(self.base_url)
+        if (loc.scheme, loc.netloc.lower()) != (base.scheme, base.netloc.lower()):
+            raise RegistryError(
+                f"Registry returned an upload Location on a different origin "
+                f"({loc.scheme}://{loc.netloc}); refusing to send credentials there."
+            )
+        return loc.path + (f"?{loc.query}" if loc.query else "")
+
     # -- blobs -------------------------------------------------------------
 
     def has_blob(self, digest: str) -> bool:
@@ -116,6 +135,7 @@ class RemoteRegistryStore:
             location = start.headers.get("Location")
             if not location:
                 raise RegistryError("Registry did not return an upload Location.")
+            location = self._same_origin_location(location)
             sep = "&" if "?" in location else "?"
             self._check(
                 self._client.put(

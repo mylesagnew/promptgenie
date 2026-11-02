@@ -8,6 +8,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Security
+
+Fixes from a source-only review with the Cloudflare `security-audit` skill (quick profile, against `9fcdb6e`). Each lead was independently re-verified from source; none was reproduced at runtime, so these are fixes for source-grounded leads, not confirmed exploits. Regression tests: `tests/test_security_audit_fixes.py`.
+
+- **`spec render --show-context` now applies the spec trust gate (THREAT_MODEL T1).** It called `build_context()` directly, so an untrusted spec's `cmd`/`file`/`glob`/`env` sources ran just by previewing it. It now uses the same gate as `run` and gains `--trust`/`--yes`; rendering without `--show-context` still needs no trust.
+- **`cmd` context sources: executable and option hardening (T2).**
+  - The allowlist compared only the basename, so `./tools/cat` ran a repository-supplied binary. Only bare command names are accepted now.
+  - git global options before the subcommand (`--git-dir`, `--work-tree`, `-C`, `--config-env`) are rejected; they could load a spec-shipped config whose `core.fsmonitor`/`diff.external` runs a program. So are `--output`, `--ext-diff`, `--textconv`, and `branch`/`tag`/`remote` with a name argument.
+  - `sort -o`/`--output`/`--compress-program` and `uniq INPUT OUTPUT` (which write files or run programs) are rejected.
+- **Remote pack index ids are validated before building install paths.** `pack update`/`pack install` joined the index's `id` into `<packs>/<id>.yaml` unchecked, so an id like `../../../.promptgenie` overwrote `~/.promptgenie.yaml` (or `providers.yaml`, the global policy). `_safe_pack_id` and a resolved-parent check now apply to every install and version lookup; bad entries are reported in `errors`.
+- **Specs with `vars.<k>.from_env` secret bindings now require trust.** They read any environment variable (e.g. `ANTHROPIC_API_KEY`) into the prompt with no trust prompt and no sensitive-name filter. They now count as host-touching, and the trust prompt lists each `name <- $ENV_VAR`.
+- **Trust prompts render commands literally.** Makefile `run:` strings, task names and spec source details were printed as Rich markup, so `[conceal]…[/conceal]` could hide part of a command from the confirmation it was approved under. They are now markup-escaped with control characters shown as `\xNN` (`renderers.rich.escape_markup`). The `make --dry-run` plan is escaped too.
+- **Registry bearer token bound to its registry.** `PROMPTGENIE_REGISTRY_TOKEN` was returned for every host, so pulling a reference on another registry sent it there. **Behaviour change:** it is now used only for the host in the new `PROMPTGENIE_REGISTRY_HOST`, so set both in CI. Blob uploads also refuse a server-supplied `Location` on a different scheme or host, instead of sending the client-wide `Authorization` header there.
+- **`registry pull --require-signed` binds the signature to the requested reference.** Any manifest signed by the key was accepted, so an untrusted registry could answer a tag with another artifact, or an older version, signed by the same key. The signed `org.promptgenie.name`/`org.promptgenie.tag` annotations must now match the requested repository (and tag, when pulling by tag); missing annotations fail closed.
+- **URL context sources fail closed when the host does not resolve.** On a DNS failure the fetch fell back to `urllib.request.urlopen`, which re-resolved the host and followed redirects (including https→http to internal IPs) with no SSRF re-check. Only the pinned, validated-IP path remains.
+- **`provider doctor` validates `base_url` before sending the API key.** `probe_provider` sent `Authorization: Bearer …` to the raw `base_url`, skipping the V-004 rule that blocks cleartext `http://` to non-loopback hosts. It now applies the same check as `complete()`/`stream()`.
+- **VS Code extension resolves the default CLI to an absolute path.** With the default `executablePath`, a bare `promptgenie` was spawned with the workspace (or the opened file's directory) as cwd; on Windows a planted `promptgenie.exe` there could run. The extension now walks `PATH` itself, skipping relative entries and workspace/file directories, and validates the result with `isTrustedPath`. It also declares `capabilities.untrustedWorkspaces: {supported: false}`.
+- **Release attestations require the `release` environment; tags must be on main.** The `attest` job signed SLSA provenance and SBOM attestations for any pushed `v*` tag without reviewer approval. The GitHub Release, which depends on `attest`, inherited that gap. `attest` now runs in the `release` environment, and `verify` rejects a tag whose commit is not reachable from `origin/main`.
+
+- **Dependency advisories.** Python lockfile: certifi 2026.5.20 → 2026.10.23 (PYSEC-2026-4320), filelock 3.29.1 → 4.2.5 (several CVEs; 4.1.0 on Python 3.10, the newest available there) and msgpack 1.2.1 → 1.2.4 (CVE-2026-114613), all dev/transitive. The VS Code extension dev tooling gets `npm audit fix` for minimatch/glob/qs/serialize-javascript; the extension still has no runtime dependencies.
+
+### Changed
+
+- **`run` and `make` read the Rich consoles at call time.** They imported `console`/`diag_console` by value, so the consoles `init_renderer()` rebuilds for `--color` never reached them (CodeQL *importing value of mutable attribute*).
+- **Scanner key-shape rules.** `SEC_SECRET_OPENAI` now also matches hyphenated `sk-` keys (`sk-proj-…`, `sk-ant-api03-…`). `SEC_SECRET_GITHUB` also matches fine-grained `github_pat_…` tokens.
+- **Custom-rule ReDoS guard.** `validate_pattern` also parses the regex and rejects nested unbounded repeats the textual heuristic missed (e.g. `((a)+)+`, `(?:(\w+)\s?)*`), and caps patterns at 500 characters. Ambiguous alternation such as `(a|a)+` is still not detected.
+
 ### Fixed
 
 - **`--color never` / `--color always` now apply to every command.** Command modules imported `console` / `diag_console` from `promptgenie.renderers.rich` by value, so they kept the import-time consoles and ignored the consoles `init_renderer()` builds once `--color` is resolved (for example, `FORCE_COLOR=1 promptgenie --color never lint …` still printed ANSI escapes). All command modules now look the consoles up as `renderer.console` / `renderer.diag_console` at call time. Clears the CodeQL "Importing value of mutable attribute" alerts in `promptgenie/commands/`. `run` and `make` were fixed separately in #146.

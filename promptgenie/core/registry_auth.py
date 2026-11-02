@@ -4,7 +4,9 @@ Phase B.1 authentication: a per-host bearer token used as
 ``Authorization: Bearer <token>`` against an OCI registry. Tokens are resolved
 in priority order:
 
-1. ``PROMPTGENIE_REGISTRY_TOKEN`` environment variable (CI-friendly, host-agnostic);
+1. ``PROMPTGENIE_REGISTRY_TOKEN`` environment variable (CI-friendly), used only
+   for the host named in ``PROMPTGENIE_REGISTRY_HOST`` so a token issued for one
+   registry is never sent to another;
 2. the system keyring (when ``promptgenie[secrets]`` is installed), keyed
    ``registry:<host>``;
 3. a ``0600`` JSON file at ``~/.config/promptgenie/registry-auth.json``
@@ -23,6 +25,7 @@ import stat
 from pathlib import Path
 
 ENV_TOKEN = "PROMPTGENIE_REGISTRY_TOKEN"
+ENV_TOKEN_HOST = "PROMPTGENIE_REGISTRY_HOST"
 _AUTH_FILE = Path.home() / ".config" / "promptgenie" / "registry-auth.json"
 _KEY_PREFIX = "registry:"
 
@@ -77,11 +80,17 @@ def store_token(host: str, token: str) -> str:
 
 
 def get_token(host: str) -> str | None:
-    """Resolve a token for *host*: env var → keyring → file."""
-    env = os.environ.get(ENV_TOKEN)
-    if env:
-        return env
+    """Resolve a token for *host*: env var → keyring → file.
+
+    The env token is bound to ``PROMPTGENIE_REGISTRY_HOST``; without that binding
+    (or for any other host) it is ignored rather than sent to whichever registry
+    a reference happens to name.
+    """
     host = normalize_host(host)
+    env = os.environ.get(ENV_TOKEN)
+    env_host = os.environ.get(ENV_TOKEN_HOST, "")
+    if env and env_host and normalize_host(env_host) == host:
+        return env
     kr = _keyring()
     if kr is not None:
         val = kr.get_password("promptgenie", _KEY_PREFIX + host)

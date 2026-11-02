@@ -286,8 +286,8 @@ def install_pack(
         )
 
     dest_dir = install_dir or USER_PACKS_DIR
+    dest = _pack_path(dest_dir, entry.id)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"{entry.id}.yaml"
 
     tmp = _download_to_temp(entry.url, timeout=timeout)
     try:
@@ -445,8 +445,20 @@ def _safe_pack_id(raw_id: object) -> str:
     """
     pack_id = str(raw_id).strip()
     if not pack_id or "/" in pack_id or "\\" in pack_id or not _SAFE_PACK_ID_RE.match(pack_id):
-        raise ValueError(f"Unsafe or invalid pack id derived from tarball: {raw_id!r}")
+        raise ValueError(f"Unsafe or invalid pack id: {raw_id!r}")
     return pack_id
+
+
+def _pack_path(install_dir: Path, pack_id: str) -> Path:
+    """Return ``<install_dir>/<pack_id>.yaml`` after validating *pack_id*.
+
+    Pack ids from a remote index are attacker-influenced; an id such as
+    ``../../../.promptgenie`` must never place a file outside *install_dir*.
+    """
+    path = install_dir / f"{_safe_pack_id(pack_id)}.yaml"
+    if path.resolve().parent != install_dir.resolve():
+        raise ValueError(f"Unsafe or invalid pack id: {pack_id!r}")
+    return path
 
 
 # ── update ────────────────────────────────────────────────────────────────────
@@ -454,7 +466,7 @@ def _safe_pack_id(raw_id: object) -> str:
 
 def _installed_version(pack_id: str, install_dir: Path) -> str:
     """Return the version string of an installed pack, or "" if not installed."""
-    path = install_dir / f"{pack_id}.yaml"
+    path = _pack_path(install_dir, pack_id)
     if not path.exists():
         return ""
     raw = safe_read_yaml(path) or {}

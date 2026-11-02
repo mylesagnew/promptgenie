@@ -122,13 +122,18 @@ def list_trusted() -> list[dict[str, Any]]:
 
 
 def spec_requires_trust(spec: Any) -> bool:
-    """Return True if *spec* has any host-touching context source.
+    """Return True if *spec* has a host-touching context source or env-bound secret var.
 
-    A spec with only an inline prompt / vars (no context sources, or only
-    ``stdin`` / ``git_diff`` / ``git_staged``) does not require trust.
+    A spec with only an inline prompt / plain vars (no context sources, or only
+    ``stdin`` / ``git_diff`` / ``git_staged``, and no ``from_env`` secret vars)
+    does not require trust.
     """
     sources = getattr(spec, "context", None) or []
-    return any(getattr(s, "type", None) in _HOST_TOUCHING_TYPES for s in sources)
+    if any(getattr(s, "type", None) in _HOST_TOUCHING_TYPES for s in sources):
+        return True
+    # ``vars.<k>.from_env`` reads an arbitrary environment variable (often a
+    # credential) straight into the prompt sent to the provider.
+    return bool(getattr(spec, "secret_vars", None))
 
 
 def makefile_requires_trust(mf: Any) -> bool:

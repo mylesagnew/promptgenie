@@ -33,18 +33,25 @@ from promptgenie.core.errors import (
 from promptgenie.core.run_engine import RunEvent, run_spec
 from promptgenie.core.spec import PromptSpec, load_spec
 from promptgenie.core.trust import add_trust, is_trusted, spec_requires_trust
-from promptgenie.renderers.rich import console, diag_console
+from promptgenie.renderers import rich as renderer
+from promptgenie.renderers.rich import escape_markup
 
 
 def _describe_sources(spec: PromptSpec) -> list[str]:
-    """Human-readable one-liners for the host-touching context sources."""
+    """Human-readable one-liners for the host-touching context sources.
+
+    Lines are markup-escaped: they are printed through a Rich console, and the
+    trust prompt must show exactly what will run, not what the spec styles it as.
+    """
     host_types = {"cmd", "file", "glob", "env", "url"}
     lines: list[str] = []
     for s in spec.context or []:
         if s.type not in host_types:
             continue
         detail = s.command or s.path or s.pattern or s.var or s.url or ""
-        lines.append(f"  - [{s.type}] {detail}")
+        lines.append(escape_markup(f"  - [{s.type}] {detail}"))
+    for name, binding in (spec.secret_vars or {}).items():
+        lines.append(escape_markup(f"  - [secret var] {name} <- ${binding.from_env}"))
     return lines
 
 
@@ -73,17 +80,17 @@ def _trust_gate(
         handle_error(
             PromptGenieError(
                 "Spec has host-touching context sources (cmd/file/glob/env/url) "
-                "and is not trusted. Re-run with --trust to record it as trusted, "
+                "or env-bound secret vars and is not trusted. Re-run with --trust to record it as trusted, "
                 "or run interactively to be prompted.",
                 code=EXIT_USAGE,
             )
         )
 
-    diag_console.print(
+    renderer.diag_console.print(
         "[yellow]⚠ This spec contains context sources that run on your host:[/yellow]"
     )
     for line in _describe_sources(spec):
-        diag_console.print(f"[yellow]{line}[/yellow]")
+        renderer.diag_console.print(f"[yellow]{line}[/yellow]")
     if not click.confirm("Trust this spec and its context sources?", default=False):
         handle_error(PromptGenieError("Spec not trusted; aborting.", code=EXIT_USAGE))
     add_trust(spec_path)
@@ -312,7 +319,7 @@ def run_cmd(
             _live_renderable = Markdown("")
             _live_ctx = Live(
                 _live_renderable,
-                console=console,
+                console=renderer.console,
                 refresh_per_second=15,
                 vertical_overflow="visible",
             )
@@ -369,19 +376,19 @@ def run_cmd(
             compress=compress_context,
             compress_aggressive=compress_aggressive,
         )
-        diag_console.print("[bold]Context manifest:[/bold]")
+        renderer.diag_console.print("[bold]Context manifest:[/bold]")
         for entry in manifest.entries:
             status = "✓" if entry.included else "✗ (trimmed)"
-            diag_console.print(
+            renderer.diag_console.print(
                 f"  [{entry.source_type}] {entry.label}  ~{entry.token_estimate} tokens  {status}"
             )
         comp = manifest.compression
         if comp is not None and comp.changed:
-            diag_console.print(
+            renderer.diag_console.print(
                 f"[green]Compressed[/green] {comp.tokens_before} → {comp.tokens_after} tokens "
                 f"([bold]-{comp.ratio:.0%}[/bold])"
             )
-        diag_console.print(f"[dim]Total: ~{manifest.total_tokens} tokens[/dim]\n")
+        renderer.diag_console.print(f"[dim]Total: ~{manifest.total_tokens} tokens[/dim]\n")
 
     if ndjson_mode:
         print(json.dumps({"event": "start", "spec": spec_file, "dry_run": dry_run}), flush=True)
@@ -443,14 +450,14 @@ def run_cmd(
                 flush=True,
             )
         else:
-            diag_console.print("\n[yellow]Dry run complete.[/yellow]")
+            renderer.diag_console.print("\n[yellow]Dry run complete.[/yellow]")
             if result.resolved_vars:
-                diag_console.print("[dim]Resolved variables:[/dim]")
+                renderer.diag_console.print("[dim]Resolved variables:[/dim]")
                 for k, v in result.redacted_vars().items():
-                    diag_console.print(f"  {k} = {v}")
+                    renderer.diag_console.print(f"  {k} = {v}")
             if result.context_manifest:
                 m = result.context_manifest
-                diag_console.print(
+                renderer.diag_console.print(
                     f"[dim]Context: {len(m.entries)} sources, ~{m.total_tokens} tokens[/dim]"
                 )
         raise SystemExit(EXIT_OK)
@@ -469,11 +476,11 @@ def run_cmd(
             flush=True,
         )
     else:
-        diag_console.print(
+        renderer.diag_console.print(
             f"\n[dim]run_id={result.run_id}  status={result.status}  {result.duration_s:.1f}s[/dim]"
         )
         if tee_file:
-            diag_console.print(f"[dim]Response written to: {tee_file}[/dim]")
+            renderer.diag_console.print(f"[dim]Response written to: {tee_file}[/dim]")
 
     # ---- output-contract validation ----
     _validate_output_contract(
@@ -512,7 +519,7 @@ def _validate_output_contract(
         try:
             schema = load_schema(schema_path)
         except OutputContractError as exc:
-            diag_console.print(f"[red]Error:[/red] {exc}")
+            renderer.diag_console.print(f"[red]Error:[/red] {exc}")
             raise SystemExit(EXIT_USAGE) from exc
     else:
         oc_schema = spec.output_contract.schema
@@ -522,7 +529,7 @@ def _validate_output_contract(
             try:
                 schema = load_schema(oc_schema)
             except OutputContractError as exc:
-                diag_console.print(f"[red]Error:[/red] {exc}")
+                renderer.diag_console.print(f"[red]Error:[/red] {exc}")
                 raise SystemExit(EXIT_USAGE) from exc
 
     if schema is None:
@@ -542,11 +549,13 @@ def _validate_output_contract(
             flush=True,
         )
     elif errors:
-        diag_console.print(f"[red]✗ Output contract violated[/red] — {len(errors)} error(s):")
+        renderer.diag_console.print(
+            f"[red]✗ Output contract violated[/red] — {len(errors)} error(s):"
+        )
         for e in errors:
-            diag_console.print(f"  [red]•[/red] {e}")
+            renderer.diag_console.print(f"  [red]•[/red] {e}")
     else:
-        diag_console.print("[green]✓ Output conforms to the schema.[/green]")
+        renderer.diag_console.print("[green]✓ Output conforms to the schema.[/green]")
 
     if errors:
         raise SystemExit(EXIT_FAILURE)
