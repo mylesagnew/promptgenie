@@ -1,5 +1,10 @@
 version: 2
 
+# Grouping keeps lockfile bumps in one PR per ecosystem (separate PRs kept
+# conflicting on uv.lock / package-lock.json) and keeps action families that
+# must share a version (e.g. codeql-action init/analyze/upload-sarif) together.
+# Majors stay as individual PRs so breaking changes are reviewed one at a time.
+
 updates:
   # Python dependencies (uv lockfile)
   - package-ecosystem: "uv"
@@ -20,6 +25,12 @@ updates:
           - "build"
           - "twine"
           - "cyclonedx-bom"
+          - "respx"
+          - "setuptools"
+      python-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
     labels:
       - "dependencies"
       - "python"
@@ -31,6 +42,19 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
+    groups:
+      typescript-eslint:
+        patterns:
+          - "@typescript-eslint/*"
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # typescript-eslint 8.x peers typescript <6.1, so newer TS breaks npm ci; raise
+      # this bound when typescript-eslint widens its peer range.
+      - dependency-name: "typescript"
+        versions: [">=6.1"]
     labels:
       - "dependencies"
       - "javascript"
@@ -42,6 +66,14 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
+      actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
     labels:
       - "dependencies"
       - "github-actions"
