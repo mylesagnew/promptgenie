@@ -39,6 +39,7 @@ Fixes from a source-only review with the Cloudflare `security-audit` skill (quic
 
 - **`--color never` / `--color always` now apply to every command.** Command modules imported `console` / `diag_console` from `promptgenie.renderers.rich` by value, so they kept the import-time consoles and ignored the consoles `init_renderer()` builds once `--color` is resolved (for example, `FORCE_COLOR=1 promptgenie --color never lint …` still printed ANSI escapes). All command modules now look the consoles up as `renderer.console` / `renderer.diag_console` at call time. Clears the CodeQL "Importing value of mutable attribute" alerts in `promptgenie/commands/`. `run` and `make` were fixed separately in #146.
 - **`--color never` (and `NO_COLOR`) now suppress all ANSI styling.** Rich's `no_color` only drops colours, so bold/dim/underline escapes were still emitted; the no-colour console now also sets `color_system=None`.
+- **`LEAK_SALESFORCE_ID` no longer flags ordinary identifiers.** It matched any 15 or 18 character alphanumeric word, so names like `isPrivateTarget` were reported (and redacted by `redact`). It now requires a letter, `0` in the reserved 6th position, and an uppercase `A-Z`/`0-5` checksum suffix on 18-character IDs. All-lowercase 18-character IDs and IDs with a non-zero 6th character are no longer detected.
 
 ## [1.8.2] - 2026-10-14
 
