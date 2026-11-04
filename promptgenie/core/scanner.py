@@ -415,13 +415,15 @@ SCAN_RULES: list[ScanRule] = [
     ScanRule(
         id="LEAK_SALESFORCE_ID",
         category="data-leakage",
-        pattern=r"\b[0-9A-Za-z]{15}(?:[0-9A-Za-z]{3})?\b",
+        # Requires a letter, '0' in the reserved 6th position, and for 18-char IDs an
+        # uppercase A-Z/0-5 checksum suffix. (?-i:) because use_original_text sets IGNORECASE.
+        pattern=r"\b(?=[0-9]*[A-Za-z])[0-9A-Za-z]{5}0[0-9A-Za-z]{9}(?:(?-i:[A-Z0-5]{3}))?\b",
         risk="LOW",
         confidence="LOW",
         message="Possible Salesforce record ID detected (15 or 18 character alphanumeric).",
         recommendation="Verify this is not a real Salesforce ID before sending to external providers.",
-        false_positive_note="Short alphanumeric strings (API keys, hashes) frequently match this pattern.",
-        use_original_text=False,
+        false_positive_note="Random tokens and hashes with '0' in the 6th position can still match this pattern.",
+        use_original_text=True,
     ),
     ScanRule(
         id="LEAK_UUID_CUSTOMER",
