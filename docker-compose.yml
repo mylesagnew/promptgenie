@@ -1,0 +1,77 @@
+name: promptgenie
+
+# Local development stack for the promptgenie_service API.
+#
+# `postgres` and `redis` are not wired into the API yet — the Phase 1 endpoints
+# (/v1/generate, /v1/lint) call promptgenie.core directly with no external
+# state. They're started here so Phase 2 (externalized run history) has a local
+# target to develop against without reshaping this file later.
+#
+# The credentials below are development defaults, so every port is bound to
+# 127.0.0.1. The image holds an installed wheel with no source mount: rebuild
+# with `docker compose up --build` to pick up code changes.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: promptgenie-api:local
+    command:
+      - python
+      - -m
+      - uvicorn
+      - promptgenie_service.api.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8080"
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      PROMPTGENIE_ENV: development
+      PROMPTGENIE_LOG_LEVEL: debug
+      # /v1 endpoints return 503 until this is set.
+      PROMPTGENIE_API_KEY: ${PROMPTGENIE_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: promptgenie
+      POSTGRES_USER: promptgenie
+      POSTGRES_PASSWORD: promptgenie
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U promptgenie -d promptgenie"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:
+  redis-data:
