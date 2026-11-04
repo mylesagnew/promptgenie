@@ -1,7 +1,8 @@
 from importlib.metadata import version
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from promptgenie_service.api.auth import require_api_key
 from promptgenie_service.api.routes import generate, health, lint
 
 app = FastAPI(
@@ -11,5 +12,5 @@ app = FastAPI(
 )
 
 app.include_router(health.router)
-app.include_router(generate.router)
-app.include_router(lint.router)
+app.include_router(generate.router, dependencies=[Depends(require_api_key)])
+app.include_router(lint.router, dependencies=[Depends(require_api_key)])

@@ -19,5 +19,6 @@ def ready() -> dict:
     try:
         load_config(settings.config_path)
     except (FileNotFoundError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=f"config not ready: {exc}") from exc
+        # Unauthenticated route, so the error (which can name file paths) stays out of the response.
+        raise HTTPException(status_code=503, detail="config not ready") from exc
     return {"status": "ok"}

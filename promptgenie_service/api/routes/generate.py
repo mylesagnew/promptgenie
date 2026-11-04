@@ -14,7 +14,8 @@ router = APIRouter(prefix="/v1", tags=["generate"])
 
 class GenerateRequest(BaseModel):
     task: str = Field(..., min_length=1)
-    target: str | None = None
+    # generate_prompt joins target into a profile file path, so it must stay a bare name.
+    target: str | None = Field(default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
     template: str | None = None
     context: str | None = None
     output_format: str | None = None
