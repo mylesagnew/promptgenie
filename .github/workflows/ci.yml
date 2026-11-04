@@ -29,7 +29,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install with dev dependencies (locked)
-        run: uv sync --frozen --extra dev --extra benchmark --extra tui
+        run: uv sync --frozen --extra dev --extra benchmark --extra tui --extra service
 
       - name: Run tests
         run: uv run pytest tests/ --tb=short -q --cov=promptgenie --cov-report=term-missing
@@ -48,13 +48,13 @@ jobs:
         run: uv sync --frozen --extra dev
 
       - name: ruff check
-        run: uv run ruff check promptgenie/ tests/
+        run: uv run ruff check promptgenie/ promptgenie_service/ tests/
 
       - name: ruff format check
-        run: uv run ruff format --check promptgenie/ tests/
+        run: uv run ruff format --check promptgenie/ promptgenie_service/ tests/
 
       - name: mypy
-        run: uv run mypy promptgenie
+        run: uv run mypy promptgenie promptgenie_service
 
   security:
     name: Security scan
@@ -70,7 +70,7 @@ jobs:
         run: uv sync --frozen --extra dev
 
       - name: bandit
-        run: uv run bandit -r promptgenie/ -ll -q
+        run: uv run bandit -r promptgenie/ promptgenie_service/ -ll -q
 
       - name: pip-audit
         run: uv run pip-audit --skip-editable --progress-spinner off

@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+
+- **`promptgenie_service` — optional HTTP API adapter (Phase 0/1 of the cloud-service track).** PromptGenie stays CLI-first (see `ROADMAP.md`), but teams that want `generate`/`lint` behind an internal endpoint instead of shelling out to the CLI can now run a FastAPI service that wraps the same `promptgenie.core` functions the CLI uses — no business logic duplicated. `GET /health/live`, `GET /health/ready` (config-loadable check), `POST /v1/generate` (wraps `core.generator.generate_prompt` + optional lint/scan), `POST /v1/lint` (wraps `core.linter.lint`). Requests are synchronous and hold no external state; Postgres/Redis/object-storage adapters are deliberately deferred until a concrete endpoint needs persisted state. New optional `promptgenie[service]` extra (`fastapi`, `uvicorn`, `pydantic-settings`); the `Dockerfile` is now a multi-stage build (wheel-only runtime, non-root, `tini` PID 1) that runs either mode (`promptgenie ...` for CLI, `python -m uvicorn promptgenie_service.api.main:app` for the API) from the same image, with `--build-arg PROMPTGENIE_EXTRAS=` for a CLI-only build. `docker-compose.yml` starts the API plus Postgres/Redis/MinIO for local development against future phases. See `docs/deployment.md`. 9 tests in `tests/service/test_api.py`.
+
 ### Security
 
 Fixes from a source-only review with the Cloudflare `security-audit` skill (quick profile, against `9fcdb6e`). Each lead was independently re-verified from source; none was reproduced at runtime, so these are fixes for source-grounded leads, not confirmed exploits. Regression tests: `tests/test_security_audit_fixes.py`.
