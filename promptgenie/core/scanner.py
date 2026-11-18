@@ -93,9 +93,8 @@ def _has_nested_repeat(pattern: str) -> bool:
             elif op == _sre_parse.BRANCH:
                 if any(walk(b, inside_repeat) for b in av[1]):
                     return True
-            elif op in (_sre_parse.ASSERT, _sre_parse.ASSERT_NOT):
-                if walk(av[1], inside_repeat):
-                    return True
+            elif op in (_sre_parse.ASSERT, _sre_parse.ASSERT_NOT) and walk(av[1], inside_repeat):
+                return True
         return False
 
     return walk(tree, False)
